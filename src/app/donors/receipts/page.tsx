@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, FileText, Download, Eye, Search, RefreshCw } from 'lucide-react';
+import { Loader2, FileText, Printer, Eye, Search, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DonationReceipt } from '@/types';
 
@@ -38,7 +38,6 @@ export default function DonationReceiptsPage() {
   const [search, setSearch] = useState('');
   const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
   const [previewReceipt, setPreviewReceipt] = useState<DonationReceipt | null>(null);
-  const [downloading, setDownloading] = useState<string | null>(null);
   const [summary, setSummary] = useState({ totalRepresentatives: 0, totalAmount: 0 });
 
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString());
@@ -94,37 +93,9 @@ export default function DonationReceiptsPage() {
     }
   };
 
-  const downloadPDF = async (representative: string) => {
-    setDownloading(representative);
-    try {
-      const res = await fetch('/api/donors/receipts/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year: parseInt(year), representative }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'PDF 생성 실패');
-      }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `기부금영수증-${year}-${representative}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      toast.success('PDF가 다운로드되었습니다');
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'PDF 다운로드 중 오류가 발생했습니다');
-    } finally {
-      setDownloading(null);
-    }
+  const openPrintPage = (representative: string) => {
+    const printUrl = `/donors/receipts/print?year=${year}&representative=${encodeURIComponent(representative)}`;
+    window.open(printUrl, '_blank');
   };
 
   const formatAmount = (amount: number) => {
@@ -253,14 +224,9 @@ export default function DonationReceiptsPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => downloadPDF(receipt.representative)}
-                            disabled={downloading === receipt.representative}
+                            onClick={() => openPrintPage(receipt.representative)}
                           >
-                            {downloading === receipt.representative ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Download className="h-4 w-4" />
-                            )}
+                            <Printer className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -277,15 +243,14 @@ export default function DonationReceiptsPage() {
                   </span>
                   <Button
                     onClick={() => {
-                      // 일괄 다운로드는 각각 개별 다운로드로 처리
-                      toast.info('선택된 영수증을 다운로드합니다');
+                      toast.info('선택된 영수증 인쇄 페이지를 엽니다');
                       Array.from(selectedReceipts).forEach((rep, idx) => {
-                        setTimeout(() => downloadPDF(rep), idx * 500);
+                        setTimeout(() => openPrintPage(rep), idx * 300);
                       });
                     }}
                   >
-                    <Download className="mr-2 h-4 w-4" />
-                    선택 다운로드
+                    <Printer className="mr-2 h-4 w-4" />
+                    선택 인쇄
                   </Button>
                 </div>
               )}
@@ -389,9 +354,9 @@ export default function DonationReceiptsPage() {
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={() => downloadPDF(previewReceipt.representative)}>
-                  <Download className="mr-2 h-4 w-4" />
-                  PDF 다운로드
+                <Button onClick={() => openPrintPage(previewReceipt.representative)}>
+                  <Printer className="mr-2 h-4 w-4" />
+                  인쇄 / PDF 저장
                 </Button>
               </div>
             </div>

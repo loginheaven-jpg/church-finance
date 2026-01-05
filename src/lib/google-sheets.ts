@@ -23,9 +23,15 @@ let sheetsClient: ReturnType<typeof google.sheets> | null = null;
 export function getGoogleSheetsClient() {
   if (sheetsClient) return sheetsClient;
 
+  // Handle both escaped \n (from .env file) and actual newlines (from Vercel)
+  let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
+  if (privateKey.includes('\\n')) {
+    privateKey = privateKey.replace(/\\n/g, '\n');
+  }
+
   const auth = new JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    key: privateKey,
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 

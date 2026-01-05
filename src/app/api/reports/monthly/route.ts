@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const yearParam = searchParams.get('year');
+    const debug = searchParams.get('debug') === 'true';
 
     const year = yearParam ? parseInt(yearParam) : new Date().getFullYear();
 
@@ -17,6 +18,24 @@ export async function GET(request: NextRequest) {
       getIncomeRecords(startDate, endDate),
       getExpenseRecords(startDate, endDate),
     ]);
+
+    if (debug) {
+      return NextResponse.json({
+        debug: true,
+        year,
+        startDate,
+        endDate,
+        incomeCount: incomeRecords.length,
+        expenseCount: expenseRecords.length,
+        sampleIncome: incomeRecords.slice(0, 2),
+        sampleExpense: expenseRecords.slice(0, 2),
+        envCheck: {
+          hasEmail: !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+          hasKey: !!process.env.GOOGLE_PRIVATE_KEY,
+          hasFinanceSheetId: !!process.env.FINANCE_SHEET_ID,
+        }
+      });
+    }
 
     // 월별 집계
     const monthlyData = new Map<number, { income: number; expense: number }>();

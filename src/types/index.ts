@@ -139,6 +139,24 @@ export interface DonorInfo {
   created_at: string;
 }
 
+// 기부금영수증 데이터
+export interface DonationReceipt {
+  year: number;
+  representative: string;
+  donors: Array<{
+    donor_name: string;
+    relationship: string;
+    registration_number: string;
+  }>;
+  address: string;
+  total_amount: number;
+  donations: Array<{
+    date: string;
+    offering_type: string;
+    amount: number;
+  }>;
+}
+
 // 현금헌금 (외부 시트)
 export interface CashOffering {
   date: string;

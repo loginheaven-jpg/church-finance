@@ -11,6 +11,7 @@ import {
   Settings,
   ChevronDown,
   Church,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -53,6 +54,14 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
+    icon: Users,
+    label: '헌금자',
+    children: [
+      { label: '헌금자 관리', href: '/donors' },
+      { label: '기부금영수증', href: '/donors/receipts' },
+    ],
+  },
+  {
     icon: Settings,
     label: '설정',
     children: [
@@ -64,7 +73,7 @@ const menuItems: MenuItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [expandedMenus, setExpandedMenus] = useState<string[]>(['보고서', '설정']);
+  const [expandedMenus, setExpandedMenus] = useState<string[]>(['보고서', '헌금자', '설정']);
 
   const toggleMenu = (label: string) => {
     setExpandedMenus(prev =>

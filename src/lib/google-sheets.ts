@@ -466,6 +466,110 @@ export async function addDonorInfo(donor: DonorInfo): Promise<void> {
   await appendToSheet(FINANCE_CONFIG.sheets.donorInfo, [row]);
 }
 
+export async function updateDonorInfo(
+  representative: string,
+  donorName: string,
+  updates: Partial<DonorInfo>
+): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.donorInfo;
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!A:I`,
+  });
+
+  const rows = response.data.values || [];
+  const headerRow = rows[0];
+  const dataRows = rows.slice(1);
+
+  const rowIndex = dataRows.findIndex(
+    (row) => row[0] === representative && row[1] === donorName
+  );
+
+  if (rowIndex === -1) {
+    throw new Error('헌금자 정보를 찾을 수 없습니다');
+  }
+
+  const currentRow = dataRows[rowIndex];
+  const updatedRow = [
+    updates.representative ?? currentRow[0],
+    updates.donor_name ?? currentRow[1],
+    updates.relationship ?? currentRow[2] ?? '',
+    updates.registration_number ?? currentRow[3] ?? '',
+    updates.address ?? currentRow[4] ?? '',
+    updates.phone ?? currentRow[5] ?? '',
+    updates.email ?? currentRow[6] ?? '',
+    updates.note ?? currentRow[7] ?? '',
+    currentRow[8], // created_at는 유지
+  ];
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!A${rowIndex + 2}:I${rowIndex + 2}`,
+    valueInputOption: 'RAW',
+    requestBody: {
+      values: [updatedRow],
+    },
+  });
+}
+
+export async function deleteDonorInfo(
+  representative: string,
+  donorName: string
+): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.donorInfo;
+
+  // 먼저 시트 ID 가져오기
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+
+  const sheet = spreadsheet.data.sheets?.find(
+    (s) => s.properties?.title === sheetName
+  );
+
+  if (!sheet?.properties?.sheetId) {
+    throw new Error('시트를 찾을 수 없습니다');
+  }
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!A:I`,
+  });
+
+  const rows = response.data.values || [];
+  const dataRows = rows.slice(1);
+
+  const rowIndex = dataRows.findIndex(
+    (row) => row[0] === representative && row[1] === donorName
+  );
+
+  if (rowIndex === -1) {
+    throw new Error('헌금자 정보를 찾을 수 없습니다');
+  }
+
+  // 행 삭제
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId: sheet.properties.sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex + 1, // +1 for header
+              endIndex: rowIndex + 2,
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
 // ============================================
 // 예산 관련
 // ============================================

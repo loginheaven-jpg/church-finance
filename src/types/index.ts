@@ -149,12 +149,14 @@ export interface DonationReceipt {
     registration_number: string;
   }>;
   address: string;
+  resident_id?: string;  // 주민번호 앞 7자리 (교적부에서 조회)
   total_amount: number;
   donations: Array<{
     date: string;
     offering_type: string;
     amount: number;
   }>;
+  issue_number?: string;  // 발급번호 (2026001~)
 }
 
 // 현금헌금 (외부 시트)

@@ -184,8 +184,8 @@ export default function DonationReceiptsPage() {
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
+                    <TableHead className="w-24">발급번호</TableHead>
                     <TableHead>대표자명</TableHead>
-                    <TableHead className="text-center">헌금자 수</TableHead>
                     <TableHead className="text-center">헌금 횟수</TableHead>
                     <TableHead className="text-right">총액</TableHead>
                     <TableHead className="w-24"></TableHead>
@@ -200,11 +200,11 @@ export default function DonationReceiptsPage() {
                           onCheckedChange={() => toggleSelect(receipt.representative)}
                         />
                       </TableCell>
+                      <TableCell className="font-mono text-sm text-slate-600">
+                        {receipt.issue_number}
+                      </TableCell>
                       <TableCell className="font-medium">
                         {receipt.representative}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {receipt.donors.length}명
                       </TableCell>
                       <TableCell className="text-center">
                         {receipt.donations.length}회
@@ -265,7 +265,7 @@ export default function DonationReceiptsPage() {
           <DialogHeader>
             <DialogTitle>기부금영수증 미리보기</DialogTitle>
             <DialogDescription>
-              {previewReceipt?.representative} - {year}년
+              발급번호: {previewReceipt?.issue_number} | {previewReceipt?.representative} - {year}년
             </DialogDescription>
           </DialogHeader>
 
@@ -273,83 +273,66 @@ export default function DonationReceiptsPage() {
             <div className="space-y-6">
               {/* 기부자 정보 */}
               <div>
-                <h3 className="font-semibold mb-2">1. 기부자 정보</h3>
+                <h3 className="font-semibold mb-2">기부자</h3>
                 <div className="border rounded-lg p-4 space-y-2">
-                  <div className="flex">
-                    <span className="w-24 text-slate-500">대표자명</span>
-                    <span>{previewReceipt.representative}</span>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex">
+                      <span className="w-24 text-slate-500">성명</span>
+                      <span className="font-medium">{previewReceipt.representative}</span>
+                    </div>
+                    <div className="flex">
+                      <span className="w-24 text-slate-500">주민번호</span>
+                      <span className="font-mono">
+                        {previewReceipt.resident_id
+                          ? previewReceipt.resident_id + '-*******'
+                          : '(미등록)'}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex">
                     <span className="w-24 text-slate-500">주소</span>
                     <span>{previewReceipt.address || '(미등록)'}</span>
                   </div>
-                  {previewReceipt.donors.length > 0 && (
-                    <div className="mt-2">
-                      <span className="text-slate-500 block mb-1">헌금자 목록</span>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>성명</TableHead>
-                            <TableHead>관계</TableHead>
-                            <TableHead>주민등록번호</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {previewReceipt.donors.map((donor, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell>{donor.donor_name}</TableCell>
-                              <TableCell>{donor.relationship || '-'}</TableCell>
-                              <TableCell className="font-mono">
-                                {donor.registration_number
-                                  ? donor.registration_number.substring(0, 8) + '******'
-                                  : '(미등록)'}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* 헌금 내역 */}
+              {/* 기부내역 요약 */}
               <div>
-                <h3 className="font-semibold mb-2">2. 헌금 내역</h3>
-                <div className="border rounded-lg overflow-hidden">
+                <h3 className="font-semibold mb-2">기부내역</h3>
+                <div className="border rounded-lg p-4">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>날짜</TableHead>
+                        <TableHead>유형</TableHead>
+                        <TableHead className="text-center">코드</TableHead>
                         <TableHead>구분</TableHead>
-                        <TableHead className="text-right">금액</TableHead>
+                        <TableHead>기부기간</TableHead>
+                        <TableHead className="text-right">기부금액</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {previewReceipt.donations.slice(0, 20).map((donation, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell>{donation.date}</TableCell>
-                          <TableCell>{donation.offering_type}</TableCell>
-                          <TableCell className="text-right">
-                            {formatAmount(donation.amount)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {previewReceipt.donations.length > 20 && (
-                        <TableRow>
-                          <TableCell colSpan={3} className="text-center text-slate-500">
-                            ... 외 {previewReceipt.donations.length - 20}건
-                          </TableCell>
-                        </TableRow>
-                      )}
+                      <TableRow>
+                        <TableCell>종교단체</TableCell>
+                        <TableCell className="text-center">41</TableCell>
+                        <TableCell>헌금</TableCell>
+                        <TableCell>{year}년 1월 1일 ~ 12월 31일</TableCell>
+                        <TableCell className="text-right font-bold">
+                          {formatAmount(previewReceipt.total_amount)}
+                        </TableCell>
+                      </TableRow>
                     </TableBody>
                   </Table>
                 </div>
-                <div className="mt-2 text-right">
-                  <span className="text-slate-500 mr-4">합계</span>
-                  <span className="text-xl font-bold">
-                    {formatAmount(previewReceipt.total_amount)}
-                  </span>
+              </div>
+
+              {/* 기부금 단체 정보 */}
+              <div>
+                <h3 className="font-semibold mb-2">기부금 수령인</h3>
+                <div className="border rounded-lg p-4 space-y-1 text-sm">
+                  <div><span className="text-slate-500 w-20 inline-block">단체명:</span> 대한예수교장로회 예봄교회</div>
+                  <div><span className="text-slate-500 w-20 inline-block">고유번호:</span> 117-82-60597</div>
+                  <div><span className="text-slate-500 w-20 inline-block">소재지:</span> 경기도 성남시 분당구 운중로 285 (판교동)</div>
+                  <div><span className="text-slate-500 w-20 inline-block">대표자:</span> 최병희</div>
                 </div>
               </div>
 

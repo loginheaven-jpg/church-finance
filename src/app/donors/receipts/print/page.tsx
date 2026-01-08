@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Loader2, Printer, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { DonationReceipt } from '@/types';
 
 function PrintContent() {
@@ -49,15 +50,12 @@ function PrintContent() {
   };
 
   const formatAmount = (amount: number) => {
-    return amount.toLocaleString('ko-KR') + '원';
+    return amount.toLocaleString('ko-KR');
   };
 
-  const issueNumber = `${year}-${String(Date.now()).slice(-6)}`;
-  const issueDate = new Date().toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  // 발급연도 (귀속연도 + 1)
+  const issueYear = parseInt(year) + 1;
+  const issueDate = `${issueYear}년 1월 2일`;
 
   if (loading) {
     return (
@@ -84,7 +82,7 @@ function PrintContent() {
   return (
     <>
       {/* 인쇄 버튼 (인쇄 시 숨김) */}
-      <div className="print:hidden fixed top-4 right-4 flex gap-2">
+      <div className="print:hidden fixed top-4 right-4 flex gap-2 z-50">
         <Link href="/donors/receipts">
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -98,128 +96,160 @@ function PrintContent() {
       </div>
 
       {/* 영수증 내용 */}
-      <div className="max-w-[800px] mx-auto p-8 bg-white print:p-0">
+      <div className="max-w-[800px] mx-auto p-8 bg-white print:p-0 print:max-w-none">
         <style jsx global>{`
           @media print {
             @page {
               size: A4;
-              margin: 20mm;
+              margin: 15mm;
             }
             body {
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
           }
+          .receipt-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .receipt-table th,
+          .receipt-table td {
+            border: 1px solid #333;
+            padding: 8px 12px;
+            font-size: 13px;
+          }
+          .receipt-table th {
+            background-color: #f5f5f5;
+            font-weight: 600;
+            text-align: center;
+          }
         `}</style>
 
         {/* 제목 */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-2">기 부 금 영 수 증</h1>
-          <p className="text-sm text-gray-600">발급번호: {issueNumber}</p>
+          <h1 className="text-3xl font-bold tracking-widest mb-2">기 부 금 영 수 증</h1>
+          <p className="text-sm text-gray-600">발급번호: {receipt.issue_number}</p>
         </div>
 
-        {/* 1. 기부자 정보 */}
+        {/* 1. 기부자 */}
         <section className="mb-6">
-          <h2 className="text-lg font-semibold bg-gray-100 p-2 mb-3">1. 기부자 정보</h2>
-          <table className="w-full border-collapse">
+          <h2 className="text-base font-bold bg-gray-100 p-2 border border-gray-300 mb-0">
+            1. 기부자
+          </h2>
+          <table className="receipt-table">
             <tbody>
               <tr>
-                <td className="border p-2 bg-gray-50 w-32 font-medium">대표자명</td>
-                <td className="border p-2">{receipt.representative}</td>
+                <th style={{ width: '15%' }}>성 명</th>
+                <td style={{ width: '35%' }}>{receipt.representative}</td>
+                <th style={{ width: '15%' }}>주민등록번호</th>
+                <td style={{ width: '35%' }} className="font-mono">
+                  {receipt.resident_id
+                    ? `${receipt.resident_id}-*******`
+                    : '(미등록)'}
+                </td>
               </tr>
               <tr>
-                <td className="border p-2 bg-gray-50 font-medium">주소</td>
-                <td className="border p-2">{receipt.address || '(미등록)'}</td>
+                <th>주 소</th>
+                <td colSpan={3}>{receipt.address || '(미등록)'}</td>
               </tr>
             </tbody>
           </table>
-
-          {/* 헌금자 목록 */}
-          {receipt.donors.length > 0 && (
-            <table className="w-full border-collapse mt-3">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border p-2 text-left">성명</th>
-                  <th className="border p-2 text-center w-24">관계</th>
-                  <th className="border p-2 text-center w-40">주민등록번호</th>
-                </tr>
-              </thead>
-              <tbody>
-                {receipt.donors.map((donor, idx) => (
-                  <tr key={idx}>
-                    <td className="border p-2">{donor.donor_name}</td>
-                    <td className="border p-2 text-center">{donor.relationship || '-'}</td>
-                    <td className="border p-2 text-center font-mono">
-                      {donor.registration_number
-                        ? donor.registration_number.substring(0, 8) + '******'
-                        : '(미등록)'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
         </section>
 
-        {/* 2. 헌금 내역 */}
+        {/* 2. 기부금 단체 */}
         <section className="mb-6">
-          <h2 className="text-lg font-semibold bg-gray-100 p-2 mb-3">2. 헌금 내역 ({year}년)</h2>
-          <table className="w-full border-collapse">
+          <h2 className="text-base font-bold bg-gray-100 p-2 border border-gray-300 mb-0">
+            2. 기부금 단체
+          </h2>
+          <table className="receipt-table">
+            <tbody>
+              <tr>
+                <th style={{ width: '15%' }}>단 체 명</th>
+                <td style={{ width: '35%' }}>대한예수교장로회 예봄교회</td>
+                <th style={{ width: '15%' }}>고유번호</th>
+                <td style={{ width: '35%' }}>117-82-60597</td>
+              </tr>
+              <tr>
+                <th>소 재 지</th>
+                <td colSpan={3}>경기도 성남시 분당구 운중로 285 (판교동)</td>
+              </tr>
+              <tr>
+                <th>대 표 자</th>
+                <td colSpan={3}>최 병 희</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        {/* 3. 기부내용 */}
+        <section className="mb-6">
+          <h2 className="text-base font-bold bg-gray-100 p-2 border border-gray-300 mb-0">
+            3. 기부내용
+          </h2>
+          <table className="receipt-table">
             <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-2 text-center w-28">날짜</th>
-                <th className="border p-2 text-left">구분</th>
-                <th className="border p-2 text-right w-32">금액</th>
+              <tr>
+                <th style={{ width: '15%' }}>유 형</th>
+                <th style={{ width: '10%' }}>코 드</th>
+                <th style={{ width: '15%' }}>구 분</th>
+                <th style={{ width: '35%' }}>기부기간</th>
+                <th style={{ width: '25%' }}>기부금액</th>
               </tr>
             </thead>
             <tbody>
-              {receipt.donations.map((donation, idx) => (
-                <tr key={idx}>
-                  <td className="border p-2 text-center">{donation.date}</td>
-                  <td className="border p-2">{donation.offering_type}</td>
-                  <td className="border p-2 text-right">{formatAmount(donation.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="font-bold bg-gray-50">
-                <td className="border p-2 text-right" colSpan={2}>합계</td>
-                <td className="border p-2 text-right text-lg">{formatAmount(receipt.total_amount)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </section>
-
-        {/* 3. 기부금 단체 정보 */}
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold bg-gray-100 p-2 mb-3">3. 기부금 단체 정보</h2>
-          <table className="w-full border-collapse">
-            <tbody>
               <tr>
-                <td className="border p-2 bg-gray-50 w-32 font-medium">단체명</td>
-                <td className="border p-2">예봄교회</td>
-              </tr>
-              <tr>
-                <td className="border p-2 bg-gray-50 font-medium">소재지</td>
-                <td className="border p-2">(주소 미등록)</td>
-              </tr>
-              <tr>
-                <td className="border p-2 bg-gray-50 font-medium">대표자</td>
-                <td className="border p-2">(대표자 미등록)</td>
+                <td className="text-center">종교단체</td>
+                <td className="text-center">41</td>
+                <td className="text-center">헌금</td>
+                <td className="text-center">{year}년 1월 1일 ~ 12월 31일</td>
+                <td className="text-right font-bold pr-4">
+                  {formatAmount(receipt.total_amount)} 원
+                </td>
               </tr>
             </tbody>
           </table>
         </section>
 
-        {/* 발급일 */}
-        <div className="text-right mb-8">
-          <p>발급일: {issueDate}</p>
+        {/* 법적 문구 */}
+        <section className="mb-8 text-sm leading-relaxed text-gray-700 border border-gray-300 p-4 bg-gray-50">
+          <p className="mb-2">
+            「소득세법」 제34조, 「조세특례제한법」 제76조·제88조의4 및 「법인세법」 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.
+          </p>
+          <p className="text-xs text-gray-500">
+            ※ 이 영수증은 소득세·법인세 신고 시 기부금 영수증으로 사용할 수 있습니다.
+          </p>
+        </section>
+
+        {/* 신청인 및 발급일 */}
+        <div className="mb-10">
+          <p className="text-center text-lg mb-6">
+            신 청 인 : <span className="font-bold underline px-4">{receipt.representative}</span>
+          </p>
+          <p className="text-center mb-8">
+            위와 같이 기부금을 기부받았음을 증명합니다.
+          </p>
+          <p className="text-center text-lg font-medium mb-12">
+            {issueDate}
+          </p>
         </div>
 
-        {/* 안내문 */}
-        <div className="text-center border-t pt-8">
-          <p className="mb-8">위 금액을 기부금으로 수령하였음을 증명합니다.</p>
-          <p className="text-xl font-bold">예봄교회</p>
+        {/* 기부금 수령인 서명란 */}
+        <div className="flex items-center justify-center gap-8">
+          <div className="text-lg">
+            <span className="font-medium">기부금 수령인 :</span>
+            <span className="ml-2">대한예수교장로회 예봄교회</span>
+          </div>
+          <div className="relative">
+            <span className="text-gray-400 text-sm">(직인)</span>
+            <Image
+              src="/church-seal.png"
+              alt="교회 직인"
+              width={80}
+              height={80}
+              className="absolute -top-6 -left-2"
+              style={{ opacity: 0.9 }}
+            />
+          </div>
         </div>
       </div>
     </>

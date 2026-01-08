@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -9,165 +10,145 @@ import {
   CreditCard,
   FileText,
   Settings,
-  ChevronDown,
-  Church,
   Users,
+  BarChart3,
+  Receipt,
+  ListChecks,
+  Cog,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { LucideIcon } from 'lucide-react';
 
 interface MenuItem {
-  icon: React.ElementType;
+  href: string;
   label: string;
-  href?: string;
-  children?: { label: string; href: string }[];
+  icon: LucideIcon;
 }
 
-const menuItems: MenuItem[] = [
+interface MenuSection {
+  label: string;
+  items: MenuItem[];
+}
+
+const menuSections: MenuSection[] = [
   {
-    icon: LayoutDashboard,
-    label: '대시보드',
-    href: '/dashboard',
-  },
-  {
-    icon: Upload,
-    label: '데이터 입력',
-    href: '/data-entry',
-  },
-  {
-    icon: GitCompare,
-    label: '거래 매칭',
-    href: '/match',
-  },
-  {
-    icon: CreditCard,
-    label: '카드내역 입력',
-    href: '/card/my-transactions',
-  },
-  {
-    icon: FileText,
-    label: '보고서',
-    children: [
-      { label: '주간 요약', href: '/reports/weekly' },
-      { label: '월간 추이', href: '/reports/monthly' },
-      { label: '예산 집행', href: '/reports/budget' },
+    label: 'MAIN',
+    items: [
+      { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
+      { href: '/data-entry', label: '데이터 입력', icon: Upload },
+      { href: '/match', label: '거래 매칭', icon: GitCompare },
+      { href: '/card/my-transactions', label: '카드내역 입력', icon: CreditCard },
     ],
   },
   {
-    icon: Users,
-    label: '헌금자',
-    children: [
-      { label: '헌금자 관리', href: '/donors' },
-      { label: '기부금영수증', href: '/donors/receipts' },
+    label: 'REPORTS',
+    items: [
+      { href: '/reports/weekly', label: '주간 요약', icon: FileText },
+      { href: '/reports/monthly', label: '월간 추이', icon: BarChart3 },
+      { href: '/reports/budget', label: '예산 집행', icon: Receipt },
     ],
   },
   {
-    icon: Settings,
-    label: '설정',
-    children: [
-      { label: '계정과목 코드', href: '/settings/codes' },
-      { label: '매칭 규칙', href: '/settings/matching-rules' },
+    label: 'DONORS',
+    items: [
+      { href: '/donors', label: '헌금자 관리', icon: Users },
+      { href: '/donors/receipts', label: '기부금영수증', icon: FileText },
+    ],
+  },
+  {
+    label: 'SETTINGS',
+    items: [
+      { href: '/settings/codes', label: '계정과목 코드', icon: ListChecks },
+      { href: '/settings/matching-rules', label: '매칭 규칙', icon: Cog },
     ],
   },
 ];
 
-export function Sidebar() {
-  const pathname = usePathname();
-  const [expandedMenus, setExpandedMenus] = useState<string[]>(['보고서', '헌금자', '설정']);
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
 
-  const toggleMenu = (label: string) => {
-    setExpandedMenus(prev =>
-      prev.includes(label)
-        ? prev.filter(l => l !== label)
-        : [...prev, label]
-    );
-  };
+export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
+  const pathname = usePathname();
 
   return (
-    <aside className="w-64 bg-slate-900 text-white min-h-screen flex flex-col">
-      {/* 로고 */}
-      <div className="p-6 border-b border-slate-700">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <Church className="h-8 w-8 text-blue-400" />
-          <div>
-            <h1 className="font-bold text-lg">예봄교회</h1>
-            <p className="text-xs text-slate-400">재정관리 시스템</p>
-          </div>
-        </Link>
+    <aside
+      className={cn(
+        'fixed left-0 top-0 z-40 h-screen w-[240px] flex flex-col transition-transform duration-300',
+        // 모바일: 기본 숨김, 열릴 때 슬라이드
+        'max-md:-translate-x-full max-md:top-14 max-md:h-[calc(100vh-56px)] max-md:overflow-y-auto max-md:scrollbar-hide',
+        isOpen && 'max-md:translate-x-0',
+        // PC: 항상 표시
+        'md:translate-x-0'
+      )}
+      style={{ background: 'linear-gradient(180deg, #2C3E50 0%, #1a2a3a 100%)' }}
+    >
+      {/* Logo Section - PC에서만 표시 */}
+      <div className="hidden md:flex items-center gap-3 px-3 py-5 border-b border-white/10">
+        <div className="w-[60px] h-[60px] rounded-full overflow-hidden bg-[#C9A962] flex items-center justify-center">
+          <Image
+            src="/yebom_logo.png"
+            alt="예봄교회 로고"
+            width={60}
+            height={60}
+            className="object-cover w-full h-full"
+            onError={(e) => {
+              // 이미지 로드 실패 시 이모지 표시
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+              target.parentElement!.innerHTML = '<span style="font-size: 28px;">⛪</span>';
+            }}
+          />
+        </div>
+        <div>
+          <div className="font-display font-semibold text-[16px] text-white">예봄교회</div>
+          <div className="text-[13px] text-white/50 tracking-[2px]">재 정 장 부</div>
+        </div>
       </div>
 
-      {/* 메뉴 */}
-      <nav className="flex-1 p-4">
-        <ul className="space-y-1">
-          {menuItems.map((item) => (
-            <li key={item.label}>
-              {item.href ? (
-                <Link
-                  href={item.href}
-                  className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
-                    pathname === item.href || pathname?.startsWith(item.href + '/')
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800'
-                  )}
-                >
-                  <item.icon className="h-5 w-5" />
-                  <span>{item.label}</span>
-                </Link>
-              ) : (
-                <>
-                  <button
-                    onClick={() => toggleMenu(item.label)}
+      {/* Navigation */}
+      <nav className="flex-1 px-2 py-4 overflow-y-auto scrollbar-hide">
+        {menuSections.map((section) => (
+          <div key={section.label} className="mb-4">
+            {/* Section Label */}
+            <div className="px-4 mb-3 text-[11px] font-semibold text-white/35 uppercase tracking-[1.5px]">
+              {section.label}
+            </div>
+
+            {/* Menu Items */}
+            <div className="space-y-1">
+              {section.items.map((item) => {
+                const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+                const Icon = item.icon;
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onClose}
                     className={cn(
-                      'flex items-center justify-between w-full px-4 py-3 rounded-lg transition-colors',
-                      item.children?.some(child => pathname?.startsWith(child.href))
-                        ? 'bg-slate-800 text-white'
-                        : 'text-slate-300 hover:bg-slate-800'
+                      'flex items-center gap-[14px] px-4 py-[14px] mx-2 rounded-xl text-[14px] font-medium transition-all duration-300 w-full relative',
+                      isActive
+                        ? 'menu-active'
+                        : 'text-white/90 hover:bg-white/5'
                     )}
                   >
-                    <div className="flex items-center gap-3">
-                      <item.icon className="h-5 w-5" />
-                      <span>{item.label}</span>
-                    </div>
-                    <ChevronDown
-                      className={cn(
-                        'h-4 w-4 transition-transform',
-                        expandedMenus.includes(item.label) && 'rotate-180'
-                      )}
-                    />
-                  </button>
-                  {expandedMenus.includes(item.label) && item.children && (
-                    <ul className="ml-4 mt-1 space-y-1">
-                      {item.children.map((child) => (
-                        <li key={child.href}>
-                          <Link
-                            href={child.href}
-                            className={cn(
-                              'flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-colors',
-                              pathname === child.href
-                                ? 'bg-blue-600 text-white'
-                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                            )}
-                          >
-                            <span className="w-5" />
-                            <span>{child.label}</span>
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+                    <Icon className="h-[18px] w-[18px] flex-shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
-      {/* 하단 정보 */}
-      <div className="p-4 border-t border-slate-700">
-        <p className="text-xs text-slate-500 text-center">
-          v1.0.0 | 2026년
-        </p>
+      {/* Footer - Version */}
+      <div className="mt-auto border-t border-white/10 p-4">
+        <div className="mt-2 text-center text-[11px] text-white/40">
+          v1.0.0
+        </div>
       </div>
     </aside>
   );

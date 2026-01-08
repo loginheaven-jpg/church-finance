@@ -1,31 +1,75 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   TrendingUp,
   TrendingDown,
   Wallet,
   AlertCircle,
-  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries';
+import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails } from '@/components/dashboard';
+import { startOfWeek, addWeeks, format } from 'date-fns';
 
 interface DashboardStats {
   weeklyIncome: number;
   weeklyExpense: number;
   balance: number;
   unmatchedCount: number;
+  incomeTransactions?: Array<{
+    date: string;
+    description: string;
+    category: string;
+    amount: number;
+  }>;
+  expenseTransactions?: Array<{
+    date: string;
+    description: string;
+    category: string;
+    amount: number;
+  }>;
+  weeklyData?: Array<{
+    date: string;
+    income: number;
+    expense: number;
+  }>;
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const weekOffset = parseInt(searchParams.get('week') || '0');
+
+  // 현재 주의 일요일 계산
+  const today = new Date();
+  const currentSunday = startOfWeek(today, { weekStartsOn: 0 });
+  const targetSunday = addWeeks(currentSunday, weekOffset);
+
+  const [selectedCard, setSelectedCard] = useState<'income' | 'expense' | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const { data: stats, isLoading, refetch } = useQuery<DashboardStats>({
-    queryKey: queryKeys.unmatchedTransactions,
+    queryKey: [...queryKeys.unmatchedTransactions, weekOffset],
     queryFn: async () => {
-      const res = await fetch('/api/dashboard/stats');
-      if (!res.ok) return { weeklyIncome: 0, weeklyExpense: 0, balance: 0, unmatchedCount: 0 };
+      const params = new URLSearchParams();
+      if (weekOffset !== 0) {
+        params.set('week', String(weekOffset));
+      }
+      const res = await fetch(`/api/dashboard/stats?${params}`);
+      if (!res.ok) return {
+        weeklyIncome: 0,
+        weeklyExpense: 0,
+        balance: 0,
+        unmatchedCount: 0,
+        incomeTransactions: [],
+        expenseTransactions: [],
+        weeklyData: []
+      };
       return res.json();
     },
   });
@@ -34,125 +78,165 @@ export default function DashboardPage() {
     return new Intl.NumberFormat('ko-KR').format(amount) + '원';
   };
 
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    refetch().finally(() => {
+      setTimeout(() => setIsRefreshing(false), 500);
+    });
+  };
+
+  const handleCardClick = (type: 'income' | 'expense') => {
+    setSelectedCard(selectedCard === type ? null : type);
+  };
+
+  // 8주 데이터 생성 (실제 API에서 가져오거나 더미 데이터)
+  const weeklyData = stats?.weeklyData || Array.from({ length: 8 }, (_, i) => {
+    const date = addWeeks(targetSunday, i - 7);
+    return {
+      date: format(date, 'M/d'),
+      income: 0,
+      expense: 0,
+    };
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-slate-900">재정 대시보드</h1>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          새로고침
-        </Button>
+      {/* Header with Week Navigation */}
+      <DashboardHeader
+        currentDate={targetSunday}
+        weekOffset={weekOffset}
+        unmatchedCount={stats?.unmatchedCount || 0}
+        onRefresh={handleRefresh}
+        isRefreshing={isRefreshing}
+      />
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <StatsCard
+          icon={TrendingUp}
+          label="이번 주 수입"
+          value={isLoading ? '...' : formatAmount(stats?.weeklyIncome || 0)}
+          color="income"
+          isSelected={selectedCard === 'income'}
+          onClick={() => handleCardClick('income')}
+        />
+        <StatsCard
+          icon={TrendingDown}
+          label="이번 주 지출"
+          value={isLoading ? '...' : formatAmount(stats?.weeklyExpense || 0)}
+          color="expense"
+          isSelected={selectedCard === 'expense'}
+          onClick={() => handleCardClick('expense')}
+        />
+        <StatsCard
+          icon={Wallet}
+          label="현재 잔액"
+          value={isLoading ? '...' : formatAmount(stats?.balance || 0)}
+          color="balance"
+        />
+        <div className="relative">
+          <StatsCard
+            icon={AlertCircle}
+            label="미분류 거래"
+            value={isLoading ? '...' : `${stats?.unmatchedCount || 0}건`}
+            color="warning"
+          />
+          {(stats?.unmatchedCount || 0) > 0 && (
+            <Link
+              href="/match"
+              className="absolute bottom-2 right-3 text-[11px] text-[#C9A962] hover:text-[#D4B87A] hover:underline"
+            >
+              처리하기 →
+            </Link>
+          )}
+        </div>
       </div>
 
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              이번 주 수입
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {isLoading ? '...' : formatAmount(stats?.weeklyIncome || 0)}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Transaction Details (shows when card is clicked) */}
+      {selectedCard && (
+        <TransactionDetails
+          type={selectedCard}
+          transactions={
+            selectedCard === 'income'
+              ? stats?.incomeTransactions || []
+              : stats?.expenseTransactions || []
+          }
+        />
+      )}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              이번 주 지출
-            </CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {isLoading ? '...' : formatAmount(stats?.weeklyExpense || 0)}
-            </div>
-          </CardContent>
-        </Card>
+      {/* 8-Week Chart */}
+      <WeeklyChart data={weeklyData} />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              현재 잔액
-            </CardTitle>
-            <Wallet className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {isLoading ? '...' : formatAmount(stats?.balance || 0)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600">
-              미분류 거래
-            </CardTitle>
-            <AlertCircle className="h-4 w-4 text-amber-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-600">
-              {isLoading ? '...' : `${stats?.unmatchedCount || 0}건`}
-            </div>
-            {(stats?.unmatchedCount || 0) > 0 && (
-              <Link href="/match" className="text-sm text-blue-600 hover:underline">
-                지금 처리하기 →
-              </Link>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 빠른 작업 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>빠른 작업</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Quick Actions */}
+      <Card className="border-0 shadow-soft">
+        <CardContent className="p-4 md:p-6">
+          <h3 className="font-display text-[16px] md:text-[18px] font-semibold text-[#2C3E50] mb-4">
+            빠른 작업
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
             <Link href="/data-entry">
-              <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
-                <span className="text-lg">📥</span>
-                <span>데이터 입력</span>
+              <Button
+                variant="outline"
+                className="w-full h-16 md:h-20 flex flex-col gap-1.5 md:gap-2 border-[#E8E4DE] hover:border-[#C9A962] hover:bg-[#F8F6F3]"
+              >
+                <span className="text-lg md:text-xl">📥</span>
+                <span className="text-[13px] md:text-[14px] text-[#2C3E50]">데이터 입력</span>
               </Button>
             </Link>
             <Link href="/match">
-              <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
-                <span className="text-lg">🔗</span>
-                <span>거래 매칭</span>
+              <Button
+                variant="outline"
+                className="w-full h-16 md:h-20 flex flex-col gap-1.5 md:gap-2 border-[#E8E4DE] hover:border-[#C9A962] hover:bg-[#F8F6F3]"
+              >
+                <span className="text-lg md:text-xl">🔗</span>
+                <span className="text-[13px] md:text-[14px] text-[#2C3E50]">거래 매칭</span>
               </Button>
             </Link>
             <Link href="/reports/weekly">
-              <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
-                <span className="text-lg">📊</span>
-                <span>주간 보고서</span>
+              <Button
+                variant="outline"
+                className="w-full h-16 md:h-20 flex flex-col gap-1.5 md:gap-2 border-[#E8E4DE] hover:border-[#C9A962] hover:bg-[#F8F6F3]"
+              >
+                <span className="text-lg md:text-xl">📊</span>
+                <span className="text-[13px] md:text-[14px] text-[#2C3E50]">주간 보고서</span>
               </Button>
             </Link>
           </div>
         </CardContent>
       </Card>
 
-      {/* 안내 메시지 */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-4">
-            <div className="text-2xl">💡</div>
+      {/* Info Card */}
+      <Card className="border-0 shadow-soft bg-[#F5EFE0]">
+        <CardContent className="p-4 md:p-6">
+          <div className="flex items-start gap-3 md:gap-4">
+            <div className="text-xl md:text-2xl">💡</div>
             <div>
-              <h3 className="font-semibold text-blue-900">시작하기</h3>
-              <p className="text-blue-800 text-sm mt-1">
-                1. <strong>데이터 입력</strong>에서 현금헌금을 동기화하거나 은행/카드 파일을 업로드하세요.<br />
-                2. <strong>거래 매칭</strong>에서 미분류된 거래를 수입/지출로 분류하세요.<br />
-                3. <strong>보고서</strong>에서 주간/월간 재정 현황을 확인하세요.
+              <h3 className="font-semibold text-[#2C3E50] text-[14px] md:text-[15px]">시작하기</h3>
+              <p className="text-[#6B7B8C] text-[12px] md:text-[13px] mt-1 leading-relaxed">
+                1. <strong className="text-[#2C3E50]">데이터 입력</strong>에서 현금헌금을 동기화하거나 은행/카드 파일을 업로드하세요.<br />
+                2. <strong className="text-[#2C3E50]">거래 매칭</strong>에서 미분류된 거래를 수입/지출로 분류하세요.<br />
+                3. <strong className="text-[#2C3E50]">보고서</strong>에서 주간/월간 재정 현황을 확인하세요.
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function DashboardLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <Loader2 className="h-8 w-8 animate-spin text-[#C9A962]" />
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardLoading />}>
+      <DashboardContent />
+    </Suspense>
   );
 }

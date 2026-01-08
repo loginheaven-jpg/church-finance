@@ -6,8 +6,21 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-noto);
+  --font-display: var(--font-playfair);
+
+  /* Navy / Gold / Beige Color System */
+  --color-navy: #2C3E50;
+  --color-navy-dark: #1a2a3a;
+  --color-gold: #C9A962;
+  --color-gold-light: #F5EFE0;
+  --color-gold-hover: #D4B87A;
+  --color-beige: #F8F6F3;
+  --color-beige-dark: #F0EDE8;
+  --color-success: #4A9B7F;
+  --color-warning: #E67E22;
+  --color-text-light: #6B7B8C;
+  --color-border-custom: #E8E4DE;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -121,5 +134,58 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-noto), sans-serif;
   }
+}
+
+/* Utility Classes */
+.font-display {
+  font-family: var(--font-playfair), serif;
+}
+
+/* Shadow utilities */
+.shadow-soft {
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.08);
+}
+
+.shadow-medium {
+  box-shadow: 0 4px 16px rgba(44, 62, 80, 0.12);
+}
+
+/* Gold top bar for cards */
+.gold-top-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #C9A962 0%, #E8D5A8 100%);
+}
+
+/* Sidebar menu active indicator */
+.menu-active {
+  background: rgba(201, 169, 98, 0.15);
+  color: white;
+  position: relative;
+}
+
+.menu-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #C9A962;
+  border-radius: 0 3px 3px 0;
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

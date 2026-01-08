@@ -129,7 +129,7 @@ function PrintContent() {
         `}</style>
 
         {/* 제목 */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <h1 className="text-3xl font-bold tracking-widest mb-2">기 부 금 영 수 증</h1>
           <p className="text-sm text-gray-600">발급번호: {displayIssueNumber}</p>
         </div>
@@ -214,7 +214,7 @@ function PrintContent() {
         </section>
 
         {/* 법적 문구 */}
-        <section className="mb-8 text-sm leading-relaxed text-gray-700 border border-gray-300 p-4 bg-gray-50">
+        <section className="mb-4 text-sm leading-relaxed text-gray-700 border border-gray-300 p-4 bg-gray-50">
           <p className="mb-2">
             「소득세법」 제34조, 「조세특례제한법」 제76조·제88조의4 및 「법인세법」 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.
           </p>
@@ -224,14 +224,14 @@ function PrintContent() {
         </section>
 
         {/* 신청인 및 발급일 */}
-        <div className="mb-10">
-          <p className="text-center text-lg mb-6">
+        <div className="mb-4">
+          <p className="text-center text-lg mb-4">
             신 청 인 : <span className="font-bold underline px-4">{receipt.representative}</span>
           </p>
-          <p className="text-center mb-8">
+          <p className="text-center mb-4">
             위와 같이 기부금을 기부받았음을 증명합니다.
           </p>
-          <p className="text-center text-lg font-medium mb-12">
+          <p className="text-center text-lg font-medium mb-6">
             {issueDate}
           </p>
         </div>
@@ -250,9 +250,9 @@ function PrintContent() {
               alt="교회 직인"
               style={{
                 position: 'absolute',
-                top: '50%',
+                top: '30%',
                 left: '50%',
-                transform: 'translate(-50%, -50%) scale(1.6)',
+                transform: 'translate(-50%, -50%) scale(1.5)',
                 opacity: 0.85,
                 pointerEvents: 'none'
               }}

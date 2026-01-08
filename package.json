@@ -29,6 +29,7 @@
     "fontkit": "^2.0.4",
     "google-auth-library": "^10.5.0",
     "googleapis": "^169.0.0",
+    "html2canvas": "^1.4.1",
     "jspdf": "^4.0.0",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.562.0",

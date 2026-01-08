@@ -27,9 +27,41 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, FileText, Printer, Eye, Search, RefreshCw } from 'lucide-react';
+import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DonationReceipt } from '@/types';
+
+// PDF 다운로드 함수
+async function downloadPdf(year: string, representative: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/donors/receipts/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year: parseInt(year), representative }),
+    });
+
+    if (!res.ok) {
+      throw new Error('PDF 생성 실패');
+    }
+
+    const blob = await res.blob();
+    const filename = `${representative}님${year}기부금영수증_예봄교회.pdf`;
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    return true;
+  } catch (error) {
+    console.error('PDF download error:', error);
+    return false;
+  }
+}
 
 export default function DonationReceiptsPage() {
   const [loading, setLoading] = useState(false);
@@ -39,6 +71,8 @@ export default function DonationReceiptsPage() {
   const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
   const [previewReceipt, setPreviewReceipt] = useState<DonationReceipt | null>(null);
   const [summary, setSummary] = useState({ totalRepresentatives: 0, totalAmount: 0 });
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
 
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString());
 
@@ -98,6 +132,46 @@ export default function DonationReceiptsPage() {
     const actualIssueNumber = issueNumber || receipt?.issue_number || '';
     const printUrl = `/donors/receipts/print?year=${year}&representative=${encodeURIComponent(representative)}&issue_number=${encodeURIComponent(actualIssueNumber)}`;
     window.open(printUrl, '_blank');
+  };
+
+  // 일괄 PDF 다운로드
+  const handleBatchDownload = async () => {
+    const selected = Array.from(selectedReceipts);
+    if (selected.length === 0) return;
+
+    setDownloading(true);
+    setDownloadProgress({ current: 0, total: selected.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < selected.length; i++) {
+      const rep = selected[i];
+      setDownloadProgress({ current: i + 1, total: selected.length });
+
+      const success = await downloadPdf(year, rep);
+      if (success) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+
+      // 다음 다운로드 전 약간의 딜레이 (브라우저 안정성)
+      if (i < selected.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    setDownloading(false);
+    setDownloadProgress({ current: 0, total: 0 });
+
+    if (failCount === 0) {
+      toast.success(`${successCount}개의 영수증 PDF가 다운로드되었습니다`);
+    } else {
+      toast.warning(`${successCount}개 성공, ${failCount}개 실패`);
+    }
+
+    setSelectedReceipts(new Set());
   };
 
   const formatAmount = (amount: number) => {
@@ -241,19 +315,35 @@ export default function DonationReceiptsPage() {
               {selectedReceipts.size > 0 && (
                 <div className="mt-4 p-4 bg-blue-50 rounded-lg flex items-center justify-between">
                   <span className="text-blue-700">
-                    {selectedReceipts.size}명 선택됨
+                    {downloading
+                      ? `다운로드 중... (${downloadProgress.current}/${downloadProgress.total})`
+                      : `${selectedReceipts.size}명 선택됨`}
                   </span>
-                  <Button
-                    onClick={() => {
-                      toast.info('선택된 영수증 인쇄 페이지를 엽니다');
-                      Array.from(selectedReceipts).forEach((rep, idx) => {
-                        setTimeout(() => openPrintPage(rep), idx * 300);
-                      });
-                    }}
-                  >
-                    <Printer className="mr-2 h-4 w-4" />
-                    선택 인쇄
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        Array.from(selectedReceipts).forEach((rep, idx) => {
+                          setTimeout(() => openPrintPage(rep), idx * 300);
+                        });
+                      }}
+                      disabled={downloading}
+                    >
+                      <Printer className="mr-2 h-4 w-4" />
+                      화면보기
+                    </Button>
+                    <Button
+                      onClick={handleBatchDownload}
+                      disabled={downloading}
+                    >
+                      {downloading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                      )}
+                      PDF 일괄저장
+                    </Button>
+                  </div>
                 </div>
               )}
             </>

@@ -180,10 +180,14 @@ export async function POST(request: NextRequest) {
     // PDF 바이너리 생성
     const pdfOutput = doc.output('arraybuffer');
 
+    // 파일명: 이름님연도기부금영수증_예봄교회.pdf
+    const filename = `${representative}님${year}기부금영수증_예봄교회.pdf`;
+    const encodedFilename = encodeURIComponent(filename);
+
     return new NextResponse(pdfOutput, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="donation-receipt-${year}-${encodeURIComponent(representative)}.pdf"`,
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}`,
       },
     });
   } catch (error) {

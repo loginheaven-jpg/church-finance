@@ -45,6 +45,16 @@ function PrintContent() {
     fetchReceipt();
   }, [year, representative]);
 
+  // PDF 파일명 설정: 이름님연도기부금영수증_예봄교회.pdf
+  useEffect(() => {
+    if (receipt) {
+      document.title = `${receipt.representative}님${year}기부금영수증_예봄교회`;
+    }
+    return () => {
+      document.title = '예봄교회 재정관리';
+    };
+  }, [receipt, year]);
+
   const handlePrint = () => {
     window.print();
   };

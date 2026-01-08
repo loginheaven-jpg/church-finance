@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Loader2, Printer, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import type { DonationReceipt } from '@/types';
 
 function PrintContent() {
@@ -239,19 +238,21 @@ function PrintContent() {
             <span className="font-medium">기부금 수령인 :</span>
             <span className="ml-2">대한예수교장로회 예봄교회</span>
           </div>
-          <div className="relative inline-flex items-center justify-center">
+          <div className="relative" style={{ width: '60px', height: '24px' }}>
             <span className="text-gray-400 text-sm">(직인)</span>
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src="/church-seal.png"
               alt="교회 직인"
-              width={200}
-              height={200}
-              className="absolute"
               style={{
-                opacity: 0.85,
+                position: 'absolute',
+                width: '400px',
+                height: '400px',
                 top: '50%',
                 left: '50%',
-                transform: 'translate(-50%, -50%)'
+                transform: 'translate(-50%, -50%)',
+                opacity: 0.85,
+                pointerEvents: 'none'
               }}
             />
           </div>

@@ -244,10 +244,10 @@ function PrintContent() {
             <Image
               src="/church-seal.png"
               alt="교회 직인"
-              width={80}
-              height={80}
-              className="absolute -top-6 -left-2"
-              style={{ opacity: 0.9 }}
+              width={320}
+              height={320}
+              className="absolute -top-36 -left-36"
+              style={{ opacity: 0.85 }}
             />
           </div>
         </div>

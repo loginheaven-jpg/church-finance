@@ -252,7 +252,7 @@ function PrintContent() {
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
-                transform: 'translate(-50%, -50%) scale(2)',
+                transform: 'translate(-50%, -50%) scale(1.6)',
                 opacity: 0.85,
                 pointerEvents: 'none'
               }}

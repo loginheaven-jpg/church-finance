@@ -239,15 +239,20 @@ function PrintContent() {
             <span className="font-medium">기부금 수령인 :</span>
             <span className="ml-2">대한예수교장로회 예봄교회</span>
           </div>
-          <div className="relative">
+          <div className="relative inline-flex items-center justify-center">
             <span className="text-gray-400 text-sm">(직인)</span>
             <Image
               src="/church-seal.png"
               alt="교회 직인"
-              width={320}
-              height={320}
-              className="absolute -top-36 -left-36"
-              style={{ opacity: 0.85 }}
+              width={200}
+              height={200}
+              className="absolute"
+              style={{
+                opacity: 0.85,
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)'
+              }}
             />
           </div>
         </div>

@@ -246,11 +246,9 @@ function PrintContent() {
               alt="교회 직인"
               style={{
                 position: 'absolute',
-                width: '400px',
-                height: '400px',
                 top: '50%',
                 left: '50%',
-                transform: 'translate(-50%, -50%)',
+                transform: 'translate(-50%, -50%) scale(4)',
                 opacity: 0.85,
                 pointerEvents: 'none'
               }}

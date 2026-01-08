@@ -11,6 +11,7 @@ function PrintContent() {
   const searchParams = useSearchParams();
   const year = searchParams.get('year') || new Date().getFullYear().toString();
   const representative = searchParams.get('representative') || '';
+  const issueNumberParam = searchParams.get('issue_number') || '';
 
   const [loading, setLoading] = useState(true);
   const [receipt, setReceipt] = useState<DonationReceipt | null>(null);
@@ -52,9 +53,12 @@ function PrintContent() {
     return amount.toLocaleString('ko-KR');
   };
 
-  // 발급연도 (귀속연도 + 1)
-  const issueYear = parseInt(year) + 1;
-  const issueDate = `${issueYear}년 1월 2일`;
+  // 발급일: 실제 출력일 (한국시간 기준)
+  const today = new Date();
+  const issueDate = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+
+  // URL 파라미터에서 받은 발급번호 사용 (없으면 API에서 받은 값 사용)
+  const displayIssueNumber = issueNumberParam || receipt?.issue_number || '';
 
   if (loading) {
     return (
@@ -127,7 +131,7 @@ function PrintContent() {
         {/* 제목 */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold tracking-widest mb-2">기 부 금 영 수 증</h1>
-          <p className="text-sm text-gray-600">발급번호: {receipt.issue_number}</p>
+          <p className="text-sm text-gray-600">발급번호: {displayIssueNumber}</p>
         </div>
 
         {/* 1. 기부자 */}
@@ -248,7 +252,7 @@ function PrintContent() {
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
-                transform: 'translate(-50%, -50%) scale(4)',
+                transform: 'translate(-50%, -50%) scale(2)',
                 opacity: 0.85,
                 pointerEvents: 'none'
               }}

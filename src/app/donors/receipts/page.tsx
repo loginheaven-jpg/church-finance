@@ -93,8 +93,10 @@ export default function DonationReceiptsPage() {
     }
   };
 
-  const openPrintPage = (representative: string) => {
-    const printUrl = `/donors/receipts/print?year=${year}&representative=${encodeURIComponent(representative)}`;
+  const openPrintPage = (representative: string, issueNumber?: string) => {
+    const receipt = receipts.find(r => r.representative === representative);
+    const actualIssueNumber = issueNumber || receipt?.issue_number || '';
+    const printUrl = `/donors/receipts/print?year=${year}&representative=${encodeURIComponent(representative)}&issue_number=${encodeURIComponent(actualIssueNumber)}`;
     window.open(printUrl, '_blank');
   };
 

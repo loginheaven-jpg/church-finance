@@ -1,10 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // 교적부 Supabase 클라이언트 (읽기 전용)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 환경변수가 설정된 경우에만 클라이언트 생성
+let supabase: SupabaseClient | null = null;
+if (supabaseUrl && supabaseAnonKey) {
+  supabase = createClient(supabaseUrl, supabaseAnonKey);
+}
 
 // 교인 정보 타입
 export interface MemberInfo {
@@ -15,6 +19,12 @@ export interface MemberInfo {
 
 // 이름으로 교인 정보 조회
 export async function getMemberByName(name: string): Promise<MemberInfo | null> {
+  // Supabase가 설정되지 않은 경우 null 반환
+  if (!supabase) {
+    console.warn('Supabase not configured - skipping member lookup');
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('members')
     .select('name, address, resident_id')
@@ -41,6 +51,12 @@ export async function getMemberByName(name: string): Promise<MemberInfo | null> 
 // 여러 이름으로 교인 정보 조회
 export async function getMembersByNames(names: string[]): Promise<Map<string, MemberInfo>> {
   const result = new Map<string, MemberInfo>();
+
+  // Supabase가 설정되지 않은 경우 빈 Map 반환
+  if (!supabase) {
+    console.warn('Supabase not configured - skipping members lookup');
+    return result;
+  }
 
   if (names.length === 0) return result;
 

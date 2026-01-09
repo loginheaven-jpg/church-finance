@@ -72,8 +72,8 @@ const historyData: BuildingHistory[] = [
     year: 2025,
     yearlyDonation: 55055000,
     cumulativeDonation: 4424096578,
-    principalPaid: 850000000,
-    interestPaid: 1410000000,
+    principalPaid: 800000000,          // 엑셀 기준 누적 원금상환 8억
+    interestPaid: 1026764421,          // 엑셀 기준 누적 이자지출 10.27억
     loanBalance: 1250000000,
     milestone: { title: '현재', description: '잔액 12.5억', icon: '📍' }
   },
@@ -109,18 +109,18 @@ export async function GET(request: NextRequest) {
     const totalRepayment5Years = recentData.reduce((sum, d) => sum + d.repayment, 0);
     const shortage5Years = totalRepayment5Years - totalDonation5Years;
 
-    // 건축 개요
+    // 건축 개요 (엑셀 데이터 기준)
     const summary = {
       totalCost: 5200000000,                // 총 건축비 52억
       landCost: 1800000000,                 // 토지 18억
       buildingCost: 3400000000,             // 건물 34억
-      totalDonation: 4424096578,            // 누적 헌금 44.2억
+      totalDonation: 4420000000,            // 누적 헌금 44.2억 (헌금~11년 32억 + 헌금12년~ 12.2억)
       totalLoan: 2100000000,                // 총 대출 21억
-      principalPaid: 850000000,             // 원금 상환 8.5억
-      interestPaid: 1410000000,             // 이자 지출 14.1억
+      principalPaid: 800000000,             // 원금 상환 누적 8억 (엑셀 기준)
+      interestPaid: 1026764421,             // 이자 지출 누적 10.27억 (엑셀 기준)
       loanBalance: 1250000000,              // 남은 대출 12.5억
-      donationRate: 85.1,                   // 헌금 비율
-      repaymentRate: 40.5,                  // 상환 비율
+      donationRate: 85.0,                   // 헌금 비율 (44.2억 / 52억)
+      repaymentRate: 38.1,                  // 상환 비율 (8억 / 21억)
     };
 
     // 5개년 목표

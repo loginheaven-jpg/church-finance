@@ -131,30 +131,57 @@ function createReceiptHtml(receipt: DonationReceipt, year: string): string {
   `;
 }
 
-// 클라이언트 사이드 PDF 생성 함수
+// 클라이언트 사이드 PDF 생성 함수 (iframe으로 스타일 격리)
 async function downloadPdf(receipt: DonationReceipt, year: string): Promise<boolean> {
   try {
-    // 숨겨진 컨테이너 생성
-    const container = document.createElement('div');
-    container.style.position = 'absolute';
-    container.style.left = '-9999px';
-    container.style.top = '0';
-    container.innerHTML = createReceiptHtml(receipt, year);
-    document.body.appendChild(container);
+    // 숨겨진 iframe 생성 (스타일 격리)
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '0';
+    iframe.style.width = '900px';
+    iframe.style.height = '1200px';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    // iframe 내부에 HTML 작성
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      throw new Error('iframe document not available');
+    }
+
+    iframeDoc.open();
+    iframeDoc.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { background: white; }
+        </style>
+      </head>
+      <body>
+        ${createReceiptHtml(receipt, year)}
+      </body>
+      </html>
+    `);
+    iframeDoc.close();
 
     // 이미지 로드 대기
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // html2canvas로 캡처
-    const canvas = await html2canvas(container.firstElementChild as HTMLElement, {
+    const targetElement = iframeDoc.body.firstElementChild as HTMLElement;
+    const canvas = await html2canvas(targetElement, {
       scale: 2,
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
     });
 
-    // 컨테이너 제거
-    document.body.removeChild(container);
+    // iframe 제거
+    document.body.removeChild(iframe);
 
     // PDF 생성
     const imgData = canvas.toDataURL('image/png');

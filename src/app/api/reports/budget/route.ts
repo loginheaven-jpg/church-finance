@@ -43,18 +43,31 @@ export async function GET(request: NextRequest) {
     const daysPassed = getDaysPassed(year, endDate);
     const daysInYear = isLeapYear(year) ? 366 : 365;
 
-    // 예산 및 지출 데이터 조회
-    const [budgetData, expenseRecords] = await Promise.all([
+    // 전년도 동일 기간 계산
+    const prevYear = year - 1;
+    const prevYearEndDate = `${prevYear}-${endDate.slice(5)}`; // 동일 월-일
+
+    // 예산, 당년 지출, 전년 지출 데이터 조회
+    const [budgetData, expenseRecords, prevYearExpenseRecords] = await Promise.all([
       getBudget(year),
       getExpenseRecords(`${year}-01-01`, endDate),
+      getExpenseRecords(`${prevYear}-01-01`, prevYearEndDate),
     ]);
 
-    // 지출을 계정과목별로 집계
+    // 당년 지출을 계정과목별로 집계
     const expenseByAccount = new Map<number, number>();
     for (const record of expenseRecords) {
       const code = record.account_code;
       const current = expenseByAccount.get(code) || 0;
       expenseByAccount.set(code, current + record.amount);
+    }
+
+    // 전년 지출을 계정과목별로 집계
+    const prevExpenseByAccount = new Map<number, number>();
+    for (const record of prevYearExpenseRecords) {
+      const code = record.account_code;
+      const current = prevExpenseByAccount.get(code) || 0;
+      prevExpenseByAccount.set(code, current + record.amount);
     }
 
     // 동기집행률 계산 함수
@@ -69,6 +82,7 @@ export async function GET(request: NextRequest) {
       category_item: string;
       budget: number;
       executed: number;
+      prev_executed: number;
       executionRate: number;
       syncRate: number;
       accounts: Array<{
@@ -76,6 +90,7 @@ export async function GET(request: NextRequest) {
         account_item: string;
         budgeted: number;
         executed: number;
+        prev_executed: number;
         percentage: number;
         syncRate: number;
         remaining: number;
@@ -89,6 +104,7 @@ export async function GET(request: NextRequest) {
           category_item: budget.category_item,
           budget: 0,
           executed: 0,
+          prev_executed: 0,
           executionRate: 0,
           syncRate: 0,
           accounts: [],
@@ -96,6 +112,7 @@ export async function GET(request: NextRequest) {
       }
 
       const executed = expenseByAccount.get(budget.account_code) || 0;
+      const prevExecuted = prevExpenseByAccount.get(budget.account_code) || 0;
       const percentage = budget.budgeted_amount > 0
         ? Math.round((executed / budget.budgeted_amount) * 100)
         : 0;
@@ -104,12 +121,14 @@ export async function GET(request: NextRequest) {
       const category = categoryMap.get(budget.category_code)!;
       category.budget += budget.budgeted_amount;
       category.executed += executed;
+      category.prev_executed += prevExecuted;
 
       category.accounts.push({
         account_code: budget.account_code,
         account_item: budget.account_item,
         budgeted: budget.budgeted_amount,
         executed,
+        prev_executed: prevExecuted,
         percentage,
         syncRate: Math.round(syncRate * 10) / 10,
         remaining: budget.budgeted_amount - executed,
@@ -127,9 +146,11 @@ export async function GET(request: NextRequest) {
     // 전체 합계 계산
     let totalBudget = 0;
     let totalExecuted = 0;
+    let totalPrevExecuted = 0;
     for (const category of categoryMap.values()) {
       totalBudget += category.budget;
       totalExecuted += category.executed;
+      totalPrevExecuted += category.prev_executed;
     }
 
     const totalExecutionRate = totalBudget > 0
@@ -159,11 +180,13 @@ export async function GET(request: NextRequest) {
 
     const report = {
       year,
+      prevYear,
       referenceDate: endDate,
       daysPassed,
       daysInYear,
       totalBudget,
       totalExecuted,
+      totalPrevExecuted,
       executionRate: totalExecutionRate,
       syncRate: totalSyncRate,
       overBudgetItems: overBudgetItems.slice(0, 10),

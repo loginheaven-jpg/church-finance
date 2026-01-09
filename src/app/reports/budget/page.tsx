@@ -7,13 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   ComposedChart,
   Bar,
   Line,
@@ -32,6 +25,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Download,
   BarChart3,
   Loader2
@@ -45,11 +39,13 @@ import { toast } from 'sonner';
 
 interface BudgetReportData {
   year: number;
+  prevYear: number;
   referenceDate: string;
   daysPassed: number;
   daysInYear: number;
   totalBudget: number;
   totalExecuted: number;
+  totalPrevExecuted: number;
   executionRate: number;
   syncRate: number;
   overBudgetItems: Array<{
@@ -62,6 +58,7 @@ interface BudgetReportData {
     category_item: string;
     budget: number;
     executed: number;
+    prev_executed: number;
     executionRate: number;
     syncRate: number;
     accounts: Array<{
@@ -69,6 +66,7 @@ interface BudgetReportData {
       account_item: string;
       budgeted: number;
       executed: number;
+      prev_executed: number;
       percentage: number;
       syncRate: number;
       remaining: number;
@@ -162,38 +160,45 @@ function StatCard({
 
 function SubCategoryItem({ item }: { item: BudgetReportData['categories'][0]['accounts'][0] }) {
   return (
-    <div className="flex items-center justify-between p-2 hover:bg-gray-50 rounded text-sm">
-      <div className="flex items-center gap-2">
-        <div className={cn(
-          "w-2 h-2 rounded-full",
-          item.syncRate > 100 ? "bg-red-500" : "bg-blue-500"
-        )} />
-        <span>{item.account_item} ({item.account_code})</span>
-      </div>
-      <div className="flex items-center gap-4">
-        <span className="text-gray-500 w-20 text-right">{formatCurrency(item.budgeted)}</span>
-        <span className="font-semibold w-20 text-right">{formatCurrency(item.executed)}</span>
-        <Badge variant={item.syncRate > 100 ? "destructive" : "secondary"} className="w-16 justify-center">
+    <tr className="border-b border-slate-100 hover:bg-slate-50">
+      <td className="py-2 pl-8 text-left text-sm">
+        {item.account_item}
+      </td>
+      <td className="py-2 px-3 text-right text-sm text-slate-500">
+        {formatCurrency(item.prev_executed)}
+      </td>
+      <td className="py-2 px-3 text-right text-sm">
+        {formatCurrency(item.budgeted)}
+      </td>
+      <td className="py-2 px-3 text-right text-sm font-medium">
+        {formatCurrency(item.executed)}
+      </td>
+      <td className="py-2 px-3 text-right">
+        <Badge variant={item.syncRate > 100 ? "destructive" : "secondary"} className="w-16 justify-center text-xs">
           {item.syncRate.toFixed(1)}%
         </Badge>
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }
 
 function CategoryItem({
   category,
   isExpanded,
-  onToggle
+  onToggle,
+  prevYear,
+  currentYear
 }: {
   category: BudgetReportData['categories'][0];
   isExpanded: boolean;
   onToggle: () => void;
+  prevYear: number;
+  currentYear: number;
 }) {
   const status = getStatus(category.syncRate);
 
   return (
-    <div className="border rounded-lg">
+    <div className="border rounded-lg overflow-hidden">
       <button
         onClick={onToggle}
         className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
@@ -209,33 +214,50 @@ function CategoryItem({
         </div>
       </button>
 
-      <div className="px-4 pb-2 grid grid-cols-4 gap-2 text-sm">
-        <div>예산: <span className="font-semibold">{formatCurrency(category.budget)}</span></div>
-        <div>집행: <span className="font-semibold">{formatCurrency(category.executed)}</span></div>
-        <div>집행률: <span className="font-semibold">{category.executionRate.toFixed(1)}%</span></div>
-        <div>동기: <span className={cn(
-          "font-semibold",
-          category.syncRate > 100 ? "text-red-600" : "text-blue-600"
-        )}>{category.syncRate.toFixed(1)}%</span></div>
-      </div>
-
-      <div className="px-4 pb-2">
-        <Progress
-          value={Math.min(category.syncRate, 100)}
-          className={cn("h-2", category.syncRate > 100 ? "[&>div]:bg-red-500" : "[&>div]:bg-blue-500")}
-        />
-        {category.syncRate > 100 && (
-          <div className="text-xs text-red-600 mt-1">
-            동기예산 초과: +{formatFullCurrency(Math.round((category.syncRate - 100) * category.budget / 100))}
-          </div>
-        )}
-      </div>
-
       {isExpanded && category.accounts.length > 0 && (
-        <div className="px-4 pb-4 space-y-1">
-          {category.accounts.map(item => (
-            <SubCategoryItem key={item.account_code} item={item} />
-          ))}
+        <div className="px-4 pb-4">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-200 text-xs text-slate-500">
+                <th className="py-2 pl-8 text-left font-medium w-40">항목명</th>
+                <th className="py-2 px-3 text-right font-medium w-24">{prevYear}집행</th>
+                <th className="py-2 px-3 text-right font-medium w-24">{currentYear}예산</th>
+                <th className="py-2 px-3 text-right font-medium w-24">{currentYear}집행</th>
+                <th className="py-2 px-3 text-right font-medium w-20">동기집행율</th>
+              </tr>
+            </thead>
+            <tbody>
+              {category.accounts.map(item => (
+                <SubCategoryItem key={item.account_code} item={item} />
+              ))}
+              {/* 소계 행 */}
+              <tr className="border-t border-slate-300 bg-slate-50 font-semibold text-sm">
+                <td className="py-2 pl-8 text-left">소계</td>
+                <td className="py-2 px-3 text-right text-slate-500">
+                  {formatCurrency(category.prev_executed)}
+                </td>
+                <td className="py-2 px-3 text-right">
+                  {formatCurrency(category.budget)}
+                </td>
+                <td className="py-2 px-3 text-right">
+                  {formatCurrency(category.executed)}
+                </td>
+                <td className="py-2 px-3 text-right">
+                  <Badge
+                    variant={category.syncRate > 100 ? "destructive" : "secondary"}
+                    className="w-16 justify-center text-xs"
+                  >
+                    {category.syncRate.toFixed(1)}%
+                  </Badge>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          {category.syncRate > 100 && (
+            <div className="text-xs text-red-600 mt-2 pl-8">
+              동기예산 초과: +{formatFullCurrency(Math.round((category.syncRate - 100) * category.budget / 100))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -399,16 +421,25 @@ export default function BudgetExecutionPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
-            <SelectTrigger className="w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableYears.map(year => (
-                <SelectItem key={year} value={String(year)}>{year}년</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSelectedYear(y => y - 1)}
+              disabled={selectedYear <= currentYear - 4}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-lg font-medium w-20 text-center">{selectedYear}년</span>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSelectedYear(y => y + 1)}
+              disabled={selectedYear >= currentYear}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
           <Button variant="outline">
             <Download className="mr-2 h-4 w-4" />
             Excel 다운로드
@@ -592,6 +623,8 @@ export default function BudgetExecutionPage() {
               category={category}
               isExpanded={expandedCategories.has(category.category_code)}
               onToggle={() => handleToggleCategory(category.category_code)}
+              prevYear={reportData.prevYear}
+              currentYear={reportData.year}
             />
           ))}
         </CardContent>

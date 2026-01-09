@@ -254,27 +254,61 @@ export interface UnmatchedResult {
 // ============================================
 
 export interface WeeklyReport {
-  week: string;
+  // 기본 정보
+  year: number;
+  weekNumber: number;
+  sundayDate: string;  // 주일 날짜 (YYYY-MM-DD)
+  reportId: string;    // 보고서 ID (YYYYMMDD 형식)
   dateRange: {
     start: string;
     end: string;
   };
+
+  // 잔고
+  previousBalance: number;  // 전주최종잔고
+  currentBalance: number;   // 현재잔고
+
+  // 일반 수입
   income: {
-    total: number;
-    byType: Array<{
-      type: string;
-      code: number;
-      amount: number;
-    }>;
-  };
-  expense: {
-    total: number;
+    total: number;          // 주간헌금수입총계
+    subtotal: number;       // 수입소계 (건축 제외)
     byCategory: Array<{
-      category: string;
+      categoryCode: number;
+      categoryName: string;
+      amount: number;
+    }>;
+    byCode: Array<{
       code: number;
+      name: string;
+      categoryCode: number;
       amount: number;
     }>;
   };
+
+  // 일반 지출
+  expense: {
+    total: number;          // 주간지출총계
+    subtotal: number;       // 지출소계 (건축 제외)
+    byCategory: Array<{
+      categoryCode: number;
+      categoryName: string;
+      amount: number;
+    }>;
+    byCode: Array<{
+      code: number;
+      name: string;
+      categoryCode: number;
+      amount: number;
+    }>;
+  };
+
+  // 건축회계 (분리)
+  construction: {
+    income: number;         // 건축헌금소계
+    expense: number;        // 건축비지출소계
+  };
+
+  // 수지차액
   balance: number;
 }
 

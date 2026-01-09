@@ -10,64 +10,21 @@ import {
 } from '@react-pdf/renderer';
 import type { DonationReceipt } from '@/types';
 
-// 폰트 등록 싱글톤 (동시 호출 방지용 뮤텍스)
-let fontRegistrationPromise: Promise<void> | null = null;
-let fontsRegistered = false;
-
-// 폰트 사전 로드 (브라우저 캐시에 로드)
-async function prefetchFonts(baseUrl: string): Promise<void> {
-  const regularUrl = `${baseUrl}/fonts/NotoSansKR-Regular.ttf`;
-  const boldUrl = `${baseUrl}/fonts/NotoSansKR-Bold.ttf`;
-
-  // HEAD 요청으로 폰트 파일 존재 확인 및 캐시 워밍
-  const [regularRes, boldRes] = await Promise.all([
-    fetch(regularUrl, { method: 'HEAD' }),
-    fetch(boldUrl, { method: 'HEAD' }),
-  ]);
-
-  if (!regularRes.ok || !boldRes.ok) {
-    throw new Error('Font files not found');
-  }
-}
-
-// 한글 폰트 등록 함수 (뮤텍스 패턴으로 동시 호출 방지)
-async function registerFonts(): Promise<void> {
-  // 이미 등록 완료된 경우
-  if (fontsRegistered) return;
-
-  // 등록 진행 중인 경우 기존 Promise 반환
-  if (fontRegistrationPromise) {
-    return fontRegistrationPromise;
-  }
-
-  // 새로운 등록 시작
-  fontRegistrationPromise = (async () => {
-    try {
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-
-      // 폰트 파일 사전 확인
-      await prefetchFonts(baseUrl);
-
-      // 직접 URL 경로로 폰트 등록 (.ttf 확장자 포함)
-      Font.register({
-        family: 'NotoSansKR',
-        fonts: [
-          { src: `${baseUrl}/fonts/NotoSansKR-Regular.ttf`, fontWeight: 'normal' },
-          { src: `${baseUrl}/fonts/NotoSansKR-Bold.ttf`, fontWeight: 'bold' },
-        ],
-      });
-
-      fontsRegistered = true;
-    } catch (error) {
-      // 실패 시 Promise 초기화하여 재시도 가능하게
-      fontRegistrationPromise = null;
-      console.error('Font registration error:', error);
-      throw error;
-    }
-  })();
-
-  return fontRegistrationPromise;
-}
+// 한글 폰트 등록 (CDN - Noto Sans KR woff 포맷)
+// 모듈 로드 시점에 동기적으로 등록 (TCI 프로젝트 검증된 방식)
+Font.register({
+  family: 'NotoSansKR',
+  fonts: [
+    {
+      src: 'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.1.1/files/noto-sans-kr-korean-400-normal.woff',
+      fontWeight: 400,
+    },
+    {
+      src: 'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-kr@5.1.1/files/noto-sans-kr-korean-700-normal.woff',
+      fontWeight: 700,
+    },
+  ],
+});
 
 // 스타일 정의
 const styles = StyleSheet.create({
@@ -396,9 +353,6 @@ export async function generateReceiptPdf(
   receipt: DonationReceipt,
   year: string
 ): Promise<Blob> {
-  // 폰트 등록 (비동기)
-  await registerFonts();
-
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const doc = <ReceiptDocument receipt={receipt} year={year} baseUrl={baseUrl} />;
   const blob = await pdf(doc).toBlob();

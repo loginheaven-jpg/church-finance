@@ -30,31 +30,153 @@ import {
 import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DonationReceipt } from '@/types';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
-// PDF 다운로드 함수
-async function downloadPdf(year: string, representative: string): Promise<boolean> {
+// 영수증 HTML 생성 함수
+function createReceiptHtml(receipt: DonationReceipt, year: string): string {
+  const today = new Date();
+  const issueDate = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+  const totalAmount = receipt.total_amount.toLocaleString('ko-KR');
+
+  return `
+    <div style="width: 794px; padding: 40px; font-family: 'Malgun Gothic', sans-serif; background: white;">
+      <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="font-size: 28px; font-weight: bold; letter-spacing: 8px; margin-bottom: 10px;">기 부 금 영 수 증</h1>
+        <p style="font-size: 12px; color: #666;">발급번호: ${receipt.issue_number || ''}</p>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h2 style="font-size: 14px; font-weight: bold; background: #f3f3f3; padding: 8px; border: 1px solid #ccc; margin: 0;">1. 기부자</h2>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <tr>
+            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">성 명</th>
+            <td style="border: 1px solid #333; padding: 8px; width: 35%;">${receipt.representative}</td>
+            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">주민등록번호</th>
+            <td style="border: 1px solid #333; padding: 8px; width: 35%; font-family: monospace;">${receipt.resident_id ? `${receipt.resident_id}-*******` : '(미등록)'}</td>
+          </tr>
+          <tr>
+            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; text-align: center;">주 소</th>
+            <td colspan="3" style="border: 1px solid #333; padding: 8px;">${receipt.address || '(미등록)'}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h2 style="font-size: 14px; font-weight: bold; background: #f3f3f3; padding: 8px; border: 1px solid #ccc; margin: 0;">2. 기부금 단체</h2>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <tr>
+            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">단 체 명</th>
+            <td style="border: 1px solid #333; padding: 8px; width: 35%;">대한예수교장로회 예봄교회</td>
+            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">고유번호</th>
+            <td style="border: 1px solid #333; padding: 8px; width: 35%;">117-82-60597</td>
+          </tr>
+          <tr>
+            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; text-align: center;">소 재 지</th>
+            <td colspan="3" style="border: 1px solid #333; padding: 8px;">경기도 성남시 분당구 운중로 285 (판교동)</td>
+          </tr>
+          <tr>
+            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; text-align: center;">대 표 자</th>
+            <td colspan="3" style="border: 1px solid #333; padding: 8px;">최 병 희</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <h2 style="font-size: 14px; font-weight: bold; background: #f3f3f3; padding: 8px; border: 1px solid #ccc; margin: 0;">3. 기부내용</h2>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr>
+              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">유 형</th>
+              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 10%; text-align: center;">코 드</th>
+              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">구 분</th>
+              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 35%; text-align: center;">기부기간</th>
+              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 25%; text-align: center;">기부금액</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="border: 1px solid #333; padding: 8px; text-align: center;">종교단체</td>
+              <td style="border: 1px solid #333; padding: 8px; text-align: center;">41</td>
+              <td style="border: 1px solid #333; padding: 8px; text-align: center;">헌금</td>
+              <td style="border: 1px solid #333; padding: 8px; text-align: center;">${year}년 1월 1일 ~ 12월 31일</td>
+              <td style="border: 1px solid #333; padding: 8px; text-align: right; font-weight: bold;">${totalAmount} 원</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-bottom: 15px; font-size: 13px; border: 1px solid #ccc; padding: 15px; background: #fafafa;">
+        <p style="margin: 0 0 8px 0;">「소득세법」 제34조, 「조세특례제한법」 제76조·제88조의4 및 「법인세법」 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.</p>
+        <p style="margin: 0; font-size: 11px; color: #666;">※ 이 영수증은 소득세·법인세 신고 시 기부금 영수증으로 사용할 수 있습니다.</p>
+      </div>
+
+      <div style="margin-bottom: 20px; text-align: center;">
+        <p style="font-size: 16px; margin-bottom: 15px;">신 청 인 : <span style="font-weight: bold; text-decoration: underline; padding: 0 20px;">${receipt.representative}</span></p>
+        <p style="margin-bottom: 15px;">위와 같이 기부금을 기부받았음을 증명합니다.</p>
+        <p style="font-size: 16px; font-weight: 500; margin-bottom: 25px;">${issueDate}</p>
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: center; gap: 30px;">
+        <div style="font-size: 16px;">
+          <span style="font-weight: 500;">기부금 수령인 :</span>
+          <span style="margin-left: 8px;">대한예수교장로회 예봄교회</span>
+        </div>
+        <div style="position: relative;">
+          <span style="color: #999; font-size: 13px;">(직인)</span>
+          <img src="/church-seal.png" alt="직인" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -70%) scale(1.5); opacity: 0.85;" />
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// 클라이언트 사이드 PDF 생성 함수
+async function downloadPdf(receipt: DonationReceipt, year: string): Promise<boolean> {
   try {
-    const res = await fetch('/api/donors/receipts/pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ year: parseInt(year), representative }),
+    // 숨겨진 컨테이너 생성
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.innerHTML = createReceiptHtml(receipt, year);
+    document.body.appendChild(container);
+
+    // 이미지 로드 대기
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // html2canvas로 캡처
+    const canvas = await html2canvas(container.firstElementChild as HTMLElement, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
     });
 
-    if (!res.ok) {
-      throw new Error('PDF 생성 실패');
-    }
+    // 컨테이너 제거
+    document.body.removeChild(container);
 
-    const blob = await res.blob();
-    const filename = `${representative}님${year}기부금영수증_예봄교회.pdf`;
+    // PDF 생성
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = canvas.width;
+    const imgHeight = canvas.height;
+    const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+    const imgX = (pdfWidth - imgWidth * ratio) / 2;
+    const imgY = 10;
+
+    pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+
+    // 다운로드
+    const filename = `${receipt.representative}님${year}기부금영수증_예봄교회.pdf`;
+    pdf.save(filename);
 
     return true;
   } catch (error) {
@@ -147,18 +269,24 @@ export default function DonationReceiptsPage() {
 
     for (let i = 0; i < selected.length; i++) {
       const rep = selected[i];
+      const receipt = receipts.find(r => r.representative === rep);
+
       setDownloadProgress({ current: i + 1, total: selected.length });
 
-      const success = await downloadPdf(year, rep);
-      if (success) {
-        successCount++;
+      if (receipt) {
+        const success = await downloadPdf(receipt, year);
+        if (success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
       } else {
         failCount++;
       }
 
       // 다음 다운로드 전 약간의 딜레이 (브라우저 안정성)
       if (i < selected.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
     }
 

@@ -152,12 +152,16 @@ const styles = StyleSheet.create({
   recipientText: {
     fontSize: 13,
   },
-  sealContainer: {
-    width: 70,
-    height: 70,
-    marginLeft: 15,
+  sealWrapper: {
+    position: 'relative',
+    width: 80,
+    height: 40,
+    marginLeft: 10,
   },
-  sealImage: {
+  sealOverlay: {
+    position: 'absolute',
+    top: -25,
+    left: -15,
     width: 70,
     height: 70,
   },
@@ -198,24 +202,24 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
           <Text style={styles.sectionHeader}>1. 기부자</Text>
           <View style={styles.table}>
             <View style={styles.tableRow}>
-              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
+              <View style={[styles.tableHeaderCell, { width: '10%' }]}>
                 <Text>성 명</Text>
               </View>
-              <View style={[styles.tableCell, { width: '38%' }]}>
+              <View style={[styles.tableCell, { width: '32%' }]}>
                 <Text>{receipt.representative}</Text>
               </View>
-              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
+              <View style={[styles.tableHeaderCell, { width: '16%' }]}>
                 <Text>주민등록번호</Text>
               </View>
-              <View style={[styles.tableCellLast, { width: '38%' }]}>
+              <View style={[styles.tableCellLast, { width: '42%' }]}>
                 <Text>{receipt.resident_id ? `${receipt.resident_id}-*******` : '(미등록)'}</Text>
               </View>
             </View>
             <View style={styles.tableRowLast}>
-              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
+              <View style={[styles.tableHeaderCell, { width: '10%' }]}>
                 <Text>주 소</Text>
               </View>
-              <View style={[styles.tableCellLast, { width: '88%' }]}>
+              <View style={[styles.tableCellLast, { width: '90%' }]}>
                 <Text>{receipt.address || '(미등록)'}</Text>
               </View>
             </View>
@@ -326,9 +330,9 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
           <Text style={styles.recipientText}>
             기부금 수령인 : 대한예수교장로회 예봄교회
           </Text>
-          <Text style={{ fontSize: 10, color: '#999999', marginLeft: 10 }}>(직인)</Text>
-          <View style={styles.sealContainer}>
-            <Image style={styles.sealImage} src={`${baseUrl}/church-seal.png`} />
+          <View style={styles.sealWrapper}>
+            <Text style={{ fontSize: 10, color: '#999999' }}>(직인)</Text>
+            <Image style={styles.sealOverlay} src={`${baseUrl}/church-seal.png`} />
           </View>
         </View>
       </Page>

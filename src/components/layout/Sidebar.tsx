@@ -15,6 +15,12 @@ import {
   Receipt,
   ListChecks,
   Cog,
+  TrendingUp,
+  TrendingDown,
+  Scale,
+  Wallet,
+  Target,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
@@ -46,6 +52,9 @@ const menuSections: MenuSection[] = [
       { href: '/reports/weekly', label: '주간 요약', icon: FileText },
       { href: '/reports/monthly', label: '월간 추이', icon: BarChart3 },
       { href: '/reports/budget', label: '예산 집행', icon: Receipt },
+      { href: '/reports/comparison', label: '3개년 비교', icon: Scale },
+      { href: '/reports/income-analysis', label: '수입 분석', icon: TrendingUp },
+      { href: '/reports/expense-analysis', label: '지출 분석', icon: TrendingDown },
     ],
   },
   {
@@ -60,6 +69,9 @@ const menuSections: MenuSection[] = [
     items: [
       { href: '/settings/codes', label: '계정과목 코드', icon: ListChecks },
       { href: '/settings/matching-rules', label: '매칭 규칙', icon: Cog },
+      { href: '/settings/budget', label: '예산 관리', icon: Wallet },
+      { href: '/settings/carryover', label: '이월잔액', icon: RefreshCw },
+      { href: '/settings/pledge', label: '작정헌금', icon: Target },
     ],
   },
 ];

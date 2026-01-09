@@ -202,24 +202,24 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
           <Text style={styles.sectionHeader}>1. 기부자</Text>
           <View style={styles.table}>
             <View style={styles.tableRow}>
-              <View style={[styles.tableHeaderCell, { width: '10%' }]}>
+              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
                 <Text>성 명</Text>
               </View>
-              <View style={[styles.tableCell, { width: '32%' }]}>
+              <View style={[styles.tableCell, { width: '30%' }]}>
                 <Text>{receipt.representative}</Text>
               </View>
-              <View style={[styles.tableHeaderCell, { width: '16%' }]}>
+              <View style={[styles.tableHeaderCell, { width: '14%' }]}>
                 <Text>주민등록번호</Text>
               </View>
-              <View style={[styles.tableCellLast, { width: '42%' }]}>
-                <Text>{receipt.resident_id ? `${receipt.resident_id}-*******` : '(미등록)'}</Text>
+              <View style={[styles.tableCellLast, { width: '44%' }]}>
+                <Text>{receipt.resident_id ? `${receipt.resident_id.slice(0, 6)}-${receipt.resident_id.slice(6)}******` : '(미등록)'}</Text>
               </View>
             </View>
             <View style={styles.tableRowLast}>
-              <View style={[styles.tableHeaderCell, { width: '10%' }]}>
+              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
                 <Text>주 소</Text>
               </View>
-              <View style={[styles.tableCellLast, { width: '90%' }]}>
+              <View style={[styles.tableCellLast, { width: '88%' }]}>
                 <Text>{receipt.address || '(미등록)'}</Text>
               </View>
             </View>
@@ -234,13 +234,13 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
               <View style={[styles.tableHeaderCell, { width: '12%' }]}>
                 <Text>단 체 명</Text>
               </View>
-              <View style={[styles.tableCell, { width: '38%' }]}>
+              <View style={[styles.tableCell, { width: '30%' }]}>
                 <Text>대한예수교장로회 예봄교회</Text>
               </View>
-              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
+              <View style={[styles.tableHeaderCell, { width: '14%' }]}>
                 <Text>고유번호</Text>
               </View>
-              <View style={[styles.tableCellLast, { width: '38%' }]}>
+              <View style={[styles.tableCellLast, { width: '44%' }]}>
                 <Text>117-82-60597</Text>
               </View>
             </View>
@@ -307,10 +307,10 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
         {/* 법적 문구 */}
         <View style={styles.legalBox}>
           <Text style={styles.legalText}>
-            「소득세법」 제34조, 「조세특례제한법」 제76조·제88조의4 및 「법인세법」 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.
+            "소득세법" 제34조, "조세특례제한법" 제76조, 제88조의4 및 "법인세법" 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.
           </Text>
           <Text style={styles.legalNote}>
-            ※ 이 영수증은 소득세·법인세 신고 시 기부금 영수증으로 사용할 수 있습니다.
+            * 이 영수증은 소득세, 법인세 신고 시 기부금 영수증으로 사용할 수 있습니다.
           </Text>
         </View>
 

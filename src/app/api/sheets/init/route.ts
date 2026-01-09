@@ -1,8 +1,24 @@
-import { NextResponse } from 'next/server';
-import { initializeSheets, readSheet } from '@/lib/google-sheets';
+import { NextRequest, NextResponse } from 'next/server';
+import { initializeSheets, resetCodeTables } from '@/lib/google-sheets';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const force = searchParams.get('force') === 'true';
+
+    if (force) {
+      // 코드 테이블 강제 교체 모드
+      const result = await resetCodeTables();
+      return NextResponse.json({
+        success: true,
+        message: '코드 테이블이 교체되었습니다',
+        data: {
+          incomeCodes: result.income,
+          expenseCodes: result.expense,
+        }
+      });
+    }
+
     await initializeSheets();
 
     return NextResponse.json({

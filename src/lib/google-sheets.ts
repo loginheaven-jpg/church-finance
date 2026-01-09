@@ -117,6 +117,149 @@ export async function updateSheet(
   });
 }
 
+// 시트 데이터 클리어 (헤더 유지, 데이터만 삭제)
+export async function clearSheetData(sheetName: string): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+
+  // 먼저 데이터 범위 확인
+  const rows = await readSheet(sheetName);
+  if (rows.length <= 1) return; // 헤더만 있거나 빈 시트
+
+  // 헤더 제외한 데이터 영역 클리어 (A2부터 끝까지)
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!A2:Z${rows.length + 100}`, // 여유있게 클리어
+  });
+}
+
+// 코드 테이블 리셋 (기존 데이터 삭제 후 새 코드로 재생성)
+export async function resetCodeTables(): Promise<{ income: number; expense: number }> {
+  // 1. 기존 코드 데이터 삭제
+  await clearSheetData(FINANCE_CONFIG.sheets.incomeCodes);
+  await clearSheetData(FINANCE_CONFIG.sheets.expenseCodes);
+
+  // 2. 새 코드 데이터 시딩
+  await seedIncomeCodesForce();
+  await seedExpenseCodesForce();
+
+  // 3. 결과 확인
+  const incomeCodes = await getIncomeCodes();
+  const expenseCodes = await getExpenseCodes();
+
+  return {
+    income: incomeCodes.length,
+    expense: expenseCodes.length,
+  };
+}
+
+// 강제 시딩 (기존 데이터 체크 없이)
+async function seedIncomeCodesForce(): Promise<void> {
+  const codes = [
+    // 일반헌금 (10)
+    [10, '일반헌금', 10, '헌금', true, 1],
+    [10, '일반헌금', 11, '주일헌금', true, 2],
+    [10, '일반헌금', 12, '십일조헌금', true, 3],
+    [10, '일반헌금', 13, '감사헌금', true, 4],
+    [10, '일반헌금', 14, '특별헌금', true, 5],
+    [10, '일반헌금', 15, '어린이부', true, 6],
+    [10, '일반헌금', 16, '중고', true, 7],
+    [10, '일반헌금', 17, '청년부', true, 8],
+    // 목적헌금 (20)
+    [20, '목적헌금', 20, '목적헌금', true, 9],
+    [20, '목적헌금', 21, '선교헌금', true, 10],
+    [20, '목적헌금', 22, '구제헌금', true, 11],
+    [20, '목적헌금', 23, '전도회비', true, 12],
+    [20, '목적헌금', 24, '지정헌금', true, 13],
+    // 잡수입 (30)
+    [30, '잡수입', 30, '잡수입', true, 14],
+    [30, '잡수입', 31, '이자수입', true, 15],
+    [30, '잡수입', 32, '기타잡수입', true, 16],
+    // 자본수입 (40)
+    [40, '자본수입', 40, '자본수입', true, 17],
+    [40, '자본수입', 41, '일시차입금', true, 18],
+    [40, '자본수입', 42, '차입금', true, 19],
+    [40, '자본수입', 43, '적립금인출', true, 20],
+    [40, '자본수입', 44, '자산처분수입', true, 21],
+    // 건축헌금 (500)
+    [500, '건축헌금', 500, '건축헌금', true, 22],
+    [500, '건축헌금', 501, '건축헌금', true, 23],
+  ];
+
+  await appendToSheet(FINANCE_CONFIG.sheets.incomeCodes, codes);
+}
+
+async function seedExpenseCodesForce(): Promise<void> {
+  const codes = [
+    // 사례비 (10)
+    [10, '사례비', 10, '사례비', true, 1],
+    [10, '사례비', 11, '교역자사례비', true, 2],
+    [10, '사례비', 12, '직원급여', true, 3],
+    [10, '사례비', 13, '기타수당', true, 4],
+    [10, '사례비', 14, '식대', true, 5],
+    // 예배비 (20)
+    [20, '예배비', 20, '예배비', true, 6],
+    [20, '예배비', 21, '예배환경비', true, 7],
+    [20, '예배비', 22, '주보대', true, 8],
+    [20, '예배비', 23, '찬양대', true, 9],
+    // 선교비 (30)
+    [30, '선교비', 30, '선교비', true, 10],
+    [30, '선교비', 31, '전도비', true, 11],
+    [30, '선교비', 32, '선교보고비', true, 12],
+    [30, '선교비', 33, '선교후원비', true, 13],
+    // 교육비 (40)
+    [40, '교육비', 40, '교육비', true, 14],
+    [40, '교육비', 41, '교육훈련비', true, 15],
+    [40, '교육비', 42, '어린이부', true, 16],
+    [40, '교육비', 43, '청소년부', true, 17],
+    [40, '교육비', 44, '청년부', true, 18],
+    [40, '교육비', 45, '목장비', true, 19],
+    [40, '교육비', 46, '행사비', true, 20],
+    [40, '교육비', 47, '친교비', true, 21],
+    [40, '교육비', 48, '도서비', true, 22],
+    [40, '교육비', 49, '장학금', true, 23],
+    // 봉사비 (50)
+    [50, '봉사비', 50, '봉사비', true, 24],
+    [50, '봉사비', 51, '경조비', true, 25],
+    [50, '봉사비', 52, '구호비', true, 26],
+    [50, '봉사비', 53, '지역사회봉사비', true, 27],
+    [50, '봉사비', 54, '지정헌금지출', true, 28],
+    // 관리비 (60)
+    [60, '관리비', 60, '관리비', true, 29],
+    [60, '관리비', 61, '사택관리비', true, 30],
+    [60, '관리비', 62, '수도광열비', true, 31],
+    [60, '관리비', 63, '공과금', true, 32],
+    [60, '관리비', 64, '관리대행비', true, 33],
+    [60, '관리비', 65, '차량유지비', true, 34],
+    [60, '관리비', 66, '수선유지비', true, 35],
+    // 운영비 (70)
+    [70, '운영비', 70, '운영비', true, 36],
+    [70, '운영비', 71, '통신비', true, 37],
+    [70, '운영비', 72, '도서인쇄비', true, 38],
+    [70, '운영비', 73, '회의비', true, 39],
+    [70, '운영비', 74, '사무비', true, 40],
+    [70, '운영비', 75, '잡비', true, 41],
+    // 상회비 (80)
+    [80, '상회비', 80, '상회비', true, 42],
+    [80, '상회비', 81, '상회비', true, 43],
+    // 기타비용 (90)
+    [90, '기타비용', 90, '기타비용', true, 44],
+    [90, '기타비용', 91, '목회활동비', true, 45],
+    [90, '기타비용', 92, '일시차입금상환', true, 46],
+    [90, '기타비용', 93, '제적립예금', true, 47],
+    [90, '기타비용', 94, '법인세', true, 48],
+    // 예비비 (100)
+    [100, '예비비', 100, '예비비', true, 49],
+    [100, '예비비', 101, '예비비', true, 50],
+    // 건축비 (500)
+    [500, '건축비', 500, '건축비', true, 51],
+    [500, '건축비', 501, '건축지급이자', true, 52],
+    [500, '건축비', 502, '건축원금상환', true, 53],
+    [500, '건축비', 503, '일시대출금', true, 54],
+  ];
+
+  await appendToSheet(FINANCE_CONFIG.sheets.expenseCodes, codes);
+}
+
 export async function getSheetData<T>(sheetName: string): Promise<T[]> {
   const rows = await readSheet(sheetName);
 

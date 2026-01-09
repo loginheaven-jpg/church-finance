@@ -160,34 +160,28 @@ export default function WeeklyReportPage() {
 
       {report && (
         <div ref={printRef} className="space-y-6 print:space-y-4">
-          {/* 잔고 현황 */}
+          {/* 잔고 현황 (3열: 전주최종잔고 | 수지차액 | 현재잔고) */}
           <Card className="print:shadow-none print:border-2">
             <CardContent className="pt-6">
-              <div className="grid grid-cols-2 gap-8">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="text-center p-4 bg-slate-50 rounded-lg print:bg-white print:border">
                   <div className="text-sm text-slate-500 mb-1">전주최종잔고</div>
-                  <div className="text-2xl font-bold text-slate-900">
+                  <div className="text-xl font-bold text-slate-900">
                     {formatAmount(report.previousBalance)}원
+                  </div>
+                </div>
+                <div className={`text-center p-4 rounded-lg print:bg-white print:border ${report.balance >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                  <div className={`text-sm mb-1 ${report.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>수지차액</div>
+                  <div className={`text-xl font-bold ${report.balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    {report.balance >= 0 ? '+' : ''}{formatAmount(report.balance)}원
                   </div>
                 </div>
                 <div className="text-center p-4 bg-blue-50 rounded-lg print:bg-white print:border">
                   <div className="text-sm text-blue-600 mb-1">현재잔고</div>
-                  <div className="text-2xl font-bold text-blue-700">
+                  <div className="text-xl font-bold text-blue-700">
                     {formatAmount(report.currentBalance)}원
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 수지차액 */}
-          <Card className={`print:shadow-none print:border-2 ${report.balance >= 0 ? 'bg-blue-50' : 'bg-red-50'}`}>
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-center">
-                <span className="text-lg font-bold text-slate-700">수지차액 (수입 - 지출)</span>
-                <span className={`text-2xl font-bold ${report.balance >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                  {report.balance >= 0 ? '+' : ''}{formatAmount(report.balance)}원
-                </span>
               </div>
             </CardContent>
           </Card>
@@ -197,7 +191,12 @@ export default function WeeklyReportPage() {
             {/* 수입 */}
             <Card className="print:shadow-none print:border-2">
               <CardContent className="pt-6">
-                <h3 className="text-lg font-bold text-green-700 mb-4 border-b pb-2">수입</h3>
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                  <h3 className="text-lg font-bold text-green-700">수입</h3>
+                  <span className="text-lg font-bold text-green-700">
+                    {formatAmount(report.income.subtotal)}원
+                  </span>
+                </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -223,10 +222,10 @@ export default function WeeklyReportPage() {
                     )}
                   </TableBody>
                 </Table>
-                <div className="mt-4 pt-4 border-t-2 border-green-200 flex justify-between items-center">
-                  <span className="font-bold text-green-700">수입 소계</span>
-                  <span className="text-xl font-bold text-green-700">
-                    {formatAmount(report.income.subtotal)}원
+                <div className="mt-4 pt-4 border-t-2 border-amber-200 flex justify-between items-center">
+                  <span className="font-bold text-amber-700">건축헌금</span>
+                  <span className="text-lg font-bold text-amber-700">
+                    {formatAmount(report.construction.income)}원
                   </span>
                 </div>
               </CardContent>
@@ -235,7 +234,12 @@ export default function WeeklyReportPage() {
             {/* 지출 */}
             <Card className="print:shadow-none print:border-2">
               <CardContent className="pt-6">
-                <h3 className="text-lg font-bold text-red-700 mb-4 border-b pb-2">지출</h3>
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                  <h3 className="text-lg font-bold text-red-700">지출</h3>
+                  <span className="text-lg font-bold text-red-700">
+                    {formatAmount(report.expense.subtotal)}원
+                  </span>
+                </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -261,40 +265,15 @@ export default function WeeklyReportPage() {
                     )}
                   </TableBody>
                 </Table>
-                <div className="mt-4 pt-4 border-t-2 border-red-200 flex justify-between items-center">
-                  <span className="font-bold text-red-700">지출 소계</span>
-                  <span className="text-xl font-bold text-red-700">
-                    {formatAmount(report.expense.subtotal)}원
+                <div className="mt-4 pt-4 border-t-2 border-amber-200 flex justify-between items-center">
+                  <span className="font-bold text-amber-700">건축비지출</span>
+                  <span className="text-lg font-bold text-amber-700">
+                    {formatAmount(report.construction.expense)}원
                   </span>
                 </div>
               </CardContent>
             </Card>
           </div>
-
-          {/* 건축회계 (있는 경우만 표시) */}
-          {(report.construction.income > 0 || report.construction.expense > 0) && (
-            <Card className="print:shadow-none print:border-2 bg-amber-50">
-              <CardContent className="pt-6">
-                <h3 className="text-lg font-bold text-amber-700 mb-4 border-b border-amber-200 pb-2">
-                  건축회계
-                </h3>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-600">건축헌금</span>
-                    <span className="font-bold text-green-600">
-                      {formatAmount(report.construction.income)}원
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-600">건축비지출</span>
-                    <span className="font-bold text-red-600">
-                      {formatAmount(report.construction.expense)}원
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           {/* 상세 내역 (코드별) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:hidden">

@@ -35,10 +35,10 @@ interface CarryoverBalance {
 }
 
 export default function CarryoverSettingsPage() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [initializing, setInitializing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [sheetStatus, setSheetStatus] = useState<'checking' | 'exists' | 'missing' | 'error'>('checking');
   const [balances, setBalances] = useState<CarryoverBalance[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingYear, setEditingYear] = useState<number | null>(null);
@@ -50,56 +50,67 @@ export default function CarryoverSettingsPage() {
   });
 
   useEffect(() => {
-    loadBalances();
+    checkSheetAndLoad();
   }, []);
+
+  const checkSheetAndLoad = async () => {
+    setSheetStatus('checking');
+    try {
+      // 먼저 시트 존재 여부 확인
+      const checkRes = await fetch('/api/sheets/create-sheet?name=이월잔액');
+      const checkResult = await checkRes.json();
+
+      if (checkResult.success && checkResult.exists) {
+        setSheetStatus('exists');
+        loadBalances();
+      } else {
+        setSheetStatus('missing');
+      }
+    } catch (err) {
+      console.error('Sheet check error:', err);
+      setSheetStatus('error');
+    }
+  };
 
   const loadBalances = async () => {
     setLoading(true);
-    setError(null);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15초 타임아웃
-
     try {
-      const res = await fetch('/api/settings/carryover', {
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      const res = await fetch('/api/settings/carryover');
       const result = await res.json();
 
       if (result.success) {
         setBalances(result.data || []);
       } else {
-        setError(result.error || '이월잔액을 불러오는 데 실패했습니다');
+        toast.error(result.error || '이월잔액을 불러오는 데 실패했습니다');
       }
     } catch (err) {
-      clearTimeout(timeoutId);
       console.error('Load error:', err);
-      if (err instanceof Error && err.name === 'AbortError') {
-        setError('서버 응답 시간이 초과되었습니다. 시트 초기화가 필요할 수 있습니다.');
-      } else {
-        setError('이월잔액을 불러오는 중 오류가 발생했습니다');
-      }
+      toast.error('이월잔액을 불러오는 중 오류가 발생했습니다');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInitialize = async () => {
+  const handleCreateSheet = async () => {
     setInitializing(true);
     try {
-      const res = await fetch('/api/sheets/init', { method: 'POST' });
+      const res = await fetch('/api/sheets/create-sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetName: '이월잔액' }),
+      });
       const result = await res.json();
 
       if (result.success) {
-        toast.success('시트가 초기화되었습니다');
+        toast.success('이월잔액 시트가 생성되었습니다');
+        setSheetStatus('exists');
         loadBalances();
       } else {
-        toast.error(result.error || '초기화에 실패했습니다');
+        toast.error(result.error || '시트 생성에 실패했습니다');
       }
     } catch (err) {
-      console.error('Init error:', err);
-      toast.error('초기화 중 오류가 발생했습니다');
+      console.error('Create sheet error:', err);
+      toast.error('시트 생성 중 오류가 발생했습니다');
     } finally {
       setInitializing(false);
     }
@@ -170,36 +181,45 @@ export default function CarryoverSettingsPage() {
     return num ? Number(num).toLocaleString() : '';
   };
 
+  // 시트 확인 중
+  if (sheetStatus === 'checking') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        <p className="text-sm text-slate-500">시트 상태 확인 중...</p>
+      </div>
+    );
+  }
+
+  // 시트가 없는 경우
+  if (sheetStatus === 'missing' || sheetStatus === 'error') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <AlertCircle className="h-12 w-12 text-amber-500" />
+        <div className="text-center">
+          <h2 className="text-lg font-medium text-slate-900">이월잔액 시트 없음</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Google Sheets에 이월잔액 시트가 없습니다. 시트를 생성해주세요.
+          </p>
+        </div>
+        <Button onClick={handleCreateSheet} disabled={initializing}>
+          {initializing ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4 mr-2" />
+          )}
+          이월잔액 시트 생성
+        </Button>
+      </div>
+    );
+  }
+
+  // 데이터 로딩 중
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
         <p className="text-sm text-slate-500">데이터를 불러오는 중...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <AlertCircle className="h-12 w-12 text-amber-500" />
-        <div className="text-center">
-          <h2 className="text-lg font-medium text-slate-900">오류 발생</h2>
-          <p className="text-sm text-slate-500 mt-1">{error}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={loadBalances}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            다시 시도
-          </Button>
-          <Button onClick={handleInitialize} disabled={initializing}>
-            {initializing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            시트 초기화
-          </Button>
-        </div>
-        <p className="text-xs text-slate-400 mt-2">
-          시트가 없는 경우 초기화 버튼을 클릭하세요
-        </p>
       </div>
     );
   }

@@ -33,98 +33,105 @@ import type { DonationReceipt } from '@/types';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
-// 영수증 HTML 생성 함수
+// 영수증 HTML 생성 함수 (인쇄 페이지와 동일한 스타일)
 function createReceiptHtml(receipt: DonationReceipt, year: string): string {
   const today = new Date();
   const issueDate = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
   const totalAmount = receipt.total_amount.toLocaleString('ko-KR');
 
   return `
-    <div style="width: 794px; padding: 40px; font-family: 'Malgun Gothic', sans-serif; background: white;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="font-size: 28px; font-weight: bold; letter-spacing: 8px; margin-bottom: 10px;">기 부 금 영 수 증</h1>
-        <p style="font-size: 12px; color: #666;">발급번호: ${receipt.issue_number || ''}</p>
+    <div style="width: 760px; padding: 50px 40px; font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; background: white; color: #000;">
+      <!-- 제목 -->
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h1 style="font-size: 26px; font-weight: bold; letter-spacing: 12px; margin: 0 0 8px 0;">기 부 금 영 수 증</h1>
+        <p style="font-size: 12px; color: #666; margin: 0;">발급번호: ${receipt.issue_number || ''}</p>
       </div>
 
+      <!-- 1. 기부자 -->
       <div style="margin-bottom: 20px;">
-        <h2 style="font-size: 14px; font-weight: bold; background: #f3f3f3; padding: 8px; border: 1px solid #ccc; margin: 0;">1. 기부자</h2>
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <div style="font-size: 14px; font-weight: bold; background: #f0f0f0; padding: 6px 10px; border: 1px solid #ccc; border-bottom: none;">1. 기부자</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
           <tr>
-            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">성 명</th>
-            <td style="border: 1px solid #333; padding: 8px; width: 35%;">${receipt.representative}</td>
-            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">주민등록번호</th>
-            <td style="border: 1px solid #333; padding: 8px; width: 35%; font-family: monospace;">${receipt.resident_id ? `${receipt.resident_id}-*******` : '(미등록)'}</td>
+            <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; width: 12%; text-align: center; font-weight: 600;">성 명</th>
+            <td style="border: 1px solid #333; padding: 6px 10px; width: 38%;">${receipt.representative}</td>
+            <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; width: 12%; text-align: center; font-weight: 600;">주민등록번호</th>
+            <td style="border: 1px solid #333; padding: 6px 10px; width: 38%; font-family: 'Courier New', monospace;">${receipt.resident_id ? `${receipt.resident_id}-*******` : '(미등록)'}</td>
           </tr>
           <tr>
-            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; text-align: center;">주 소</th>
-            <td colspan="3" style="border: 1px solid #333; padding: 8px;">${receipt.address || '(미등록)'}</td>
+            <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; text-align: center; font-weight: 600;">주 소</th>
+            <td colspan="3" style="border: 1px solid #333; padding: 6px 10px;">${receipt.address || '(미등록)'}</td>
           </tr>
         </table>
       </div>
 
+      <!-- 2. 기부금 단체 -->
       <div style="margin-bottom: 20px;">
-        <h2 style="font-size: 14px; font-weight: bold; background: #f3f3f3; padding: 8px; border: 1px solid #ccc; margin: 0;">2. 기부금 단체</h2>
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <div style="font-size: 14px; font-weight: bold; background: #f0f0f0; padding: 6px 10px; border: 1px solid #ccc; border-bottom: none;">2. 기부금 단체</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
           <tr>
-            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">단 체 명</th>
-            <td style="border: 1px solid #333; padding: 8px; width: 35%;">대한예수교장로회 예봄교회</td>
-            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">고유번호</th>
-            <td style="border: 1px solid #333; padding: 8px; width: 35%;">117-82-60597</td>
+            <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; width: 12%; text-align: center; font-weight: 600;">단 체 명</th>
+            <td style="border: 1px solid #333; padding: 6px 10px; width: 38%;">대한예수교장로회 예봄교회</td>
+            <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; width: 12%; text-align: center; font-weight: 600;">고유번호</th>
+            <td style="border: 1px solid #333; padding: 6px 10px; width: 38%;">117-82-60597</td>
           </tr>
           <tr>
-            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; text-align: center;">소 재 지</th>
-            <td colspan="3" style="border: 1px solid #333; padding: 8px;">경기도 성남시 분당구 운중로 285 (판교동)</td>
+            <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; text-align: center; font-weight: 600;">소 재 지</th>
+            <td colspan="3" style="border: 1px solid #333; padding: 6px 10px;">경기도 성남시 분당구 운중로 285 (판교동)</td>
           </tr>
           <tr>
-            <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; text-align: center;">대 표 자</th>
-            <td colspan="3" style="border: 1px solid #333; padding: 8px;">최 병 희</td>
+            <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; text-align: center; font-weight: 600;">대 표 자</th>
+            <td colspan="3" style="border: 1px solid #333; padding: 6px 10px;">최 병 희</td>
           </tr>
         </table>
       </div>
 
+      <!-- 3. 기부내용 -->
       <div style="margin-bottom: 20px;">
-        <h2 style="font-size: 14px; font-weight: bold; background: #f3f3f3; padding: 8px; border: 1px solid #ccc; margin: 0;">3. 기부내용</h2>
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <div style="font-size: 14px; font-weight: bold; background: #f0f0f0; padding: 6px 10px; border: 1px solid #ccc; border-bottom: none;">3. 기부내용</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
           <thead>
             <tr>
-              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">유 형</th>
-              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 10%; text-align: center;">코 드</th>
-              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 15%; text-align: center;">구 분</th>
-              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 35%; text-align: center;">기부기간</th>
-              <th style="border: 1px solid #333; padding: 8px; background: #f5f5f5; width: 25%; text-align: center;">기부금액</th>
+              <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; width: 12%; text-align: center; font-weight: 600;">유 형</th>
+              <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; width: 8%; text-align: center; font-weight: 600;">코 드</th>
+              <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; width: 12%; text-align: center; font-weight: 600;">구 분</th>
+              <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; width: 38%; text-align: center; font-weight: 600;">기부기간</th>
+              <th style="border: 1px solid #333; padding: 6px 10px; background: #f5f5f5; width: 30%; text-align: center; font-weight: 600;">기부금액</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td style="border: 1px solid #333; padding: 8px; text-align: center;">종교단체</td>
-              <td style="border: 1px solid #333; padding: 8px; text-align: center;">41</td>
-              <td style="border: 1px solid #333; padding: 8px; text-align: center;">헌금</td>
-              <td style="border: 1px solid #333; padding: 8px; text-align: center;">${year}년 1월 1일 ~ 12월 31일</td>
-              <td style="border: 1px solid #333; padding: 8px; text-align: right; font-weight: bold;">${totalAmount} 원</td>
+              <td style="border: 1px solid #333; padding: 6px 10px; text-align: center;">종교단체</td>
+              <td style="border: 1px solid #333; padding: 6px 10px; text-align: center;">41</td>
+              <td style="border: 1px solid #333; padding: 6px 10px; text-align: center;">헌금</td>
+              <td style="border: 1px solid #333; padding: 6px 10px; text-align: center;">${year}년 1월 1일 ~ 12월 31일</td>
+              <td style="border: 1px solid #333; padding: 6px 10px; text-align: right; font-weight: bold;">${totalAmount} 원</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div style="margin-bottom: 15px; font-size: 13px; border: 1px solid #ccc; padding: 15px; background: #fafafa;">
-        <p style="margin: 0 0 8px 0;">「소득세법」 제34조, 「조세특례제한법」 제76조·제88조의4 및 「법인세법」 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.</p>
+      <!-- 법적 문구 -->
+      <div style="margin-bottom: 16px; font-size: 12px; line-height: 1.6; border: 1px solid #ccc; padding: 12px; background: #fafafa;">
+        <p style="margin: 0 0 6px 0;">「소득세법」 제34조, 「조세특례제한법」 제76조·제88조의4 및 「법인세법」 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.</p>
         <p style="margin: 0; font-size: 11px; color: #666;">※ 이 영수증은 소득세·법인세 신고 시 기부금 영수증으로 사용할 수 있습니다.</p>
       </div>
 
-      <div style="margin-bottom: 20px; text-align: center;">
-        <p style="font-size: 16px; margin-bottom: 15px;">신 청 인 : <span style="font-weight: bold; text-decoration: underline; padding: 0 20px;">${receipt.representative}</span></p>
-        <p style="margin-bottom: 15px;">위와 같이 기부금을 기부받았음을 증명합니다.</p>
-        <p style="font-size: 16px; font-weight: 500; margin-bottom: 25px;">${issueDate}</p>
+      <!-- 신청인 및 발급일 -->
+      <div style="margin-bottom: 16px; text-align: center;">
+        <p style="font-size: 15px; margin: 0 0 12px 0;">신 청 인 : <span style="font-weight: bold; text-decoration: underline; padding: 0 16px;">${receipt.representative}</span></p>
+        <p style="font-size: 13px; margin: 0 0 12px 0;">위와 같이 기부금을 기부받았음을 증명합니다.</p>
+        <p style="font-size: 15px; font-weight: 500; margin: 0 0 20px 0;">${issueDate}</p>
       </div>
 
-      <div style="display: flex; align-items: center; justify-content: center; gap: 30px;">
-        <div style="font-size: 16px;">
+      <!-- 기부금 수령인 서명란 -->
+      <div style="display: flex; align-items: center; justify-content: center; gap: 20px;">
+        <div style="font-size: 15px;">
           <span style="font-weight: 500;">기부금 수령인 :</span>
-          <span style="margin-left: 8px;">대한예수교장로회 예봄교회</span>
+          <span style="margin-left: 6px;">대한예수교장로회 예봄교회</span>
         </div>
-        <div style="position: relative;">
-          <span style="color: #999; font-size: 13px;">(직인)</span>
-          <img src="/church-seal.png" alt="직인" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -70%) scale(1.5); opacity: 0.85;" />
+        <div style="position: relative; width: 70px; height: 70px;">
+          <span style="color: #aaa; font-size: 12px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">(직인)</span>
+          <img src="/church-seal.png" alt="직인" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 65px; height: 65px; opacity: 0.85;" />
         </div>
       </div>
     </div>

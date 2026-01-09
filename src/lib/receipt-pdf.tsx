@@ -29,27 +29,22 @@ Font.register({
 // 스타일 정의
 const styles = StyleSheet.create({
   page: {
-    padding: 40,
+    padding: 50,
+    paddingTop: 40,
     fontFamily: 'NotoSansKR',
     fontSize: 10,
     backgroundColor: '#ffffff',
   },
-  // 헤더
+  // 헤더 - 1.pdf 스타일 (단순 텍스트 + 밑줄)
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 10,
-    borderBottom: '1px solid #e5e5e5',
-  },
-  headerLogo: {
-    width: 24,
-    height: 24,
-    marginRight: 8,
+    marginBottom: 30,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#cccccc',
   },
   headerText: {
     fontSize: 11,
-    color: '#2C3E50',
+    color: '#333333',
   },
   // 제목
   title: {
@@ -147,31 +142,24 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
   },
-  // 수령인
+  // 수령인 - 1.pdf 스타일
   recipientRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 20,
   },
   recipientText: {
     fontSize: 13,
   },
   sealContainer: {
-    width: 60,
-    height: 60,
-    marginLeft: 10,
-    position: 'relative',
+    width: 70,
+    height: 70,
+    marginLeft: 15,
   },
   sealImage: {
-    width: 60,
-    height: 60,
-    opacity: 0.85,
-  },
-  sealPlaceholder: {
-    fontSize: 10,
-    color: '#aaaaaa',
-    textAlign: 'center',
-    marginTop: 20,
+    width: 70,
+    height: 70,
   },
 });
 
@@ -196,7 +184,7 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
       <Page size="A4" style={styles.page}>
         {/* 헤더 - 예봄교회 재정부 */}
         <View style={styles.header}>
-          <Text style={styles.headerText}>⛪ 예봄교회 재정부</Text>
+          <Text style={styles.headerText}>예봄교회 재정부</Text>
         </View>
 
         {/* 제목 */}
@@ -338,8 +326,8 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
           <Text style={styles.recipientText}>
             기부금 수령인 : 대한예수교장로회 예봄교회
           </Text>
+          <Text style={{ fontSize: 10, color: '#999999', marginLeft: 10 }}>(직인)</Text>
           <View style={styles.sealContainer}>
-            <Text style={styles.sealPlaceholder}>(직인)</Text>
             <Image style={styles.sealImage} src={`${baseUrl}/church-seal.png`} />
           </View>
         </View>

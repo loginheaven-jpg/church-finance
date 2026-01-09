@@ -403,6 +403,42 @@ export default function DonationReceiptsPage() {
             </div>
           </div>
 
+          {/* 선택 항목 일괄 다운로드 - 테이블 위에 표시 */}
+          {selectedReceipts.size > 0 && (
+            <div className="mb-4 p-4 bg-blue-50 rounded-lg flex items-center justify-between">
+              <span className="text-blue-700">
+                {downloading
+                  ? `다운로드 중... (${downloadProgress.current}/${downloadProgress.total})`
+                  : `${selectedReceipts.size}명 선택됨`}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    Array.from(selectedReceipts).forEach((rep, idx) => {
+                      setTimeout(() => openPrintPage(rep), idx * 300);
+                    });
+                  }}
+                  disabled={downloading}
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  화면보기
+                </Button>
+                <Button
+                  onClick={handleBatchDownload}
+                  disabled={downloading}
+                >
+                  {downloading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
+                  PDF 일괄저장
+                </Button>
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
@@ -472,42 +508,6 @@ export default function DonationReceiptsPage() {
                   ))}
                 </TableBody>
               </Table>
-
-              {/* 선택 항목 일괄 다운로드 */}
-              {selectedReceipts.size > 0 && (
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg flex items-center justify-between">
-                  <span className="text-blue-700">
-                    {downloading
-                      ? `다운로드 중... (${downloadProgress.current}/${downloadProgress.total})`
-                      : `${selectedReceipts.size}명 선택됨`}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        Array.from(selectedReceipts).forEach((rep, idx) => {
-                          setTimeout(() => openPrintPage(rep), idx * 300);
-                        });
-                      }}
-                      disabled={downloading}
-                    >
-                      <Printer className="mr-2 h-4 w-4" />
-                      화면보기
-                    </Button>
-                    <Button
-                      onClick={handleBatchDownload}
-                      disabled={downloading}
-                    >
-                      {downloading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="mr-2 h-4 w-4" />
-                      )}
-                      PDF 일괄저장
-                    </Button>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </CardContent>

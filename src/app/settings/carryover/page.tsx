@@ -22,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, Plus, RefreshCw, Edit2, Trash2 } from 'lucide-react';
+import { Loader2, Plus, RefreshCw, Edit2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CarryoverBalance {
@@ -37,6 +37,8 @@ interface CarryoverBalance {
 export default function CarryoverSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [initializing, setInitializing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [balances, setBalances] = useState<CarryoverBalance[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingYear, setEditingYear] = useState<number | null>(null);
@@ -53,20 +55,53 @@ export default function CarryoverSettingsPage() {
 
   const loadBalances = async () => {
     setLoading(true);
+    setError(null);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15초 타임아웃
+
     try {
-      const res = await fetch('/api/settings/carryover');
+      const res = await fetch('/api/settings/carryover', {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
       const result = await res.json();
 
       if (result.success) {
         setBalances(result.data || []);
       } else {
-        toast.error(result.error || '이월잔액을 불러오는 데 실패했습니다');
+        setError(result.error || '이월잔액을 불러오는 데 실패했습니다');
       }
-    } catch (error) {
-      console.error('Load error:', error);
-      toast.error('이월잔액을 불러오는 중 오류가 발생했습니다');
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.error('Load error:', err);
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('서버 응답 시간이 초과되었습니다. 시트 초기화가 필요할 수 있습니다.');
+      } else {
+        setError('이월잔액을 불러오는 중 오류가 발생했습니다');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleInitialize = async () => {
+    setInitializing(true);
+    try {
+      const res = await fetch('/api/sheets/init', { method: 'POST' });
+      const result = await res.json();
+
+      if (result.success) {
+        toast.success('시트가 초기화되었습니다');
+        loadBalances();
+      } else {
+        toast.error(result.error || '초기화에 실패했습니다');
+      }
+    } catch (err) {
+      console.error('Init error:', err);
+      toast.error('초기화 중 오류가 발생했습니다');
+    } finally {
+      setInitializing(false);
     }
   };
 
@@ -137,8 +172,34 @@ export default function CarryoverSettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        <p className="text-sm text-slate-500">데이터를 불러오는 중...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <AlertCircle className="h-12 w-12 text-amber-500" />
+        <div className="text-center">
+          <h2 className="text-lg font-medium text-slate-900">오류 발생</h2>
+          <p className="text-sm text-slate-500 mt-1">{error}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={loadBalances}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            다시 시도
+          </Button>
+          <Button onClick={handleInitialize} disabled={initializing}>
+            {initializing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            시트 초기화
+          </Button>
+        </div>
+        <p className="text-xs text-slate-400 mt-2">
+          시트가 없는 경우 초기화 버튼을 클릭하세요
+        </p>
       </div>
     );
   }

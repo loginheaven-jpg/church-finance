@@ -10,24 +10,54 @@ import {
 } from '@react-pdf/renderer';
 import type { DonationReceipt } from '@/types';
 
-// 폰트 등록 여부
+// 폰트 등록 상태
 let fontsRegistered = false;
+let fontLoadPromise: Promise<void> | null = null;
 
-// 한글 폰트 등록 함수
-function registerFonts() {
+// 폰트를 ArrayBuffer로 로드
+async function loadFontAsArrayBuffer(url: string): Promise<ArrayBuffer> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to load font: ${url}`);
+  }
+  return response.arrayBuffer();
+}
+
+// 한글 폰트 등록 함수 (비동기)
+async function registerFonts(): Promise<void> {
   if (fontsRegistered) return;
 
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  // 이미 로딩 중이면 기존 Promise 반환
+  if (fontLoadPromise) return fontLoadPromise;
 
-  Font.register({
-    family: 'NotoSansKR',
-    fonts: [
-      { src: `${baseUrl}/fonts/NotoSansKR-Regular.ttf`, fontWeight: 'normal' },
-      { src: `${baseUrl}/fonts/NotoSansKR-Bold.ttf`, fontWeight: 'bold' },
-    ],
-  });
+  fontLoadPromise = (async () => {
+    try {
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
-  fontsRegistered = true;
+      // 폰트를 ArrayBuffer로 미리 로드
+      const [regularFont, boldFont] = await Promise.all([
+        loadFontAsArrayBuffer(`${baseUrl}/fonts/NotoSansKR-Regular.ttf`),
+        loadFontAsArrayBuffer(`${baseUrl}/fonts/NotoSansKR-Bold.ttf`),
+      ]);
+
+      // ArrayBuffer를 Uint8Array로 변환하여 등록
+      Font.register({
+        family: 'NotoSansKR',
+        fonts: [
+          { src: new Uint8Array(regularFont) as unknown as string, fontWeight: 'normal' },
+          { src: new Uint8Array(boldFont) as unknown as string, fontWeight: 'bold' },
+        ],
+      });
+
+      fontsRegistered = true;
+    } catch (error) {
+      console.error('Font registration error:', error);
+      fontLoadPromise = null;
+      throw error;
+    }
+  })();
+
+  return fontLoadPromise;
 }
 
 // 스타일 정의
@@ -357,8 +387,8 @@ export async function generateReceiptPdf(
   receipt: DonationReceipt,
   year: string
 ): Promise<Blob> {
-  // 폰트 등록
-  registerFonts();
+  // 폰트 등록 (비동기)
+  await registerFonts();
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const doc = <ReceiptDocument receipt={receipt} year={year} baseUrl={baseUrl} />;

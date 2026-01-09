@@ -10,66 +10,59 @@ import {
 } from '@react-pdf/renderer';
 import type { DonationReceipt } from '@/types';
 
-// 폰트 등록 상태
+// 폰트 등록 상태 및 캐시
 let fontsRegistered = false;
-let fontLoadPromise: Promise<void> | null = null;
+let regularFontData: string | null = null;
+let boldFontData: string | null = null;
 
-// ArrayBuffer를 base64 data URI로 변환
-function arrayBufferToDataUri(buffer: ArrayBuffer, mimeType: string): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+// 폰트 데이터를 Blob URL로 로드하고 캐시
+async function loadAndCacheFonts(): Promise<{ regular: string; bold: string }> {
+  if (regularFontData && boldFontData) {
+    return { regular: regularFontData, bold: boldFontData };
   }
-  const base64 = btoa(binary);
-  return `data:${mimeType};base64,${base64}`;
-}
 
-// 폰트를 data URI로 로드
-async function loadFontAsDataUri(url: string): Promise<string> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to load font: ${url}`);
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const [regularResponse, boldResponse] = await Promise.all([
+    fetch(`${baseUrl}/fonts/NotoSansKR-Regular.ttf`),
+    fetch(`${baseUrl}/fonts/NotoSansKR-Bold.ttf`),
+  ]);
+
+  if (!regularResponse.ok || !boldResponse.ok) {
+    throw new Error('Failed to load font files');
   }
-  const buffer = await response.arrayBuffer();
-  return arrayBufferToDataUri(buffer, 'font/truetype');
+
+  const [regularBlob, boldBlob] = await Promise.all([
+    regularResponse.blob(),
+    boldResponse.blob(),
+  ]);
+
+  regularFontData = URL.createObjectURL(regularBlob);
+  boldFontData = URL.createObjectURL(boldBlob);
+
+  return { regular: regularFontData, bold: boldFontData };
 }
 
 // 한글 폰트 등록 함수 (비동기)
 async function registerFonts(): Promise<void> {
   if (fontsRegistered) return;
 
-  // 이미 로딩 중이면 기존 Promise 반환
-  if (fontLoadPromise) return fontLoadPromise;
+  try {
+    const { regular, bold } = await loadAndCacheFonts();
 
-  fontLoadPromise = (async () => {
-    try {
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    Font.register({
+      family: 'NotoSansKR',
+      fonts: [
+        { src: regular, fontWeight: 'normal' },
+        { src: bold, fontWeight: 'bold' },
+      ],
+    });
 
-      // 폰트를 data URI로 미리 로드
-      const [regularFontUri, boldFontUri] = await Promise.all([
-        loadFontAsDataUri(`${baseUrl}/fonts/NotoSansKR-Regular.ttf`),
-        loadFontAsDataUri(`${baseUrl}/fonts/NotoSansKR-Bold.ttf`),
-      ]);
-
-      // data URI로 폰트 등록
-      Font.register({
-        family: 'NotoSansKR',
-        fonts: [
-          { src: regularFontUri, fontWeight: 'normal' },
-          { src: boldFontUri, fontWeight: 'bold' },
-        ],
-      });
-
-      fontsRegistered = true;
-    } catch (error) {
-      console.error('Font registration error:', error);
-      fontLoadPromise = null;
-      throw error;
-    }
-  })();
-
-  return fontLoadPromise;
+    fontsRegistered = true;
+  } catch (error) {
+    console.error('Font registration error:', error);
+    throw error;
+  }
 }
 
 // 스타일 정의

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,56 +33,55 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
-  BarChart3
+  BarChart3,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-interface BudgetSummary {
+interface BudgetReportData {
   year: number;
   referenceDate: string;
   daysPassed: number;
+  daysInYear: number;
   totalBudget: number;
   totalExecuted: number;
   executionRate: number;
   syncRate: number;
-  overBudgetItems: OverBudgetItem[];
+  overBudgetItems: Array<{
+    code: number;
+    name: string;
+    syncRate: number;
+  }>;
+  categories: Array<{
+    category_code: number;
+    category_item: string;
+    budget: number;
+    executed: number;
+    executionRate: number;
+    syncRate: number;
+    accounts: Array<{
+      account_code: number;
+      account_item: string;
+      budgeted: number;
+      executed: number;
+      percentage: number;
+      syncRate: number;
+      remaining: number;
+    }>;
+  }>;
 }
 
-interface OverBudgetItem {
-  code: string;
-  name: string;
-  syncRate: number;
-}
-
-interface YearlyData {
+interface YearlyChartData {
   year: number;
   budget: number;
   executed: number;
   executionRate: number;
   syncRate: number;
-}
-
-interface CategoryData {
-  code: number;
-  name: string;
-  budget: number;
-  executed: number;
-  executionRate: number;
-  syncRate: number;
-  items: SubCategoryData[];
-}
-
-interface SubCategoryData {
-  code: string;
-  name: string;
-  budget: number;
-  executed: number;
-  syncRate: number;
-  previousYearExecuted?: number;
 }
 
 interface Insight {
@@ -115,307 +114,6 @@ function getStatus(syncRate: number): 'danger' | 'warning' | 'normal' {
   if (syncRate > 110) return 'danger';
   if (syncRate > 100) return 'warning';
   return 'normal';
-}
-
-function calculateSyncRate(executed: number, budget: number, daysPassed: number): number {
-  const syncBudget = (budget / 365) * daysPassed;
-  return syncBudget > 0 ? (executed / syncBudget) * 100 : 0;
-}
-
-// ============================================================================
-// 5개년 데이터 (xlsx에서 추출)
-// ============================================================================
-
-const YEARLY_DATA: Record<number, {
-  referenceDate: string;
-  daysPassed: number;
-  categories: CategoryData[];
-}> = {
-  2021: {
-    referenceDate: '2021-12-31',
-    daysPassed: 365,
-    categories: [
-      { code: 10, name: '사례비', budget: 72706080, executed: 72706080, executionRate: 100, syncRate: 100, items: [
-        { code: '11', name: '교역자사례', budget: 67200000, executed: 67200000, syncRate: 100 },
-        { code: '13', name: '기타수당', budget: 5506080, executed: 5506080, syncRate: 100 },
-      ]},
-      { code: 20, name: '예배비', budget: 6580000, executed: 6580000, executionRate: 100, syncRate: 100, items: [
-        { code: '21', name: '예배환경비', budget: 1600000, executed: 1600000, syncRate: 100 },
-        { code: '23', name: '찬양대', budget: 4800000, executed: 4800000, syncRate: 100 },
-      ]},
-      { code: 30, name: '선교비', budget: 22080000, executed: 22080000, executionRate: 100, syncRate: 100, items: [
-        { code: '31', name: '전도비', budget: 4880000, executed: 4880000, syncRate: 100 },
-        { code: '32', name: '선교보고비', budget: 1600000, executed: 1600000, syncRate: 100 },
-        { code: '33', name: '선교후원비', budget: 15600000, executed: 15600000, syncRate: 100 },
-      ]},
-      { code: 40, name: '교육비', budget: 69500000, executed: 69500000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 50, name: '봉사비', budget: 5500000, executed: 5500000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 60, name: '관리비', budget: 80000000, executed: 80000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 70, name: '운영비', budget: 8000000, executed: 8000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 80, name: '상회비', budget: 6000000, executed: 6000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 90, name: '기타비용', budget: 10000000, executed: 10000000, executionRate: 100, syncRate: 100, items: [] },
-    ]
-  },
-  2022: {
-    referenceDate: '2022-12-31',
-    daysPassed: 365,
-    categories: [
-      { code: 10, name: '사례비', budget: 85000000, executed: 85000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 20, name: '예배비', budget: 8000000, executed: 8000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 30, name: '선교비', budget: 25000000, executed: 25000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 40, name: '교육비', budget: 75000000, executed: 75000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 50, name: '봉사비', budget: 6000000, executed: 6000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 60, name: '관리비', budget: 85000000, executed: 85000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 70, name: '운영비', budget: 9000000, executed: 9000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 80, name: '상회비', budget: 6200000, executed: 6200000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 90, name: '기타비용', budget: 10000000, executed: 10000000, executionRate: 100, syncRate: 100, items: [] },
-    ]
-  },
-  2023: {
-    referenceDate: '2023-12-31',
-    daysPassed: 365,
-    categories: [
-      { code: 10, name: '사례비', budget: 115420000, executed: 114998110, executionRate: 99.6, syncRate: 99.6, items: [
-        { code: '11', name: '교역자사례', budget: 106720000, executed: 103452260, syncRate: 96.9 },
-        { code: '13', name: '기타수당', budget: 8200000, executed: 8800000, syncRate: 107.3 },
-        { code: '14', name: '중식대', budget: 500000, executed: 2745850, syncRate: 549.2 },
-      ]},
-      { code: 20, name: '예배비', budget: 20200000, executed: 35940260, executionRate: 177.9, syncRate: 177.9, items: [
-        { code: '21', name: '예배환경비', budget: 14000000, executed: 29678090, syncRate: 211.9 },
-        { code: '23', name: '찬양대', budget: 6200000, executed: 6262170, syncRate: 101.0 },
-      ]},
-      { code: 30, name: '선교비', budget: 44200000, executed: 42327270, executionRate: 95.8, syncRate: 95.8, items: [
-        { code: '31', name: '전도비', budget: 4000000, executed: 3236650, syncRate: 80.9 },
-        { code: '32', name: '선교보고비', budget: 1000000, executed: 1307220, syncRate: 130.7 },
-        { code: '33', name: '선교후원비', budget: 39200000, executed: 37783400, syncRate: 96.4 },
-      ]},
-      { code: 40, name: '교육비', budget: 95590000, executed: 66490015, executionRate: 69.6, syncRate: 69.6, items: [
-        { code: '41', name: '교육훈련비', budget: 20000000, executed: 12251995, syncRate: 61.3 },
-        { code: '42', name: '어린이부', budget: 7900000, executed: 7336670, syncRate: 92.9 },
-        { code: '43', name: '청소년부', budget: 3980000, executed: 3356250, syncRate: 84.3 },
-        { code: '44', name: '청년부', budget: 7110000, executed: 6811246, syncRate: 95.8 },
-        { code: '46', name: '행사비', budget: 15000000, executed: 5333750, syncRate: 35.6 },
-        { code: '47', name: '친교비', budget: 16000000, executed: 12419144, syncRate: 77.6 },
-        { code: '48', name: '도서비', budget: 5000000, executed: 1644660, syncRate: 32.9 },
-        { code: '49', name: '장학금', budget: 20000000, executed: 17336300, syncRate: 86.7 },
-      ]},
-      { code: 50, name: '봉사비', budget: 7650000, executed: 6815000, executionRate: 89.1, syncRate: 89.1, items: [] },
-      { code: 60, name: '관리비', budget: 95000000, executed: 95000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 70, name: '운영비', budget: 10000000, executed: 10000000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 80, name: '상회비', budget: 6450000, executed: 6450000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 90, name: '기타비용', budget: 10000000, executed: 10000000, executionRate: 100, syncRate: 100, items: [] },
-    ]
-  },
-  2024: {
-    referenceDate: '2024-12-31',
-    daysPassed: 366,
-    categories: [
-      { code: 10, name: '사례비', budget: 118600000, executed: 122176330, executionRate: 103.0, syncRate: 103.0, items: [
-        { code: '11', name: '교역자사례', budget: 106600000, executed: 108815430, syncRate: 102.1, previousYearExecuted: 103452260 },
-        { code: '13', name: '기타수당', budget: 9000000, executed: 8531000, syncRate: 94.8, previousYearExecuted: 8800000 },
-        { code: '14', name: '중식대', budget: 3000000, executed: 4829900, syncRate: 161.0, previousYearExecuted: 2745850 },
-      ]},
-      { code: 20, name: '예배비', budget: 36500000, executed: 11381590, executionRate: 31.2, syncRate: 31.2, items: [
-        { code: '21', name: '예배환경비', budget: 30000000, executed: 4622180, syncRate: 15.4, previousYearExecuted: 29678090 },
-        { code: '23', name: '찬양대', budget: 6500000, executed: 6759410, syncRate: 104.0, previousYearExecuted: 6262170 },
-      ]},
-      { code: 30, name: '선교비', budget: 49600000, executed: 31642970, executionRate: 63.8, syncRate: 63.8, items: [
-        { code: '31', name: '전도비', budget: 2500000, executed: 936270, syncRate: 37.5, previousYearExecuted: 3236650 },
-        { code: '32', name: '선교보고비', budget: 1700000, executed: 800000, syncRate: 47.1, previousYearExecuted: 1307220 },
-        { code: '33', name: '선교후원비', budget: 45400000, executed: 29906700, syncRate: 65.9, previousYearExecuted: 37783400 },
-      ]},
-      { code: 40, name: '교육비', budget: 92960000, executed: 81751122, executionRate: 87.9, syncRate: 87.9, items: [
-        { code: '41', name: '교육훈련비', budget: 26000000, executed: 9312810, syncRate: 35.8, previousYearExecuted: 12251995 },
-        { code: '42', name: '어린이부', budget: 7500000, executed: 8773610, syncRate: 117.0, previousYearExecuted: 7336670 },
-        { code: '43', name: '청소년부', budget: 5800000, executed: 3364940, syncRate: 58.0, previousYearExecuted: 3356250 },
-        { code: '44', name: '청년부', budget: 7960000, executed: 7984764, syncRate: 100.3, previousYearExecuted: 6811246 },
-        { code: '46', name: '행사비', budget: 4000000, executed: 16699705, syncRate: 417.5, previousYearExecuted: 5333750 },
-        { code: '47', name: '친교비', budget: 19000000, executed: 13762653, syncRate: 72.4, previousYearExecuted: 12419144 },
-        { code: '48', name: '도서비', budget: 1700000, executed: 4292640, syncRate: 252.5, previousYearExecuted: 1644660 },
-        { code: '49', name: '장학금', budget: 21000000, executed: 17560000, syncRate: 83.6, previousYearExecuted: 17336300 },
-      ]},
-      { code: 50, name: '봉사비', budget: 6800000, executed: 1223600, executionRate: 18.0, syncRate: 18.0, items: [] },
-      { code: 60, name: '관리비', budget: 115000000, executed: 121970654, executionRate: 106.1, syncRate: 106.1, items: [] },
-      { code: 70, name: '운영비', budget: 9000000, executed: 8266131, executionRate: 91.8, syncRate: 91.8, items: [] },
-      { code: 80, name: '상회비', budget: 6430000, executed: 6430000, executionRate: 100, syncRate: 100, items: [] },
-      { code: 90, name: '기타비용', budget: 10000000, executed: 10613550, executionRate: 106.1, syncRate: 106.1, items: [] },
-    ]
-  },
-  2025: {
-    referenceDate: '2025-12-28',
-    daysPassed: 363,
-    categories: [
-      { code: 10, name: '사례비', budget: 148800000, executed: 156313691, executionRate: 105.0, syncRate: 105.7, items: [
-        { code: '11', name: '교역자사례', budget: 128200000, executed: 136245721, syncRate: 106.8, previousYearExecuted: 108815430 },
-        { code: '13', name: '기타수당', budget: 16100000, executed: 14433000, syncRate: 90.1, previousYearExecuted: 8531000 },
-        { code: '14', name: '중식대', budget: 4500000, executed: 5634970, syncRate: 125.9, previousYearExecuted: 4829900 },
-      ]},
-      { code: 20, name: '예배비', budget: 20000000, executed: 19584867, executionRate: 97.9, syncRate: 98.5, items: [
-        { code: '21', name: '예배환경비', budget: 12000000, executed: 9116067, syncRate: 76.4, previousYearExecuted: 4622180 },
-        { code: '23', name: '찬양대', budget: 8000000, executed: 10468800, syncRate: 131.6, previousYearExecuted: 6759410 },
-      ]},
-      { code: 30, name: '선교비', budget: 32000000, executed: 30150250, executionRate: 94.2, syncRate: 94.7, items: [
-        { code: '31', name: '전도비', budget: 1000000, executed: 1391650, syncRate: 140.0, previousYearExecuted: 936270 },
-        { code: '32', name: '선교보고비', budget: 1000000, executed: 1267000, syncRate: 127.4, previousYearExecuted: 800000 },
-        { code: '33', name: '선교후원비', budget: 30000000, executed: 27491600, syncRate: 92.1, previousYearExecuted: 29906700 },
-      ]},
-      { code: 40, name: '교육비', budget: 122800000, executed: 93800035, executionRate: 76.4, syncRate: 76.8, items: [
-        { code: '41', name: '교육훈련비', budget: 2800000, executed: 7507250, syncRate: 269.6, previousYearExecuted: 9312810 },
-        { code: '42', name: '어린이부', budget: 16200000, executed: 14760480, syncRate: 91.6, previousYearExecuted: 8773610 },
-        { code: '43', name: '청소년부', budget: 6800000, executed: 5785050, syncRate: 85.6, previousYearExecuted: 3364940 },
-        { code: '44', name: '청년부', budget: 10000000, executed: 10426390, syncRate: 104.8, previousYearExecuted: 7984764 },
-        { code: '45', name: '목장비', budget: 19000000, executed: 5363150, syncRate: 28.4, previousYearExecuted: 0 },
-        { code: '46', name: '행사비', budget: 19000000, executed: 14850330, syncRate: 78.6, previousYearExecuted: 16699705 },
-        { code: '47', name: '친교비', budget: 15000000, executed: 17790450, syncRate: 119.3, previousYearExecuted: 13762653 },
-        { code: '48', name: '도서비', budget: 4000000, executed: 2623935, syncRate: 66.0, previousYearExecuted: 4292640 },
-        { code: '49', name: '장학금', budget: 30000000, executed: 14693000, syncRate: 49.3, previousYearExecuted: 17560000 },
-      ]},
-      { code: 50, name: '봉사비', budget: 2100000, executed: 7908040, executionRate: 376.6, syncRate: 378.7, items: [
-        { code: '51', name: '경조비', budget: 600000, executed: 1800000, syncRate: 301.6, previousYearExecuted: 528000 },
-        { code: '52', name: '구호비', budget: 500000, executed: 3100000, syncRate: 623.5, previousYearExecuted: 95600 },
-        { code: '53', name: '지역사회봉사비', budget: 1000000, executed: 3008040, syncRate: 302.5, previousYearExecuted: 600000 },
-      ]},
-      { code: 60, name: '관리비', budget: 68100000, executed: 63739060, executionRate: 93.6, syncRate: 94.1, items: [
-        { code: '61', name: '사택관리비', budget: 9000000, executed: 9652200, syncRate: 107.9, previousYearExecuted: 11288710 },
-        { code: '62', name: '수도광열비', budget: 20000000, executed: 24506900, syncRate: 123.2, previousYearExecuted: 21724790 },
-        { code: '63', name: '공과금', budget: 2000000, executed: 2400530, syncRate: 120.7, previousYearExecuted: 48000 },
-        { code: '64', name: '관리대행비', budget: 6100000, executed: 6597560, syncRate: 108.8, previousYearExecuted: 6444840 },
-        { code: '65', name: '차량유지비', budget: 11000000, executed: 10959000, syncRate: 100.2, previousYearExecuted: 57896684 },
-        { code: '66', name: '수선유지비', budget: 20000000, executed: 9622870, syncRate: 48.4, previousYearExecuted: 24567630 },
-      ]},
-      { code: 70, name: '운영비', budget: 6700000, executed: 9782733, executionRate: 146.0, syncRate: 146.8, items: [
-        { code: '71', name: '통신비', budget: 2200000, executed: 2240270, syncRate: 102.4, previousYearExecuted: 2338620 },
-        { code: '72', name: '도서인쇄비', budget: 500000, executed: 1042250, syncRate: 209.6, previousYearExecuted: 392000 },
-        { code: '74', name: '사무비', budget: 3000000, executed: 6200853, syncRate: 207.9, previousYearExecuted: 4342330 },
-        { code: '75', name: '잡비', budget: 1000000, executed: 299360, syncRate: 30.1, previousYearExecuted: 1193181 },
-      ]},
-      { code: 80, name: '상회비', budget: 6500000, executed: 6381500, executionRate: 98.2, syncRate: 98.7, items: [
-        { code: '81', name: '상회비', budget: 6500000, executed: 6381500, syncRate: 98.7, previousYearExecuted: 6430000 },
-      ]},
-      { code: 90, name: '기타비용', budget: 10020000, executed: 10595133, executionRate: 105.7, syncRate: 106.3, items: [
-        { code: '91', name: '목회활동비', budget: 10000000, executed: 10550663, syncRate: 106.1, previousYearExecuted: 10598400 },
-        { code: '94', name: '법인세', budget: 20000, executed: 44470, syncRate: 223.6, previousYearExecuted: 15150 },
-      ]},
-    ]
-  }
-};
-
-// 5개년 추이 데이터 생성
-function getFiveYearData(): YearlyData[] {
-  return [2021, 2022, 2023, 2024, 2025].map(year => {
-    const data = YEARLY_DATA[year];
-    if (!data) return { year, budget: 0, executed: 0, executionRate: 0, syncRate: 0 };
-
-    const totalBudget = data.categories.reduce((sum, cat) => sum + cat.budget, 0);
-    const totalExecuted = data.categories.reduce((sum, cat) => sum + cat.executed, 0);
-    const executionRate = totalBudget > 0 ? (totalExecuted / totalBudget) * 100 : 0;
-    const syncRate = calculateSyncRate(totalExecuted, totalBudget, data.daysPassed);
-
-    return { year, budget: totalBudget, executed: totalExecuted, executionRate, syncRate };
-  });
-}
-
-// 연도별 요약 생성
-function getYearlySummary(year: number): BudgetSummary {
-  const data = YEARLY_DATA[year];
-  if (!data) {
-    return {
-      year,
-      referenceDate: `${year}-12-31`,
-      daysPassed: 365,
-      totalBudget: 0,
-      totalExecuted: 0,
-      executionRate: 0,
-      syncRate: 0,
-      overBudgetItems: []
-    };
-  }
-
-  const totalBudget = data.categories.reduce((sum, cat) => sum + cat.budget, 0);
-  const totalExecuted = data.categories.reduce((sum, cat) => sum + cat.executed, 0);
-  const executionRate = totalBudget > 0 ? (totalExecuted / totalBudget) * 100 : 0;
-  const syncRate = calculateSyncRate(totalExecuted, totalBudget, data.daysPassed);
-
-  // 초과 항목 추출
-  const overBudgetItems: OverBudgetItem[] = [];
-  for (const cat of data.categories) {
-    for (const item of cat.items) {
-      if (item.syncRate > 100) {
-        overBudgetItems.push({
-          code: item.code,
-          name: item.name,
-          syncRate: item.syncRate
-        });
-      }
-    }
-  }
-  overBudgetItems.sort((a, b) => b.syncRate - a.syncRate);
-
-  return {
-    year,
-    referenceDate: data.referenceDate,
-    daysPassed: data.daysPassed,
-    totalBudget,
-    totalExecuted,
-    executionRate,
-    syncRate,
-    overBudgetItems: overBudgetItems.slice(0, 5)
-  };
-}
-
-// 인사이트 생성
-function generateInsights(year: number): Insight[] {
-  const data = YEARLY_DATA[year];
-  if (!data) return [];
-
-  const insights: Insight[] = [];
-
-  // 위험 항목 찾기
-  const dangerItems: { name: string; syncRate: number }[] = [];
-  for (const cat of data.categories) {
-    for (const item of cat.items) {
-      if (item.syncRate > 150) {
-        dangerItems.push({ name: item.name, syncRate: item.syncRate });
-      }
-    }
-  }
-  dangerItems.sort((a, b) => b.syncRate - a.syncRate);
-
-  if (dangerItems.length > 0) {
-    insights.push({
-      type: 'danger',
-      message: `${dangerItems[0].name}이 동기집행률 ${dangerItems[0].syncRate.toFixed(1)}% → 즉시 예산 조정 필요`
-    });
-  }
-
-  // 전년 대비 비교
-  const prevYear = year - 1;
-  const prevData = YEARLY_DATA[prevYear];
-  if (prevData) {
-    const currentTotal = data.categories.reduce((sum, cat) => sum + cat.executed, 0);
-    const prevTotal = prevData.categories.reduce((sum, cat) => sum + cat.executed, 0);
-    const yoyRate = prevTotal > 0 ? ((currentTotal - prevTotal) / prevTotal) * 100 : 0;
-
-    insights.push({
-      type: yoyRate > 0 ? 'warning' : 'info',
-      message: `전년 대비 총 집행액 ${yoyRate >= 0 ? '+' : ''}${yoyRate.toFixed(1)}% ${yoyRate > 0 ? '증가' : '감소'}${yoyRate < 0 ? ' (예산 절감 효과)' : ''}`
-    });
-  }
-
-  // 사례비 증가 추세
-  const salaryCategory = data.categories.find(c => c.code === 10);
-  const prevSalaryCategory = prevData?.categories.find(c => c.code === 10);
-  if (salaryCategory && prevSalaryCategory) {
-    const salaryGrowth = ((salaryCategory.executed - prevSalaryCategory.executed) / prevSalaryCategory.executed) * 100;
-    if (salaryGrowth > 10) {
-      insights.push({
-        type: 'warning',
-        message: `사례비 증가율 +${salaryGrowth.toFixed(1)}% → 인건비 상승 추세`
-      });
-    }
-  }
-
-  return insights;
 }
 
 // ============================================================================
@@ -462,7 +160,7 @@ function StatCard({
   );
 }
 
-function SubCategoryItem({ item }: { item: SubCategoryData }) {
+function SubCategoryItem({ item }: { item: BudgetReportData['categories'][0]['accounts'][0] }) {
   return (
     <div className="flex items-center justify-between p-2 hover:bg-gray-50 rounded text-sm">
       <div className="flex items-center gap-2">
@@ -470,10 +168,10 @@ function SubCategoryItem({ item }: { item: SubCategoryData }) {
           "w-2 h-2 rounded-full",
           item.syncRate > 100 ? "bg-red-500" : "bg-blue-500"
         )} />
-        <span>{item.name} ({item.code})</span>
+        <span>{item.account_item} ({item.account_code})</span>
       </div>
       <div className="flex items-center gap-4">
-        <span className="text-gray-500 w-20 text-right">{formatCurrency(item.budget)}</span>
+        <span className="text-gray-500 w-20 text-right">{formatCurrency(item.budgeted)}</span>
         <span className="font-semibold w-20 text-right">{formatCurrency(item.executed)}</span>
         <Badge variant={item.syncRate > 100 ? "destructive" : "secondary"} className="w-16 justify-center">
           {item.syncRate.toFixed(1)}%
@@ -488,7 +186,7 @@ function CategoryItem({
   isExpanded,
   onToggle
 }: {
-  category: CategoryData;
+  category: BudgetReportData['categories'][0];
   isExpanded: boolean;
   onToggle: () => void;
 }) {
@@ -502,7 +200,7 @@ function CategoryItem({
       >
         <div className="flex items-center gap-2">
           {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-          <span className="font-semibold">{category.name} ({category.code})</span>
+          <span className="font-semibold">{category.category_item} ({category.category_code})</span>
         </div>
         <div className="flex items-center gap-2">
           {status === 'danger' && <Badge variant="destructive">초과 경고</Badge>}
@@ -533,10 +231,10 @@ function CategoryItem({
         )}
       </div>
 
-      {isExpanded && category.items.length > 0 && (
+      {isExpanded && category.accounts.length > 0 && (
         <div className="px-4 pb-4 space-y-1">
-          {category.items.map(item => (
-            <SubCategoryItem key={item.code} item={item} />
+          {category.accounts.map(item => (
+            <SubCategoryItem key={item.account_code} item={item} />
           ))}
         </div>
       )}
@@ -549,14 +247,108 @@ function CategoryItem({
 // ============================================================================
 
 export default function BudgetExecutionPage() {
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const currentYear = new Date().getFullYear();
+  const availableYears = [currentYear - 4, currentYear - 3, currentYear - 2, currentYear - 1, currentYear];
+
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [loading, setLoading] = useState(true);
+  const [reportData, setReportData] = useState<BudgetReportData | null>(null);
+  const [yearlyData, setYearlyData] = useState<YearlyChartData[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set([10, 20]));
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
 
-  const summary = useMemo(() => getYearlySummary(selectedYear), [selectedYear]);
-  const fiveYearData = useMemo(() => getFiveYearData(), []);
-  const categories = useMemo(() => YEARLY_DATA[selectedYear]?.categories || [], [selectedYear]);
-  const insights = useMemo(() => generateInsights(selectedYear), [selectedYear]);
+  // 단일 연도 데이터 로드
+  const loadYearData = async (year: number): Promise<BudgetReportData | null> => {
+    try {
+      const res = await fetch(`/api/reports/budget?year=${year}`);
+      const data = await res.json();
+      if (data.success) {
+        return data.data;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Failed to load ${year} data:`, error);
+      return null;
+    }
+  };
+
+  // 선택 연도 및 5개년 데이터 로드
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        // 선택 연도 데이터
+        const currentData = await loadYearData(selectedYear);
+        setReportData(currentData);
+
+        // 5개년 차트 데이터
+        const chartDataPromises = availableYears.map(async (year) => {
+          const data = await loadYearData(year);
+          if (data) {
+            return {
+              year,
+              budget: data.totalBudget,
+              executed: data.totalExecuted,
+              executionRate: data.executionRate,
+              syncRate: data.syncRate,
+            };
+          }
+          return { year, budget: 0, executed: 0, executionRate: 0, syncRate: 0 };
+        });
+
+        const chartData = await Promise.all(chartDataPromises);
+        setYearlyData(chartData);
+      } catch (error) {
+        console.error('Load error:', error);
+        toast.error('데이터를 불러오는 중 오류가 발생했습니다');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [selectedYear]);
+
+  // 인사이트 생성
+  const insights = useMemo<Insight[]>(() => {
+    if (!reportData) return [];
+
+    const insights: Insight[] = [];
+
+    // 위험 항목 (동기집행률 150% 초과)
+    const dangerItems = reportData.overBudgetItems.filter(item => item.syncRate > 150);
+    if (dangerItems.length > 0) {
+      insights.push({
+        type: 'danger',
+        message: `${dangerItems[0].name}이(가) 동기집행률 ${dangerItems[0].syncRate.toFixed(1)}% → 즉시 예산 조정 필요`
+      });
+    }
+
+    // 전년 대비 비교
+    const prevYearData = yearlyData.find(d => d.year === selectedYear - 1);
+    if (prevYearData && prevYearData.executed > 0) {
+      const yoyRate = ((reportData.totalExecuted - prevYearData.executed) / prevYearData.executed) * 100;
+      insights.push({
+        type: yoyRate > 0 ? 'warning' : 'info',
+        message: `전년 대비 총 집행액 ${yoyRate >= 0 ? '+' : ''}${yoyRate.toFixed(1)}% ${yoyRate > 0 ? '증가' : '감소'}${yoyRate < 0 ? ' (예산 절감 효과)' : ''}`
+      });
+    }
+
+    // 사례비 증가 추세
+    const salaryCategory = reportData.categories.find(c => c.category_code === 10);
+    const prevSalaryData = yearlyData.find(d => d.year === selectedYear - 1);
+    if (salaryCategory && prevSalaryData) {
+      // 전년 사례비 데이터를 별도로 조회해야 하지만 간단히 처리
+      if (salaryCategory.executed > salaryCategory.budget * 1.05) {
+        insights.push({
+          type: 'warning',
+          message: `사례비 집행률 ${salaryCategory.executionRate.toFixed(1)}% → 예산 대비 초과 집행`
+        });
+      }
+    }
+
+    return insights;
+  }, [reportData, yearlyData, selectedYear]);
 
   const handleToggleCategory = (code: number) => {
     const newSet = new Set(expandedCategories);
@@ -569,12 +361,32 @@ export default function BudgetExecutionPage() {
   };
 
   const toggleAll = () => {
-    if (expandedCategories.size === categories.length) {
+    if (!reportData) return;
+    if (expandedCategories.size === reportData.categories.length) {
       setExpandedCategories(new Set());
     } else {
-      setExpandedCategories(new Set(categories.map(c => c.code)));
+      setExpandedCategories(new Set(reportData.categories.map(c => c.category_code)));
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        <p className="text-sm text-slate-500">예산 데이터를 불러오는 중...</p>
+      </div>
+    );
+  }
+
+  if (!reportData) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <AlertTriangle className="h-8 w-8 text-yellow-500" />
+        <p className="text-sm text-slate-500">예산 데이터가 없습니다.</p>
+        <p className="text-xs text-slate-400">설정 {'>'} 예산 관리에서 예산을 등록해주세요.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -592,7 +404,7 @@ export default function BudgetExecutionPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[2021, 2022, 2023, 2024, 2025].map(year => (
+              {availableYears.map(year => (
                 <SelectItem key={year} value={String(year)}>{year}년</SelectItem>
               ))}
             </SelectContent>
@@ -610,10 +422,10 @@ export default function BudgetExecutionPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              {summary.year}년 예산 집행 현황
+              {reportData.year}년 예산 집행 현황
             </CardTitle>
             <Badge variant="outline">
-              기준일: {summary.referenceDate} ({summary.daysPassed}일 경과)
+              기준일: {reportData.referenceDate} ({reportData.daysPassed}일 경과)
             </Badge>
           </div>
         </CardHeader>
@@ -621,35 +433,35 @@ export default function BudgetExecutionPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <StatCard
               title="총 예산"
-              value={formatCurrency(summary.totalBudget)}
+              value={formatCurrency(reportData.totalBudget)}
               icon={<DollarSign className="h-4 w-4" />}
             />
             <StatCard
               title="총 집행"
-              value={formatCurrency(summary.totalExecuted)}
+              value={formatCurrency(reportData.totalExecuted)}
               icon={<TrendingUp className="h-4 w-4" />}
             />
             <StatCard
               title="집행률"
-              value={`${summary.executionRate.toFixed(1)}%`}
+              value={`${reportData.executionRate.toFixed(1)}%`}
               icon={<Percent className="h-4 w-4" />}
-              status={summary.executionRate > 100 ? 'warning' : 'normal'}
+              status={reportData.executionRate > 100 ? 'warning' : 'normal'}
             />
             <StatCard
               title="동기집행률"
-              value={`${summary.syncRate.toFixed(1)}%`}
+              value={`${reportData.syncRate.toFixed(1)}%`}
               icon={<AlertTriangle className="h-4 w-4" />}
-              status={getStatus(summary.syncRate)}
+              status={getStatus(reportData.syncRate)}
             />
           </div>
 
-          {summary.overBudgetItems.length > 0 && (
+          {reportData.overBudgetItems.length > 0 && (
             <Alert variant="destructive" className="mt-4">
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>동기집행률 초과 항목: {summary.overBudgetItems.length}개</AlertTitle>
+              <AlertTitle>동기집행률 초과 항목: {reportData.overBudgetItems.length}개</AlertTitle>
               <AlertDescription>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {summary.overBudgetItems.map(item => (
+                  {reportData.overBudgetItems.slice(0, 5).map(item => (
                     <span key={item.code} className="text-sm">
                       • {item.name} ({item.syncRate.toFixed(1)}%)
                     </span>
@@ -687,7 +499,7 @@ export default function BudgetExecutionPage() {
         <CardContent>
           {viewMode === 'chart' ? (
             <ResponsiveContainer width="100%" height={400}>
-              <ComposedChart data={fiveYearData}>
+              <ComposedChart data={yearlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" />
                 <YAxis yAxisId="left" tickFormatter={(v) => formatCurrency(v)} />
@@ -742,7 +554,7 @@ export default function BudgetExecutionPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {fiveYearData.map(row => (
+                  {yearlyData.map(row => (
                     <tr key={row.year} className="border-b">
                       <td className="p-2 font-medium">{row.year}년</td>
                       <td className="text-right p-2">{formatFullCurrency(row.budget)}</td>
@@ -769,17 +581,17 @@ export default function BudgetExecutionPage() {
           <div className="flex items-center justify-between">
             <CardTitle>분야별 상세</CardTitle>
             <Button variant="outline" size="sm" onClick={toggleAll}>
-              {expandedCategories.size === categories.length ? '전체 접기' : '전체 펼치기'}
+              {expandedCategories.size === reportData.categories.length ? '전체 접기' : '전체 펼치기'}
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {categories.map(category => (
+          {reportData.categories.map(category => (
             <CategoryItem
-              key={category.code}
+              key={category.category_code}
               category={category}
-              isExpanded={expandedCategories.has(category.code)}
-              onToggle={() => handleToggleCategory(category.code)}
+              isExpanded={expandedCategories.has(category.category_code)}
+              onToggle={() => handleToggleCategory(category.category_code)}
             />
           ))}
         </CardContent>

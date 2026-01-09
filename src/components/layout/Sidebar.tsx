@@ -21,6 +21,7 @@ import {
   Wallet,
   Target,
   RefreshCw,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
@@ -55,6 +56,12 @@ const menuSections: MenuSection[] = [
       { href: '/reports/comparison', label: '3개년 비교', icon: Scale },
       { href: '/reports/income-analysis', label: '수입 분석', icon: TrendingUp },
       { href: '/reports/expense-analysis', label: '지출 분석', icon: TrendingDown },
+    ],
+  },
+  {
+    label: 'BUILDING',
+    items: [
+      { href: '/building', label: '건축 현황', icon: Building2 },
     ],
   },
   {

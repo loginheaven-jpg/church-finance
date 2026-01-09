@@ -14,13 +14,25 @@ import type { DonationReceipt } from '@/types';
 let fontsRegistered = false;
 let fontLoadPromise: Promise<void> | null = null;
 
-// 폰트를 ArrayBuffer로 로드
-async function loadFontAsArrayBuffer(url: string): Promise<ArrayBuffer> {
+// ArrayBuffer를 base64 data URI로 변환
+function arrayBufferToDataUri(buffer: ArrayBuffer, mimeType: string): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = btoa(binary);
+  return `data:${mimeType};base64,${base64}`;
+}
+
+// 폰트를 data URI로 로드
+async function loadFontAsDataUri(url: string): Promise<string> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to load font: ${url}`);
   }
-  return response.arrayBuffer();
+  const buffer = await response.arrayBuffer();
+  return arrayBufferToDataUri(buffer, 'font/truetype');
 }
 
 // 한글 폰트 등록 함수 (비동기)
@@ -34,18 +46,18 @@ async function registerFonts(): Promise<void> {
     try {
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
-      // 폰트를 ArrayBuffer로 미리 로드
-      const [regularFont, boldFont] = await Promise.all([
-        loadFontAsArrayBuffer(`${baseUrl}/fonts/NotoSansKR-Regular.ttf`),
-        loadFontAsArrayBuffer(`${baseUrl}/fonts/NotoSansKR-Bold.ttf`),
+      // 폰트를 data URI로 미리 로드
+      const [regularFontUri, boldFontUri] = await Promise.all([
+        loadFontAsDataUri(`${baseUrl}/fonts/NotoSansKR-Regular.ttf`),
+        loadFontAsDataUri(`${baseUrl}/fonts/NotoSansKR-Bold.ttf`),
       ]);
 
-      // ArrayBuffer를 Uint8Array로 변환하여 등록
+      // data URI로 폰트 등록
       Font.register({
         family: 'NotoSansKR',
         fonts: [
-          { src: new Uint8Array(regularFont) as unknown as string, fontWeight: 'normal' },
-          { src: new Uint8Array(boldFont) as unknown as string, fontWeight: 'bold' },
+          { src: regularFontUri, fontWeight: 'normal' },
+          { src: boldFontUri, fontWeight: 'bold' },
         ],
       });
 

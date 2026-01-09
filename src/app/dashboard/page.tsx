@@ -14,7 +14,7 @@ import {
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries';
-import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails } from '@/components/dashboard';
+import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails, BudgetExecutionCard } from '@/components/dashboard';
 import { startOfWeek, addWeeks, format } from 'date-fns';
 
 interface DashboardStats {
@@ -39,6 +39,17 @@ interface DashboardStats {
     income: number;
     expense: number;
   }>;
+  // 동기집행률 관련
+  yearlyIncome?: number;
+  yearlyExpense?: number;
+  carryoverBalance?: number;
+  totalBudget?: number;
+  syncBudget?: number;
+  syncExecutionRate?: number;
+  yearlyExecutionRate?: number;
+  daysPassed?: number;
+  daysInYear?: number;
+  currentYear?: number;
 }
 
 function DashboardContent() {
@@ -166,6 +177,19 @@ function DashboardContent() {
 
       {/* 8-Week Chart */}
       <WeeklyChart data={weeklyData} />
+
+      {/* Budget Execution Rate Card */}
+      <BudgetExecutionCard
+        totalBudget={stats?.totalBudget || 0}
+        syncBudget={stats?.syncBudget || 0}
+        yearlyExpense={stats?.yearlyExpense || 0}
+        syncExecutionRate={stats?.syncExecutionRate || 0}
+        yearlyExecutionRate={stats?.yearlyExecutionRate || 0}
+        daysPassed={stats?.daysPassed || 0}
+        daysInYear={stats?.daysInYear || 365}
+        currentYear={stats?.currentYear || new Date().getFullYear()}
+        isLoading={isLoading}
+      />
 
       {/* Quick Actions */}
       <Card className="border-0 shadow-soft">

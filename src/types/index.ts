@@ -106,6 +106,29 @@ export interface Budget {
   note?: string;
 }
 
+// 이월잔액
+export interface CarryoverBalance {
+  year: number;           // 기준 연도 (2024 = 2024년 말 → 2025년으로 이월)
+  balance: number;        // 이월잔액
+  construction_balance?: number;  // 건축회계 이월잔액 (분리 관리)
+  note?: string;          // 비고
+  updated_at: string;     // 수정일시
+  updated_by?: string;    // 수정자
+}
+
+// 작정헌금 (Pledge Donation)
+export interface PledgeDonation {
+  id: string;
+  year: number;           // 작정 연도
+  donor_name: string;     // 작정자명
+  representative: string; // 대표자명
+  pledged_amount: number; // 작정 금액
+  fulfilled_amount: number; // 실행 금액 (자동 계산)
+  note?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // 수입부 코드
 export interface IncomeCode {
   category_code: number;

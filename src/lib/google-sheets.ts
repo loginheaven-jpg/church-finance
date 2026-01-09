@@ -13,6 +13,8 @@ import type {
   DonorInfo,
   Budget,
   ManualReceiptHistory,
+  CarryoverBalance,
+  PledgeDonation,
 } from '@/types';
 
 // ============================================
@@ -63,6 +65,8 @@ const FINANCE_CONFIG = {
     expenseCodes: '지출부코드',
     donorInfo: '헌금자정보',
     manualReceipts: '수작업발급이력',
+    carryoverBalance: '이월잔액',
+    pledgeDonations: '작정헌금',
   },
 };
 
@@ -828,6 +832,13 @@ export async function initializeSheets(): Promise<void> {
       'issue_number', 'year', 'representative', 'address', 'resident_id',
       'amount', 'issued_at', 'original_issue_number', 'note'
     ],
+    [FINANCE_CONFIG.sheets.carryoverBalance]: [
+      'year', 'balance', 'construction_balance', 'note', 'updated_at', 'updated_by'
+    ],
+    [FINANCE_CONFIG.sheets.pledgeDonations]: [
+      'id', 'year', 'donor_name', 'representative', 'pledged_amount',
+      'fulfilled_amount', 'note', 'created_at', 'updated_at'
+    ],
   };
 
   // 각 시트 생성 및 헤더 설정
@@ -1013,4 +1024,263 @@ export function getKSTDateTime(): string {
   const now = new Date();
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return kst.toISOString();
+}
+
+// ============================================
+// 이월잔액 관련
+// ============================================
+
+export async function getCarryoverBalances(): Promise<CarryoverBalance[]> {
+  return getSheetData<CarryoverBalance>(FINANCE_CONFIG.sheets.carryoverBalance);
+}
+
+export async function getCarryoverBalance(year: number): Promise<CarryoverBalance | null> {
+  const data = await getCarryoverBalances();
+  return data.find(b => b.year === year) || null;
+}
+
+export async function setCarryoverBalance(record: CarryoverBalance): Promise<void> {
+  const existing = await getCarryoverBalances();
+  const existingIndex = existing.findIndex(b => b.year === record.year);
+
+  if (existingIndex >= 0) {
+    // 업데이트
+    const rows = await readSheet(FINANCE_CONFIG.sheets.carryoverBalance);
+    const rowIndex = existingIndex + 1; // +1 for header
+    const row = [
+      record.year,
+      record.balance,
+      record.construction_balance || 0,
+      record.note || '',
+      record.updated_at,
+      record.updated_by || '',
+    ];
+    await updateSheet(
+      FINANCE_CONFIG.sheets.carryoverBalance,
+      `A${rowIndex + 1}:F${rowIndex + 1}`,
+      [row]
+    );
+  } else {
+    // 신규 추가
+    const row = [
+      record.year,
+      record.balance,
+      record.construction_balance || 0,
+      record.note || '',
+      record.updated_at,
+      record.updated_by || '',
+    ];
+    await appendToSheet(FINANCE_CONFIG.sheets.carryoverBalance, [row]);
+  }
+}
+
+// ============================================
+// 작정헌금 관련
+// ============================================
+
+export async function getPledgeDonations(year?: number): Promise<PledgeDonation[]> {
+  const data = await getSheetData<PledgeDonation>(FINANCE_CONFIG.sheets.pledgeDonations);
+  if (year) {
+    return data.filter(p => p.year === year);
+  }
+  return data;
+}
+
+export async function addPledgeDonation(pledge: Omit<PledgeDonation, 'id' | 'fulfilled_amount'>): Promise<string> {
+  const id = generateId('PLG');
+  const row = [
+    id,
+    pledge.year,
+    pledge.donor_name,
+    pledge.representative,
+    pledge.pledged_amount,
+    0, // fulfilled_amount (자동 계산)
+    pledge.note || '',
+    pledge.created_at,
+    pledge.updated_at,
+  ];
+  await appendToSheet(FINANCE_CONFIG.sheets.pledgeDonations, [row]);
+  return id;
+}
+
+export async function updatePledgeDonation(
+  id: string,
+  updates: Partial<PledgeDonation>
+): Promise<void> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.pledgeDonations);
+  const rowIndex = rows.findIndex(row => row[0] === id);
+
+  if (rowIndex === -1) throw new Error(`Pledge donation ${id} not found`);
+
+  const headers = rows[0];
+  const currentRow = rows[rowIndex];
+
+  const updatedRow = headers.map((header, idx) => {
+    if (header in updates) {
+      return (updates as Record<string, unknown>)[header];
+    }
+    return currentRow[idx];
+  });
+
+  await updateSheet(
+    FINANCE_CONFIG.sheets.pledgeDonations,
+    `A${rowIndex + 1}:I${rowIndex + 1}`,
+    [updatedRow as (string | number | boolean)[]]
+  );
+}
+
+export async function deletePledgeDonation(id: string): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.pledgeDonations;
+
+  // 시트 ID 가져오기
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+
+  const sheet = spreadsheet.data.sheets?.find(
+    (s) => s.properties?.title === sheetName
+  );
+
+  if (!sheet?.properties?.sheetId) {
+    throw new Error('시트를 찾을 수 없습니다');
+  }
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!A:I`,
+  });
+
+  const rows = response.data.values || [];
+  const dataRows = rows.slice(1);
+
+  const rowIndex = dataRows.findIndex((row) => row[0] === id);
+
+  if (rowIndex === -1) {
+    throw new Error('작정헌금 정보를 찾을 수 없습니다');
+  }
+
+  // 행 삭제
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId: sheet.properties.sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex + 1, // +1 for header
+              endIndex: rowIndex + 2,
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
+// ============================================
+// 예산 CRUD 관련
+// ============================================
+
+export async function getAllBudgets(): Promise<Budget[]> {
+  return getSheetData<Budget>(FINANCE_CONFIG.sheets.budget);
+}
+
+export async function addBudget(budget: Budget): Promise<void> {
+  const row = [
+    budget.year,
+    budget.category_code,
+    budget.category_item,
+    budget.account_code,
+    budget.account_item,
+    budget.budgeted_amount,
+    budget.note || '',
+  ];
+  await appendToSheet(FINANCE_CONFIG.sheets.budget, [row]);
+}
+
+export async function updateBudget(
+  year: number,
+  accountCode: number,
+  updates: Partial<Budget>
+): Promise<void> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.budget);
+  const dataRows = rows.slice(1);
+  const rowIndex = dataRows.findIndex(
+    (row) => Number(row[0]) === year && Number(row[3]) === accountCode
+  );
+
+  if (rowIndex === -1) throw new Error('예산 항목을 찾을 수 없습니다');
+
+  const currentRow = dataRows[rowIndex];
+  const updatedRow = [
+    updates.year ?? Number(currentRow[0]),
+    updates.category_code ?? Number(currentRow[1]),
+    updates.category_item ?? currentRow[2],
+    updates.account_code ?? Number(currentRow[3]),
+    updates.account_item ?? currentRow[4],
+    updates.budgeted_amount ?? Number(currentRow[5]),
+    updates.note ?? currentRow[6] ?? '',
+  ];
+
+  await updateSheet(
+    FINANCE_CONFIG.sheets.budget,
+    `A${rowIndex + 2}:G${rowIndex + 2}`,
+    [updatedRow as (string | number | boolean)[]]
+  );
+}
+
+export async function deleteBudget(year: number, accountCode: number): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.budget;
+
+  // 시트 ID 가져오기
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+
+  const sheet = spreadsheet.data.sheets?.find(
+    (s) => s.properties?.title === sheetName
+  );
+
+  if (!sheet?.properties?.sheetId) {
+    throw new Error('시트를 찾을 수 없습니다');
+  }
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!A:G`,
+  });
+
+  const rows = response.data.values || [];
+  const dataRows = rows.slice(1);
+
+  const rowIndex = dataRows.findIndex(
+    (row) => Number(row[0]) === year && Number(row[3]) === accountCode
+  );
+
+  if (rowIndex === -1) {
+    throw new Error('예산 항목을 찾을 수 없습니다');
+  }
+
+  // 행 삭제
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId: sheet.properties.sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex + 1, // +1 for header
+              endIndex: rowIndex + 2,
+            },
+          },
+        },
+      ],
+    },
+  });
 }

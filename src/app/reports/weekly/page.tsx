@@ -180,6 +180,18 @@ export default function WeeklyReportPage() {
             </CardContent>
           </Card>
 
+          {/* 수지차액 */}
+          <Card className={`print:shadow-none print:border-2 ${report.balance >= 0 ? 'bg-blue-50' : 'bg-red-50'}`}>
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-bold text-slate-700">수지차액 (수입 - 지출)</span>
+                <span className={`text-2xl font-bold ${report.balance >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                  {report.balance >= 0 ? '+' : ''}{formatAmount(report.balance)}원
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* 수입/지출 테이블 (2열 레이아웃) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4">
             {/* 수입 */}
@@ -259,24 +271,12 @@ export default function WeeklyReportPage() {
             </Card>
           </div>
 
-          {/* 수지차액 */}
-          <Card className={`print:shadow-none print:border-2 ${report.balance >= 0 ? 'bg-blue-50' : 'bg-red-50'}`}>
-            <CardContent className="pt-6">
-              <div className="flex justify-between items-center">
-                <span className="text-lg font-bold text-slate-700">수지차액 (수입 - 지출)</span>
-                <span className={`text-2xl font-bold ${report.balance >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                  {report.balance >= 0 ? '+' : ''}{formatAmount(report.balance)}원
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* 건축회계 (있는 경우만 표시) */}
           {(report.construction.income > 0 || report.construction.expense > 0) && (
             <Card className="print:shadow-none print:border-2 bg-amber-50">
               <CardContent className="pt-6">
                 <h3 className="text-lg font-bold text-amber-700 mb-4 border-b border-amber-200 pb-2">
-                  건축회계 (별도)
+                  건축회계
                 </h3>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="flex justify-between items-center">

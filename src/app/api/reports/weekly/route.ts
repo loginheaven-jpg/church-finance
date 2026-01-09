@@ -84,17 +84,24 @@ export async function GET(request: NextRequest) {
       getExpenseRecords(yearStart, prevEndDate),
     ]);
 
-    // 전주까지 누적 수입/지출 (건축 분리)
+    // 전주까지 누적 수입/지출 (자본이동 제외, 건축 포함)
+    // - 자본수입(40번대): 내부 자금 이동이므로 제외
+    // - 자본지출(92, 93): 내부 자금 이동이므로 제외
+    // - 건축(500번대): 포함 (편의상 분류일 뿐 통합 관리)
     let prevTotalIncome = 0;
     for (const r of prevIncomeRecords) {
-      if (r.offering_code < 500) {
+      const code = r.offering_code;
+      // 자본수입(40번대) 제외, 나머지 모두 포함 (건축 포함)
+      if (!(code >= 40 && code < 50)) {
         prevTotalIncome += r.amount;
       }
     }
 
     let prevTotalExpense = 0;
     for (const r of prevExpenseRecords) {
-      if (r.category_code < 500) {
+      const accountCode = r.account_code;
+      // 자본지출(92, 93) 제외, 나머지 모두 포함 (건축 포함)
+      if (accountCode !== 92 && accountCode !== 93) {
         prevTotalExpense += r.amount;
       }
     }
@@ -130,49 +137,72 @@ export async function GET(request: NextRequest) {
       100: '예비비',
     };
 
-    // 금주 수입 집계
+    // 금주 수입 집계 (자본이동 제외, 건축 포함)
     const incomeByCategory = new Map<number, number>();
     const incomeByCode = new Map<number, number>();
     let weeklyIncome = 0;
-    let weeklyIncomeSubtotal = 0;
-    let constructionIncome = 0;
+    let weeklyIncomeSubtotal = 0;  // 잔고 계산용 (자본이동 제외)
+    let constructionIncome = 0;    // 표시용 (건축 별도 집계)
+    let capitalIncome = 0;         // 자본수입 (제외됨)
 
     for (const record of incomeRecords) {
       const code = record.offering_code;
       const codeInfo = incomeCodeMap.get(code);
       const categoryCode = codeInfo?.category_code || Math.floor(code / 10) * 10;
 
+      weeklyIncome += record.amount;
+
+      // 건축(500번대) 별도 집계 (표시용)
       if (categoryCode >= 500) {
         constructionIncome += record.amount;
+      }
+
+      // 자본수입(40번대) 제외, 나머지는 잔고 계산에 포함
+      if (code >= 40 && code < 50) {
+        capitalIncome += record.amount;
       } else {
         weeklyIncomeSubtotal += record.amount;
-        incomeByCategory.set(categoryCode, (incomeByCategory.get(categoryCode) || 0) + record.amount);
-        incomeByCode.set(code, (incomeByCode.get(code) || 0) + record.amount);
+        // 카테고리/코드별 집계 (건축 제외하여 표시)
+        if (categoryCode < 500) {
+          incomeByCategory.set(categoryCode, (incomeByCategory.get(categoryCode) || 0) + record.amount);
+          incomeByCode.set(code, (incomeByCode.get(code) || 0) + record.amount);
+        }
       }
-      weeklyIncome += record.amount;
     }
 
-    // 금주 지출 집계
+    // 금주 지출 집계 (자본이동 제외, 건축 포함)
     const expenseByCategory = new Map<number, number>();
     const expenseByCode = new Map<number, number>();
     let weeklyExpense = 0;
-    let weeklyExpenseSubtotal = 0;
-    let constructionExpense = 0;
+    let weeklyExpenseSubtotal = 0;  // 잔고 계산용 (자본이동 제외)
+    let constructionExpense = 0;    // 표시용 (건축 별도 집계)
+    let capitalExpense = 0;         // 자본지출 (제외됨)
 
     for (const record of expenseRecords) {
       const categoryCode = record.category_code;
+      const accountCode = record.account_code;
 
+      weeklyExpense += record.amount;
+
+      // 건축(500번대) 별도 집계 (표시용)
       if (categoryCode >= 500) {
         constructionExpense += record.amount;
+      }
+
+      // 자본지출(92, 93) 제외, 나머지는 잔고 계산에 포함
+      if (accountCode === 92 || accountCode === 93) {
+        capitalExpense += record.amount;
       } else {
         weeklyExpenseSubtotal += record.amount;
-        expenseByCategory.set(categoryCode, (expenseByCategory.get(categoryCode) || 0) + record.amount);
-        expenseByCode.set(record.account_code, (expenseByCode.get(record.account_code) || 0) + record.amount);
+        // 카테고리/코드별 집계 (건축 제외하여 표시)
+        if (categoryCode < 500) {
+          expenseByCategory.set(categoryCode, (expenseByCategory.get(categoryCode) || 0) + record.amount);
+          expenseByCode.set(accountCode, (expenseByCode.get(accountCode) || 0) + record.amount);
+        }
       }
-      weeklyExpense += record.amount;
     }
 
-    // 현재잔고 = 전주최종잔고 + 금주수입 - 금주지출 (건축 제외)
+    // 현재잔고 = 전주최종잔고 + 금주수입 - 금주지출 (자본이동 제외, 건축 포함)
     const currentBalance = previousBalance + weeklyIncomeSubtotal - weeklyExpenseSubtotal;
 
     // 수입 카테고리별 배열 생성

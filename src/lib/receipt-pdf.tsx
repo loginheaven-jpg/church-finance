@@ -268,36 +268,36 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
           <Text style={styles.sectionHeader}>3. 기부내용</Text>
           <View style={styles.table}>
             <View style={styles.tableRow}>
-              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
-                <Text>유 형</Text>
+              <View style={[styles.tableHeaderCell, { width: '10%' }]}>
+                <Text>유형</Text>
               </View>
               <View style={[styles.tableHeaderCell, { width: '8%' }]}>
-                <Text>코 드</Text>
+                <Text>코드</Text>
               </View>
-              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
-                <Text>구 분</Text>
+              <View style={[styles.tableHeaderCell, { width: '10%' }]}>
+                <Text>구분</Text>
               </View>
-              <View style={[styles.tableHeaderCell, { width: '38%' }]}>
+              <View style={[styles.tableHeaderCell, { width: '40%' }]}>
                 <Text>기부기간</Text>
               </View>
-              <View style={[styles.tableHeaderCell, { width: '30%', borderRightWidth: 0 }]}>
+              <View style={[styles.tableHeaderCell, { width: '32%', borderRightWidth: 0 }]}>
                 <Text>기부금액</Text>
               </View>
             </View>
             <View style={styles.tableRowLast}>
-              <View style={[styles.tableCell, { width: '12%', textAlign: 'center' }]}>
+              <View style={[styles.tableCell, { width: '10%', textAlign: 'center' }]}>
                 <Text>종교단체</Text>
               </View>
               <View style={[styles.tableCell, { width: '8%', textAlign: 'center' }]}>
                 <Text>41</Text>
               </View>
-              <View style={[styles.tableCell, { width: '12%', textAlign: 'center' }]}>
+              <View style={[styles.tableCell, { width: '10%', textAlign: 'center' }]}>
                 <Text>헌금</Text>
               </View>
-              <View style={[styles.tableCell, { width: '38%', textAlign: 'center' }]}>
+              <View style={[styles.tableCell, { width: '40%', textAlign: 'center' }]}>
                 <Text>{year}년 1월 1일 ~ 12월 31일</Text>
               </View>
-              <View style={[styles.tableCellLast, { width: '30%', textAlign: 'right' }]}>
+              <View style={[styles.tableCellLast, { width: '32%', textAlign: 'right' }]}>
                 <Text style={{ fontWeight: 'bold' }}>{formatAmount(receipt.total_amount)} 원</Text>
               </View>
             </View>

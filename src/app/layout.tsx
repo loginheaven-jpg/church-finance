@@ -17,8 +17,8 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "예봄교회 재정관리",
-  description: "예봄교회 재정관리 시스템",
+  title: "예봄교회 재정부",
+  description: "예봄교회 재정부",
 };
 
 export default function RootLayout({

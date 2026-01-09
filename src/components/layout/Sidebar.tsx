@@ -103,7 +103,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         </div>
         <div>
           <div className="font-display font-semibold text-[16px] text-white">예봄교회</div>
-          <div className="text-[13px] text-white/50 tracking-[2px]">재 정 장 부</div>
+          <div className="text-[13px] text-white/50 tracking-[2px]">재 정 부</div>
         </div>
       </div>
 

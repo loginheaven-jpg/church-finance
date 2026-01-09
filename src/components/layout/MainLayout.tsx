@@ -35,7 +35,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           >
             ⛪
           </div>
-          <span className="font-display font-semibold text-white text-[13px]">예봄교회 재정장부</span>
+          <span className="font-display font-semibold text-white text-[13px]">예봄교회 재정부</span>
         </div>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}

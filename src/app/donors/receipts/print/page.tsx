@@ -51,7 +51,7 @@ function PrintContent() {
       document.title = `${receipt.representative}님${year}기부금영수증_예봄교회`;
     }
     return () => {
-      document.title = '예봄교회 재정관리';
+      document.title = '예봄교회 재정부';
     };
   }, [receipt, year]);
 

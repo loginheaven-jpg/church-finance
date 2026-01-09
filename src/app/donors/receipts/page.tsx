@@ -27,10 +27,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download, Plus, Split } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DonationReceipt } from '@/types';
 import { downloadReceiptPdf } from '@/lib/receipt-pdf';
+
+// 수작업 발행 폼 타입
+interface ManualForm {
+  representative: string;
+  address: string;
+  resident_id: string;
+  amount: string;
+  issue_number: string;
+}
+
+// 분할 발행 수령인 타입
+interface SplitRecipient {
+  name: string;
+  address: string;
+  resident_id: string;
+  amount: string;
+  issue_number: string;
+}
 
 export default function DonationReceiptsPage() {
   const [loading, setLoading] = useState(false);
@@ -42,6 +61,33 @@ export default function DonationReceiptsPage() {
   const [summary, setSummary] = useState({ totalRepresentatives: 0, totalAmount: 0 });
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
+
+  // 수작업 발행 상태
+  const [showManualDialog, setShowManualDialog] = useState(false);
+  const [manualForm, setManualForm] = useState<ManualForm>({
+    representative: '',
+    address: '',
+    resident_id: '',
+    amount: '',
+    issue_number: '',
+  });
+  const [manualLoading, setManualLoading] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(false);
+
+  // 분할 발행 상태
+  const [showSplitDialog, setShowSplitDialog] = useState(false);
+  const [splitSource, setSplitSource] = useState<DonationReceipt | null>(null);
+  const [splitRecipients, setSplitRecipients] = useState<SplitRecipient[]>([
+    { name: '', address: '', resident_id: '', amount: '', issue_number: '' },
+    { name: '', address: '', resident_id: '', amount: '', issue_number: '' },
+  ]);
+  const [splitLoading, setSplitLoading] = useState(false);
+
+  // 발급번호 정보
+  const [issueNumberInfo, setIssueNumberInfo] = useState<{
+    existingNumbers: string[];
+    nextIssueNumber: string;
+  }>({ existingNumbers: [], nextIssueNumber: '' });
 
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString());
 
@@ -58,6 +104,9 @@ export default function DonationReceiptsPage() {
         setReceipts(data.data);
         setSummary(data.summary);
         setSelectedReceipts(new Set());
+        if (data.issueNumberInfo) {
+          setIssueNumberInfo(data.issueNumberInfo);
+        }
       } else {
         toast.error(data.error);
       }
@@ -153,14 +202,295 @@ export default function DonationReceiptsPage() {
     return amount.toLocaleString('ko-KR') + '원';
   };
 
+  // 금액 문자열을 숫자로 변환
+  const parseAmount = (str: string): number => {
+    return parseInt(str.replace(/[^0-9]/g, '')) || 0;
+  };
+
+  // 금액 입력 포맷팅
+  const formatAmountInput = (value: string): string => {
+    const num = parseAmount(value);
+    return num > 0 ? num.toLocaleString('ko-KR') : '';
+  };
+
+  // 교인 정보 조회
+  const handleLookup = async (name: string, target: 'manual' | 'split', splitIndex?: number) => {
+    if (!name.trim()) {
+      toast.error('이름을 입력해주세요');
+      return;
+    }
+
+    setLookupLoading(true);
+    try {
+      const res = await fetch(`/api/donors/lookup?name=${encodeURIComponent(name)}`);
+      const data = await res.json();
+
+      if (data.success && data.data) {
+        if (target === 'manual') {
+          setManualForm((prev) => ({
+            ...prev,
+            address: data.data.address || '',
+            resident_id: data.data.resident_id || '',
+          }));
+          if (data.data.source === 'not_found') {
+            toast.info('등록된 정보가 없습니다. 직접 입력해주세요.');
+          } else {
+            toast.success('정보를 불러왔습니다');
+          }
+        } else if (target === 'split' && splitIndex !== undefined) {
+          setSplitRecipients((prev) => {
+            const updated = [...prev];
+            updated[splitIndex] = {
+              ...updated[splitIndex],
+              address: data.data.address || '',
+              resident_id: data.data.resident_id || '',
+            };
+            return updated;
+          });
+          if (data.data.source !== 'not_found') {
+            toast.success('정보를 불러왔습니다');
+          }
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('조회 중 오류가 발생했습니다');
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  // 수작업 발행 다이얼로그 열기
+  const openManualDialog = async () => {
+    // 다음 발급번호 조회
+    try {
+      const res = await fetch(`/api/donors/receipts/manual?year=${year}`);
+      const data = await res.json();
+      if (data.success) {
+        setManualForm({
+          representative: '',
+          address: '',
+          resident_id: '',
+          amount: '',
+          issue_number: data.nextIssueNumber,
+        });
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    setShowManualDialog(true);
+  };
+
+  // 수작업 발행 실행
+  const handleManualIssue = async () => {
+    if (!manualForm.representative.trim()) {
+      toast.error('대표자명을 입력해주세요');
+      return;
+    }
+    if (!parseAmount(manualForm.amount)) {
+      toast.error('금액을 입력해주세요');
+      return;
+    }
+    if (!manualForm.issue_number.trim()) {
+      toast.error('발급번호를 입력해주세요');
+      return;
+    }
+
+    setManualLoading(true);
+    try {
+      // 발급 이력 저장
+      const saveRes = await fetch('/api/donors/receipts/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          year: parseInt(year),
+          representative: manualForm.representative,
+          address: manualForm.address,
+          resident_id: manualForm.resident_id,
+          amount: parseAmount(manualForm.amount),
+          issue_number: manualForm.issue_number,
+          original_issue_number: '',
+          note: '수작업',
+        }),
+      });
+
+      const saveData = await saveRes.json();
+      if (!saveData.success) {
+        toast.error(saveData.error || '저장 중 오류가 발생했습니다');
+        setManualLoading(false);
+        return;
+      }
+
+      // PDF 다운로드
+      const receipt: DonationReceipt = {
+        year: parseInt(year),
+        representative: manualForm.representative,
+        address: manualForm.address,
+        resident_id: manualForm.resident_id,
+        total_amount: parseAmount(manualForm.amount),
+        issue_number: saveData.issue_number,
+        donors: [],
+        donations: [],
+      };
+
+      const success = await downloadReceiptPdf(receipt, year);
+      if (success) {
+        toast.success('영수증이 발행되었습니다');
+        setShowManualDialog(false);
+        fetchReceipts();
+      } else {
+        toast.error('PDF 생성 중 오류가 발생했습니다');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('발행 중 오류가 발생했습니다');
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
+  // 분할 발행 다이얼로그 열기
+  const openSplitDialog = async (receipt: DonationReceipt) => {
+    setSplitSource(receipt);
+
+    // 분할 발급번호 조회
+    try {
+      const res = await fetch(
+        `/api/donors/receipts/manual?year=${year}&base_number=${receipt.issue_number}`
+      );
+      const data = await res.json();
+      if (data.success) {
+        setSplitRecipients([
+          {
+            name: '',
+            address: '',
+            resident_id: '',
+            amount: '',
+            issue_number: data.nextIssueNumber,
+          },
+          {
+            name: '',
+            address: '',
+            resident_id: '',
+            amount: '',
+            issue_number: data.nextSplitNumber || `${receipt.issue_number}-3`,
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error(error);
+      setSplitRecipients([
+        { name: '', address: '', resident_id: '', amount: '', issue_number: `${receipt.issue_number}-2` },
+        { name: '', address: '', resident_id: '', amount: '', issue_number: `${receipt.issue_number}-3` },
+      ]);
+    }
+    setShowSplitDialog(true);
+  };
+
+  // 분할 발행 실행
+  const handleSplitIssue = async () => {
+    if (!splitSource) return;
+
+    // 검증
+    for (let i = 0; i < splitRecipients.length; i++) {
+      const r = splitRecipients[i];
+      if (!r.name.trim()) {
+        toast.error(`수령인 ${i + 1}의 이름을 입력해주세요`);
+        return;
+      }
+      if (!parseAmount(r.amount)) {
+        toast.error(`수령인 ${i + 1}의 금액을 입력해주세요`);
+        return;
+      }
+    }
+
+    // 합계 검증
+    const totalSplit = splitRecipients.reduce((sum, r) => sum + parseAmount(r.amount), 0);
+    if (totalSplit !== splitSource.total_amount) {
+      toast.error(`합계가 원본 금액(${formatAmount(splitSource.total_amount)})과 일치해야 합니다`);
+      return;
+    }
+
+    setSplitLoading(true);
+    try {
+      for (const recipient of splitRecipients) {
+        // 발급 이력 저장
+        const saveRes = await fetch('/api/donors/receipts/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            year: parseInt(year),
+            representative: recipient.name,
+            address: recipient.address,
+            resident_id: recipient.resident_id,
+            amount: parseAmount(recipient.amount),
+            issue_number: recipient.issue_number,
+            original_issue_number: splitSource.issue_number,
+            note: '분할',
+          }),
+        });
+
+        const saveData = await saveRes.json();
+        if (!saveData.success) {
+          toast.error(`${recipient.name} 저장 실패: ${saveData.error}`);
+          continue;
+        }
+
+        // PDF 다운로드
+        const receipt: DonationReceipt = {
+          year: parseInt(year),
+          representative: recipient.name,
+          address: recipient.address,
+          resident_id: recipient.resident_id,
+          total_amount: parseAmount(recipient.amount),
+          issue_number: saveData.issue_number,
+          donors: [],
+          donations: [],
+        };
+
+        await downloadReceiptPdf(receipt, year);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      toast.success('분할 발행이 완료되었습니다');
+      setShowSplitDialog(false);
+      fetchReceipts();
+    } catch (error) {
+      console.error(error);
+      toast.error('분할 발행 중 오류가 발생했습니다');
+    } finally {
+      setSplitLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-900">기부금영수증 발급</h1>
-        <Button variant="outline" onClick={fetchReceipts}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          새로고침
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={openManualDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            수작업 발행
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (selectedReceipts.size === 1) {
+                const rep = Array.from(selectedReceipts)[0];
+                const receipt = receipts.find((r) => r.representative === rep);
+                if (receipt) openSplitDialog(receipt);
+              }
+            }}
+            disabled={selectedReceipts.size !== 1}
+          >
+            <Split className="mr-2 h-4 w-4" />
+            분할 발행
+          </Button>
+          <Button variant="outline" onClick={fetchReceipts}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            새로고침
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -407,6 +737,295 @@ export default function DonationReceiptsPage() {
                 <Button onClick={() => openPrintPage(previewReceipt.representative)}>
                   <Printer className="mr-2 h-4 w-4" />
                   인쇄 / PDF 저장
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 수작업 발행 다이얼로그 */}
+      <Dialog open={showManualDialog} onOpenChange={setShowManualDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>수작업 기부금영수증 발행</DialogTitle>
+            <DialogDescription>
+              대표자 목록에 없는 신규 수령인의 영수증을 발행합니다
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>연도</Label>
+              <div className="text-lg font-medium">{year}년</div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manual-name">대표자명</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="manual-name"
+                  value={manualForm.representative}
+                  onChange={(e) =>
+                    setManualForm((prev) => ({ ...prev, representative: e.target.value }))
+                  }
+                  placeholder="이름 입력"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleLookup(manualForm.representative, 'manual')}
+                  disabled={lookupLoading}
+                >
+                  {lookupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manual-address">주소</Label>
+              <Input
+                id="manual-address"
+                value={manualForm.address}
+                onChange={(e) =>
+                  setManualForm((prev) => ({ ...prev, address: e.target.value }))
+                }
+                placeholder="주소 입력"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manual-resident">주민번호 앞자리</Label>
+              <Input
+                id="manual-resident"
+                value={manualForm.resident_id}
+                onChange={(e) =>
+                  setManualForm((prev) => ({ ...prev, resident_id: e.target.value.slice(0, 7) }))
+                }
+                placeholder="000000-0"
+                maxLength={8}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manual-amount">금액</Label>
+              <div className="relative">
+                <Input
+                  id="manual-amount"
+                  value={manualForm.amount}
+                  onChange={(e) =>
+                    setManualForm((prev) => ({
+                      ...prev,
+                      amount: formatAmountInput(e.target.value),
+                    }))
+                  }
+                  placeholder="0"
+                  className="pr-8"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">원</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manual-issue">발급번호</Label>
+              <Input
+                id="manual-issue"
+                value={manualForm.issue_number}
+                onChange={(e) =>
+                  setManualForm((prev) => ({ ...prev, issue_number: e.target.value }))
+                }
+                placeholder="자동 생성"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowManualDialog(false)}>
+                취소
+              </Button>
+              <Button onClick={handleManualIssue} disabled={manualLoading}>
+                {manualLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="mr-2 h-4 w-4" />
+                )}
+                발행 및 PDF 저장
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 분할 발행 다이얼로그 */}
+      <Dialog open={showSplitDialog} onOpenChange={setShowSplitDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>기부금영수증 분할 발행</DialogTitle>
+            <DialogDescription>
+              선택한 영수증의 금액을 분할하여 여러 명에게 발행합니다
+            </DialogDescription>
+          </DialogHeader>
+
+          {splitSource && (
+            <div className="space-y-4">
+              {/* 원본 정보 */}
+              <div className="p-3 bg-slate-100 rounded-lg">
+                <div className="text-sm text-slate-500">원본</div>
+                <div className="font-medium">
+                  {splitSource.representative} ({splitSource.issue_number}) -{' '}
+                  {formatAmount(splitSource.total_amount)}
+                </div>
+              </div>
+
+              {/* 분할 수령인 */}
+              {splitRecipients.map((recipient, index) => (
+                <div key={index} className="border rounded-lg p-4 space-y-3">
+                  <div className="font-medium text-slate-700">수령인 {index + 1}</div>
+
+                  <div className="space-y-2">
+                    <Label>이름</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={recipient.name}
+                        onChange={(e) => {
+                          setSplitRecipients((prev) => {
+                            const updated = [...prev];
+                            updated[index] = { ...updated[index], name: e.target.value };
+                            return updated;
+                          });
+                        }}
+                        placeholder="이름 입력"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleLookup(recipient.name, 'split', index)}
+                        disabled={lookupLoading}
+                      >
+                        {lookupLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Search className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>주소</Label>
+                    <Input
+                      value={recipient.address}
+                      onChange={(e) => {
+                        setSplitRecipients((prev) => {
+                          const updated = [...prev];
+                          updated[index] = { ...updated[index], address: e.target.value };
+                          return updated;
+                        });
+                      }}
+                      placeholder="주소 입력"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>주민번호 앞자리</Label>
+                    <Input
+                      value={recipient.resident_id}
+                      onChange={(e) => {
+                        setSplitRecipients((prev) => {
+                          const updated = [...prev];
+                          updated[index] = {
+                            ...updated[index],
+                            resident_id: e.target.value.slice(0, 7),
+                          };
+                          return updated;
+                        });
+                      }}
+                      placeholder="000000-0"
+                      maxLength={8}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-2">
+                      <Label>금액</Label>
+                      <div className="relative">
+                        <Input
+                          value={recipient.amount}
+                          onChange={(e) => {
+                            setSplitRecipients((prev) => {
+                              const updated = [...prev];
+                              updated[index] = {
+                                ...updated[index],
+                                amount: formatAmountInput(e.target.value),
+                              };
+                              return updated;
+                            });
+                          }}
+                          placeholder="0"
+                          className="pr-8"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">
+                          원
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>발급번호</Label>
+                      <Input
+                        value={recipient.issue_number}
+                        onChange={(e) => {
+                          setSplitRecipients((prev) => {
+                            const updated = [...prev];
+                            updated[index] = { ...updated[index], issue_number: e.target.value };
+                            return updated;
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* 합계 표시 */}
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">분할 합계</span>
+                  <span className="font-bold">
+                    {formatAmount(
+                      splitRecipients.reduce((sum, r) => sum + parseAmount(r.amount), 0)
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500">원본 금액</span>
+                  <span>{formatAmount(splitSource.total_amount)}</span>
+                </div>
+                {splitRecipients.reduce((sum, r) => sum + parseAmount(r.amount), 0) !==
+                  splitSource.total_amount && (
+                  <div className="text-red-500 text-sm mt-1">
+                    ※ 합계가 원본 금액과 일치해야 합니다
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={() => setShowSplitDialog(false)}>
+                  취소
+                </Button>
+                <Button
+                  onClick={handleSplitIssue}
+                  disabled={
+                    splitLoading ||
+                    splitRecipients.reduce((sum, r) => sum + parseAmount(r.amount), 0) !==
+                      splitSource.total_amount
+                  }
+                >
+                  {splitLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Split className="mr-2 h-4 w-4" />
+                  )}
+                  분할 발행 및 PDF 저장
                 </Button>
               </div>
             </div>

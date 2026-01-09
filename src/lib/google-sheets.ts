@@ -12,6 +12,7 @@ import type {
   CardOwner,
   DonorInfo,
   Budget,
+  ManualReceiptHistory,
 } from '@/types';
 
 // ============================================
@@ -61,6 +62,7 @@ const FINANCE_CONFIG = {
     incomeCodes: '수입부코드',
     expenseCodes: '지출부코드',
     donorInfo: '헌금자정보',
+    manualReceipts: '수작업발급이력',
   },
 };
 
@@ -580,6 +582,55 @@ export async function getBudget(year: number): Promise<Budget[]> {
 }
 
 // ============================================
+// 수작업 발급 이력 관련
+// ============================================
+
+export async function getManualReceiptHistory(year?: number): Promise<ManualReceiptHistory[]> {
+  const data = await getSheetData<ManualReceiptHistory>(FINANCE_CONFIG.sheets.manualReceipts);
+  if (year) {
+    return data.filter(r => r.year === year);
+  }
+  return data;
+}
+
+export async function addManualReceiptHistory(record: ManualReceiptHistory): Promise<void> {
+  const row = [
+    record.issue_number,
+    record.year,
+    record.representative,
+    record.address || '',
+    record.resident_id || '',
+    record.amount,
+    record.issued_at,
+    record.original_issue_number || '',
+    record.note || '',
+  ];
+
+  await appendToSheet(FINANCE_CONFIG.sheets.manualReceipts, [row]);
+}
+
+export async function getAllIssueNumbers(year: number): Promise<string[]> {
+  // 기존 영수증의 발급번호 조회
+  const rows = await readSheet(FINANCE_CONFIG.sheets.income);
+  const manualRows = await readSheet(FINANCE_CONFIG.sheets.manualReceipts);
+
+  const issueNumbers: string[] = [];
+
+  // 수작업 발급 이력에서 발급번호 추출
+  if (manualRows.length > 1) {
+    const issueNumberIdx = manualRows[0].indexOf('issue_number');
+    const yearIdx = manualRows[0].indexOf('year');
+    manualRows.slice(1).forEach(row => {
+      if (row[yearIdx] === String(year) && row[issueNumberIdx]) {
+        issueNumbers.push(row[issueNumberIdx]);
+      }
+    });
+  }
+
+  return issueNumbers;
+}
+
+// ============================================
 // 시트 초기화
 // ============================================
 
@@ -629,6 +680,10 @@ export async function initializeSheets(): Promise<void> {
     [FINANCE_CONFIG.sheets.donorInfo]: [
       'representative', 'donor_name', 'relationship', 'registration_number',
       'address', 'phone', 'email', 'note', 'created_at'
+    ],
+    [FINANCE_CONFIG.sheets.manualReceipts]: [
+      'issue_number', 'year', 'representative', 'address', 'resident_id',
+      'amount', 'issued_at', 'original_issue_number', 'note'
     ],
   };
 

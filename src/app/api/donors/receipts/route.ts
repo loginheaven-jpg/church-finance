@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getIncomeRecords, getDonorInfo, getIncomeCodes } from '@/lib/google-sheets';
+import { getIncomeRecords, getDonorInfo, getIncomeCodes, getAllIssueNumbers } from '@/lib/google-sheets';
 import { getMembersByNames } from '@/lib/supabase';
 import type { DonationReceipt } from '@/types';
 
@@ -118,12 +118,34 @@ export async function GET(request: NextRequest) {
         issue_number: `${year + 1}${String(index + 1).padStart(3, '0')}`,
       }));
 
+    // 수작업 발급 이력에서 사용된 발급번호 조회
+    const manualIssueNumbers = await getAllIssueNumbers(year);
+
+    // 자동 발급번호 + 수작업 발급번호
+    const allIssueNumbers = [
+      ...receipts.map(r => r.issue_number),
+      ...manualIssueNumbers,
+    ];
+
+    // 다음 발급번호 계산 (수작업 발행용)
+    const yearPrefix = String(year + 1);
+    const allSeqs = allIssueNumbers
+      .filter(n => n.startsWith(yearPrefix) && !n.includes('-'))
+      .map(n => parseInt(n.slice(4)) || 0);
+    const maxSeq = allSeqs.length > 0 ? Math.max(...allSeqs) : 0;
+    const nextIssueNumber = `${yearPrefix}${String(maxSeq + 1).padStart(3, '0')}`;
+
     return NextResponse.json({
       success: true,
       data: receipts,
       summary: {
         totalRepresentatives: receipts.length,
         totalAmount: receipts.reduce((sum, r) => sum + r.total_amount, 0),
+      },
+      issueNumberInfo: {
+        existingNumbers: allIssueNumbers,
+        nextIssueNumber,
+        lastAutoNumber: receipts[receipts.length - 1]?.issue_number || null,
       },
     });
   } catch (error) {

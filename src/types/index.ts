@@ -159,6 +159,19 @@ export interface DonationReceipt {
   issue_number?: string;  // 발급번호 (2026001~)
 }
 
+// 수작업 발급 이력
+export interface ManualReceiptHistory {
+  issue_number: string;      // 발급번호 (예: 2026016, 2026001-2)
+  year: number;              // 기부 연도
+  representative: string;    // 대표자명
+  address: string;           // 주소
+  resident_id: string;       // 주민번호 앞 7자리
+  amount: number;            // 금액
+  issued_at: string;         // 발급일시
+  original_issue_number: string;  // 원본 발급번호 (분할 시)
+  note: string;              // 비고 (수작업/분할)
+}
+
 // 현금헌금 (외부 시트)
 export interface CashOffering {
   date: string;

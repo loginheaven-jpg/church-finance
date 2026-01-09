@@ -10,59 +10,63 @@ import {
 } from '@react-pdf/renderer';
 import type { DonationReceipt } from '@/types';
 
-// 폰트 등록 상태 및 캐시
+// 폰트 등록 싱글톤 (동시 호출 방지용 뮤텍스)
+let fontRegistrationPromise: Promise<void> | null = null;
 let fontsRegistered = false;
-let regularFontData: string | null = null;
-let boldFontData: string | null = null;
 
-// 폰트 데이터를 Blob URL로 로드하고 캐시
-async function loadAndCacheFonts(): Promise<{ regular: string; bold: string }> {
-  if (regularFontData && boldFontData) {
-    return { regular: regularFontData, bold: boldFontData };
-  }
+// 폰트 사전 로드 (브라우저 캐시에 로드)
+async function prefetchFonts(baseUrl: string): Promise<void> {
+  const regularUrl = `${baseUrl}/fonts/NotoSansKR-Regular.ttf`;
+  const boldUrl = `${baseUrl}/fonts/NotoSansKR-Bold.ttf`;
 
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-
-  const [regularResponse, boldResponse] = await Promise.all([
-    fetch(`${baseUrl}/fonts/NotoSansKR-Regular.ttf`),
-    fetch(`${baseUrl}/fonts/NotoSansKR-Bold.ttf`),
+  // HEAD 요청으로 폰트 파일 존재 확인 및 캐시 워밍
+  const [regularRes, boldRes] = await Promise.all([
+    fetch(regularUrl, { method: 'HEAD' }),
+    fetch(boldUrl, { method: 'HEAD' }),
   ]);
 
-  if (!regularResponse.ok || !boldResponse.ok) {
-    throw new Error('Failed to load font files');
+  if (!regularRes.ok || !boldRes.ok) {
+    throw new Error('Font files not found');
   }
-
-  const [regularBlob, boldBlob] = await Promise.all([
-    regularResponse.blob(),
-    boldResponse.blob(),
-  ]);
-
-  regularFontData = URL.createObjectURL(regularBlob);
-  boldFontData = URL.createObjectURL(boldBlob);
-
-  return { regular: regularFontData, bold: boldFontData };
 }
 
-// 한글 폰트 등록 함수 (비동기)
+// 한글 폰트 등록 함수 (뮤텍스 패턴으로 동시 호출 방지)
 async function registerFonts(): Promise<void> {
+  // 이미 등록 완료된 경우
   if (fontsRegistered) return;
 
-  try {
-    const { regular, bold } = await loadAndCacheFonts();
-
-    Font.register({
-      family: 'NotoSansKR',
-      fonts: [
-        { src: regular, fontWeight: 'normal' },
-        { src: bold, fontWeight: 'bold' },
-      ],
-    });
-
-    fontsRegistered = true;
-  } catch (error) {
-    console.error('Font registration error:', error);
-    throw error;
+  // 등록 진행 중인 경우 기존 Promise 반환
+  if (fontRegistrationPromise) {
+    return fontRegistrationPromise;
   }
+
+  // 새로운 등록 시작
+  fontRegistrationPromise = (async () => {
+    try {
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
+      // 폰트 파일 사전 확인
+      await prefetchFonts(baseUrl);
+
+      // 직접 URL 경로로 폰트 등록 (.ttf 확장자 포함)
+      Font.register({
+        family: 'NotoSansKR',
+        fonts: [
+          { src: `${baseUrl}/fonts/NotoSansKR-Regular.ttf`, fontWeight: 'normal' },
+          { src: `${baseUrl}/fonts/NotoSansKR-Bold.ttf`, fontWeight: 'bold' },
+        ],
+      });
+
+      fontsRegistered = true;
+    } catch (error) {
+      // 실패 시 Promise 초기화하여 재시도 가능하게
+      fontRegistrationPromise = null;
+      console.error('Font registration error:', error);
+      throw error;
+    }
+  })();
+
+  return fontRegistrationPromise;
 }
 
 // 스타일 정의

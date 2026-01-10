@@ -77,6 +77,8 @@ interface BuildingData {
   recent: {
     totalDonation: number;
     totalRepayment: number;
+    totalPrincipal: number;
+    totalInterest: number;
     shortage: number;
     years: RecentYear[];
   };
@@ -91,6 +93,17 @@ interface BuildingData {
       amountPerMonth: number;
       total: number;
     }>;
+  };
+  projection: {
+    avgPrincipalPerYear: number;
+    avgInterestPerYear: number;
+    projectedPayoffYear: number;
+    targetYear: number;
+    yearsToPayoff: number;
+    requiredAnnualPrincipal: number;
+    additionalRequired: number;
+    projectedTotalInterest: number;
+    insights: string[];
   };
 }
 
@@ -373,11 +386,12 @@ export default function BuildingPage() {
     대출잔액: h.loanBalance / 100000000,
   }));
 
-  // 최근 5년 차트 데이터
+  // 최근 5년 차트 데이터 (원금/이자 분리)
   const recentChartData = data.recent.years.map(y => ({
     year: y.year,
     건축헌금: y.donation / 100000000,
-    대출상환: y.repayment / 100000000,
+    원금상환: y.principal / 100000000,
+    이자지출: y.interest / 100000000,
   }));
 
   return (
@@ -546,30 +560,55 @@ export default function BuildingPage() {
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
                 <Bar dataKey="건축헌금" fill="#10b981" name="건축헌금" />
-                <Bar dataKey="대출상환" fill="#ef4444" name="대출상환" />
+                <Bar dataKey="원금상환" fill="#3b82f6" name="원금상환" />
+                <Bar dataKey="이자지출" fill="#ef4444" name="이자지출" />
               </BarChart>
             </ResponsiveContainer>
 
-            {/* 요약 통계 */}
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              <div className="p-3 bg-green-50 rounded-lg border border-green-200 text-center">
-                <div className="text-xs text-green-700">건축헌금 합계</div>
-                <div className="text-lg font-bold text-green-900">
+            {/* 요약 통계 (원금/이자 분리) */}
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              <div className="p-2 bg-green-50 rounded-lg border border-green-200 text-center">
+                <div className="text-xs text-green-700">건축헌금</div>
+                <div className="text-base font-bold text-green-900">
                   {formatCurrency(data.recent.totalDonation)}
                 </div>
               </div>
-              <div className="p-3 bg-red-50 rounded-lg border border-red-200 text-center">
-                <div className="text-xs text-red-700">상환액 합계</div>
-                <div className="text-lg font-bold text-red-900">
-                  {formatCurrency(data.recent.totalRepayment)}
+              <div className="p-2 bg-blue-50 rounded-lg border border-blue-200 text-center">
+                <div className="text-xs text-blue-700">원금상환</div>
+                <div className="text-base font-bold text-blue-900">
+                  {formatCurrency(data.recent.totalPrincipal)}
                 </div>
               </div>
-              <div className="p-3 bg-orange-50 rounded-lg border border-orange-200 text-center">
+              <div className="p-2 bg-red-50 rounded-lg border border-red-200 text-center">
+                <div className="text-xs text-red-700">이자지출</div>
+                <div className="text-base font-bold text-red-900">
+                  {formatCurrency(data.recent.totalInterest)}
+                </div>
+              </div>
+              <div className="p-2 bg-orange-50 rounded-lg border border-orange-200 text-center">
                 <div className="text-xs text-orange-700">부족분</div>
-                <div className="text-lg font-bold text-orange-900">
+                <div className="text-base font-bold text-orange-900">
                   {formatCurrency(data.recent.shortage)}
                 </div>
               </div>
+            </div>
+
+            {/* 인사이트 */}
+            <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="text-xs font-semibold text-slate-700 mb-2">분석</div>
+              <ul className="space-y-1 text-xs text-slate-600">
+                {data.projection.insights.map((insight, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className={cn(
+                      "mt-0.5",
+                      idx === 0 ? "text-blue-500" : idx === 1 ? "text-orange-500" : "text-red-500"
+                    )}>
+                      {idx === 0 ? '📍' : idx === 1 ? '🎯' : '💰'}
+                    </span>
+                    <span>{insight}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <Alert variant="destructive" className="mt-4">

@@ -78,13 +78,12 @@ export function StatsCard({ icon: Icon, label, value, rawValue, color, isSelecte
           </div>
 
           {/* Value and Label */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 relative group">
             <p
               className={cn(
                 'font-display text-[22px] md:text-[28px] font-bold leading-none',
                 colors.textColor
               )}
-              title={tooltipText}
             >
               {value}
             </p>
@@ -94,6 +93,12 @@ export function StatsCard({ icon: Icon, label, value, rawValue, color, isSelecte
             )}>
               {label}
             </p>
+            {/* Custom Tooltip */}
+            {tooltipText && (
+              <div className="absolute left-0 -bottom-10 z-50 px-3 py-1.5 bg-slate-800 text-white text-base md:text-lg font-semibold rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none">
+                {tooltipText}
+              </div>
+            )}
           </div>
         </div>
       </CardContent>

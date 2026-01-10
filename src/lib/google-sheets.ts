@@ -731,16 +731,24 @@ export async function deleteDonorInfo(
 
 /**
  * 연도별예산 시트에서 예산 데이터 읽기 (피벗 형태 → Budget[] 변환)
- * 시트 구조: B=분야코드, C=계정코드, D=항목명, E~=연도별 금액
+ * 시트 구조:
+ *   - B열: 분야코드 (카테고리 헤더 행에서만 값 있음)
+ *   - C열: 계정코드 (세부 항목 행에서만 값 있음)
+ *   - D열: 항목명
+ *   - E열~: 연도별 금액 (헤더: "2024년", "2025년" 등)
  */
 async function getBudgetFromYearlySheet(year: number): Promise<Budget[]> {
   const rows = await readSheet(FINANCE_CONFIG.sheets.yearlyBudget, 'A:Z');
   if (!rows || rows.length < 2) return [];
 
-  // 헤더에서 연도 컬럼 위치 찾기
+  // 헤더에서 연도 컬럼 위치 찾기 (예: "2025년", " 2024년 " 등)
   const headers = rows[0];
-  const yearColIndex = headers.findIndex(h => String(h) === String(year));
-  if (yearColIndex === -1) return [];
+  const yearStr = `${year}년`;
+  const yearColIndex = headers.findIndex(h => String(h).trim() === yearStr);
+  if (yearColIndex === -1) {
+    console.warn(`Year column for ${year} not found in 연도별예산 sheet`);
+    return [];
+  }
 
   // 지출부코드에서 분야명 조회용 맵 생성
   const expenseCodes = await getExpenseCodes();
@@ -754,26 +762,37 @@ async function getBudgetFromYearlySheet(year: number): Promise<Budget[]> {
   // 숫자 파싱 헬퍼
   const parseNum = (val: string | undefined) => {
     if (!val) return 0;
-    return Number(String(val).replace(/,/g, '')) || 0;
+    return Number(String(val).replace(/,/g, '').trim()) || 0;
   };
 
   // 각 행을 Budget 객체로 변환
   const budgets: Budget[] = [];
+  let currentCategoryCode = 0; // 현재 분야코드 (카테고리 헤더 행에서 설정됨)
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length < 4) continue;
 
-    const categoryCode = Number(row[1]); // B열: 분야코드
-    const accountCode = Number(row[2]);  // C열: 계정코드
-    const accountItem = String(row[3] || '');  // D열: 항목명
+    // B열: 분야코드 (카테고리 헤더 행에서만 값 있음)
+    const rowCategoryCode = Number(row[1]) || 0;
+    // C열: 계정코드 (세부 항목 행에서만 값 있음)
+    const accountCode = Number(row[2]) || 0;
+    // D열: 항목명
+    const accountItem = String(row[3] || '').trim();
+    // 해당 연도 금액
     const amount = parseNum(row[yearColIndex]);
 
-    if (accountCode && amount > 0) {
+    // 분야코드가 있으면 현재 카테고리 업데이트 (카테고리 헤더 행)
+    if (rowCategoryCode > 0) {
+      currentCategoryCode = rowCategoryCode;
+    }
+
+    // 계정코드가 있는 행만 예산 항목으로 추가 (세부 항목 행)
+    if (accountCode > 0 && amount > 0) {
       budgets.push({
         year,
-        category_code: categoryCode,
-        category_item: categoryNameMap.get(categoryCode) || `분야${categoryCode}`,
+        category_code: currentCategoryCode,
+        category_item: categoryNameMap.get(currentCategoryCode) || `분야${currentCategoryCode}`,
         account_code: accountCode,
         account_item: accountItem,
         budgeted_amount: amount,

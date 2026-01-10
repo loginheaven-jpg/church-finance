@@ -20,6 +20,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
   BarChart,
+  LabelList,
 } from 'recharts';
 import {
   Building2,
@@ -481,7 +482,7 @@ export default function BuildingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={330}>
               <BarChart data={recentChartData} barGap={8}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" />
@@ -492,49 +493,21 @@ export default function BuildingPage() {
                 />
                 <Legend />
                 {/* 건축헌금 스택 */}
-                <Bar dataKey="건축헌금" stackId="income" fill="#22c55e" name="건축헌금" />
-                <Bar dataKey="일반예산" stackId="income" fill="#166534" name="일반예산" />
+                <Bar dataKey="건축헌금" stackId="income" fill="#22c55e" name="건축헌금">
+                  <LabelList dataKey="건축헌금" position="center" formatter={(v: number) => v > 0.3 ? `${Math.round(v * 100)}` : ''} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                </Bar>
+                <Bar dataKey="일반예산" stackId="income" fill="#166534" name="일반예산">
+                  <LabelList dataKey="일반예산" position="center" formatter={(v: number) => v > 0.3 ? `${Math.round(v * 100)}` : ''} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                </Bar>
                 {/* 건축지출 스택 */}
-                <Bar dataKey="원금상환" stackId="expense" fill="#f97316" name="원금상환" />
-                <Bar dataKey="이자지출" stackId="expense" fill="#ea580c" name="이자지출" />
+                <Bar dataKey="원금상환" stackId="expense" fill="#f97316" name="원금상환">
+                  <LabelList dataKey="원금상환" position="center" formatter={(v: number) => v > 0.3 ? `${Math.round(v * 100)}` : ''} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                </Bar>
+                <Bar dataKey="이자지출" stackId="expense" fill="#ea580c" name="이자지출">
+                  <LabelList dataKey="이자지출" position="center" formatter={(v: number) => v > 0.3 ? `${Math.round(v * 100)}` : ''} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
-
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-xs font-semibold text-green-700 mb-2">건축헌금 + 일반예산</p>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-green-500">건축헌금</span>
-                    <span className="font-bold">3.7억</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-green-800">일반예산</span>
-                    <span className="font-bold">4.2억</span>
-                  </div>
-                </div>
-              </div>
-              <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-                <p className="text-xs font-semibold text-orange-700 mb-2">원금상환 + 이자지출</p>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-orange-500">원금상환</span>
-                    <span className="font-bold">4.9억</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-orange-600">이자지출</span>
-                    <span className="font-bold">3억</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <Alert className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-sm">
-                건축헌금만으로 부족한 <strong>4.2억</strong>은 일반 재정에서 충당되었습니다.
-              </AlertDescription>
-            </Alert>
           </CardContent>
         </Card>
 

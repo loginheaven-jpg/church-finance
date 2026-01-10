@@ -2,6 +2,37 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords, getExpenseRecords, getCarryoverBalance, getBankTransactions } from '@/lib/google-sheets';
 import type { MonthlyReport } from '@/types';
 
+// 이월잔액을 동적으로 계산하는 헬퍼 함수
+// 시트에 데이터가 없으면 이전 연도의 수입/지출로 계산
+async function getCalculatedCarryover(targetYear: number): Promise<number> {
+  // 먼저 시트에서 직접 조회
+  const carryoverData = await getCarryoverBalance(targetYear);
+  if (carryoverData?.balance !== undefined) {
+    return carryoverData.balance;
+  }
+
+  // 기준 연도 (이 이전은 수동 입력 필요)
+  const BASE_YEAR = 2020;
+  if (targetYear <= BASE_YEAR) {
+    return 0; // 기준 연도 이전 데이터는 0 반환
+  }
+
+  // 이전 연도의 이월금 + 이전 연도의 수입 - 지출로 계산
+  const prevYearCarryover = await getCalculatedCarryover(targetYear - 1);
+  const prevStartDate = `${targetYear}-01-01`;
+  const prevEndDate = `${targetYear}-12-31`;
+
+  const [prevIncomeRecords, prevExpenseRecords] = await Promise.all([
+    getIncomeRecords(prevStartDate, prevEndDate),
+    getExpenseRecords(prevStartDate, prevEndDate),
+  ]);
+
+  const prevIncome = prevIncomeRecords.reduce((sum, r) => sum + r.amount, 0);
+  const prevExpense = prevExpenseRecords.reduce((sum, r) => sum + r.amount, 0);
+
+  return prevYearCarryover + prevIncome - prevExpense;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -14,10 +45,10 @@ export async function GET(request: NextRequest) {
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
 
-    const [incomeRecords, expenseRecords, carryoverData, bankTransactions] = await Promise.all([
+    const [incomeRecords, expenseRecords, calculatedCarryover, bankTransactions] = await Promise.all([
       getIncomeRecords(startDate, endDate),
       getExpenseRecords(startDate, endDate),
-      getCarryoverBalance(year - 1), // 전년도 말 이월잔액
+      getCalculatedCarryover(year - 1), // 전년도 말 이월잔액 (동적 계산)
       getBankTransactions(),
     ]);
 
@@ -70,8 +101,8 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => a.month - b.month);
 
-    // 이월잔액
-    const carryoverBalance = carryoverData?.balance || 0;
+    // 이월잔액 (이미 동적 계산된 값)
+    const carryoverBalance = calculatedCarryover;
 
     // 연간 합계
     const totalIncome = months.reduce((sum, m) => sum + m.income, 0);

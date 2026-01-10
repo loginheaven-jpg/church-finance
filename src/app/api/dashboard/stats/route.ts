@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     // week offset 파라미터 처리
     const { searchParams } = new URL(request.url);
     const weekOffset = parseInt(searchParams.get('week') || '0');
+    const debug = searchParams.get('debug') === 'true';
 
     // 현재 KST 시간
     const now = new Date();
@@ -61,6 +62,40 @@ export async function GET(request: NextRequest) {
       getCarryoverBalance(currentYear - 1), // 전년도 말 이월잔액
     ]);
 
+    // 디버그 모드 응답
+    if (debug) {
+      return NextResponse.json({
+        debug: true,
+        currentYear,
+        weekOffset,
+        startDate,
+        endDate,
+        yearStart,
+        yearEnd,
+        counts: {
+          weeklyIncome: weeklyIncomeRecords.length,
+          weeklyExpense: weeklyExpenseRecords.length,
+          yearlyIncome: yearlyIncomeRecords.length,
+          yearlyExpense: yearlyExpenseRecords.length,
+          bankTransactions: bankTransactions.length,
+          unmatchedBank: unmatchedBank.length,
+          unmatchedCard: unmatchedCard.length,
+          budgetItems: budgetData.length,
+        },
+        sampleData: {
+          weeklyIncome: weeklyIncomeRecords.slice(0, 2),
+          weeklyExpense: weeklyExpenseRecords.slice(0, 2),
+          lastBankTransaction: bankTransactions.slice(-1)[0],
+          carryoverData,
+        },
+        envCheck: {
+          hasEmail: !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+          hasKey: !!process.env.GOOGLE_PRIVATE_KEY,
+          hasFinanceSheetId: !!process.env.FINANCE_SHEET_ID,
+        },
+      });
+    }
+
     // 주간 수입/지출 합계
     const weeklyIncome = weeklyIncomeRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
     const weeklyExpense = weeklyExpenseRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
@@ -73,7 +108,11 @@ export async function GET(request: NextRequest) {
       .filter(r => r.category_code < 500) // 건축비 제외
       .reduce((sum, r) => sum + (r.amount || 0), 0);
 
+    // 이월잔액
+    const carryoverBalance = carryoverData?.balance || 0;
+
     // 현재 잔액 (은행원장의 마지막 잔액)
+    // 은행원장이 없으면 이월금 + 연간수입 - 연간지출로 계산
     const sortedBank = bankTransactions
       .filter(t => t.balance > 0)
       .sort((a, b) => {
@@ -82,13 +121,11 @@ export async function GET(request: NextRequest) {
         }
         return b.transaction_date.localeCompare(a.transaction_date);
       });
-    const balance = sortedBank[0]?.balance || 0;
+    const lastBankBalance = sortedBank[0]?.balance;
+    const balance = lastBankBalance ?? (carryoverBalance + yearlyIncome - yearlyExpense);
 
     // 미분류 거래 수
     const unmatchedCount = unmatchedBank.length + unmatchedCard.length;
-
-    // 이월잔액
-    const carryoverBalance = carryoverData?.balance || 0;
 
     // 동기집행률 계산
     // 동기예산 = 연간예산 / 365 * 경과일수

@@ -124,14 +124,18 @@ function getStatus(syncRate: number): 'danger' | 'warning' | 'normal' {
 function StatCard({
   title,
   value,
+  rawValue,
   icon,
   status
 }: {
   title: string;
   value: string;
+  rawValue?: number;
   icon: React.ReactNode;
   status?: 'danger' | 'warning' | 'normal';
 }) {
+  const tooltipText = rawValue !== undefined ? formatFullCurrency(rawValue) : undefined;
+
   return (
     <div className={cn(
       "p-4 rounded-lg border",
@@ -154,7 +158,7 @@ function StatCard({
         status === 'danger' ? 'text-red-700' :
         status === 'warning' ? 'text-yellow-700' :
         'text-blue-700'
-      )}>
+      )} title={tooltipText}>
         {value}
       </div>
     </div>
@@ -173,10 +177,10 @@ function SubCategoryItem({
       <td className="py-2 pl-8 text-left text-sm">
         {item.account_item}
       </td>
-      <td className="py-2 px-3 text-right text-sm text-slate-500">
+      <td className="py-2 px-3 text-right text-sm text-slate-500" title={formatFullCurrency(item.prev_executed)}>
         {formatCurrency(item.prev_executed)}
       </td>
-      <td className="py-2 px-3 text-right text-sm">
+      <td className="py-2 px-3 text-right text-sm" title={formatFullCurrency(item.budgeted)}>
         {formatCurrency(item.budgeted)}
       </td>
       <td className="py-2 px-3 text-right text-sm font-medium">
@@ -184,7 +188,7 @@ function SubCategoryItem({
           type="button"
           onClick={() => onExecutedClick?.(item.account_code, item.account_item)}
           className="hover:text-blue-600 hover:underline cursor-pointer transition-colors"
-          title="클릭하여 지출 내역 보기"
+          title={`${formatFullCurrency(item.executed)} - 클릭하여 지출 내역 보기`}
         >
           {formatCurrency(item.executed)}
         </button>
@@ -229,15 +233,15 @@ function CategoryItem({
           {/* 대항목 합계 숫자 */}
           <div className="text-right">
             <div className="text-xs text-slate-400">{prevYear}집행</div>
-            <div className="font-semibold text-slate-600">{formatCurrency(category.prev_executed)}</div>
+            <div className="font-semibold text-slate-600" title={formatFullCurrency(category.prev_executed)}>{formatCurrency(category.prev_executed)}</div>
           </div>
           <div className="text-right">
             <div className="text-xs text-slate-400">{currentYear}예산</div>
-            <div className="font-semibold">{formatCurrency(category.budget)}</div>
+            <div className="font-semibold" title={formatFullCurrency(category.budget)}>{formatCurrency(category.budget)}</div>
           </div>
           <div className="text-right">
             <div className="text-xs text-slate-400">{currentYear}집행</div>
-            <div className="font-semibold text-blue-600">{formatCurrency(category.executed)}</div>
+            <div className="font-semibold text-blue-600" title={formatFullCurrency(category.executed)}>{formatCurrency(category.executed)}</div>
           </div>
           <Badge
             variant={(category.syncRate ?? 0) > 100 ? "destructive" : "secondary"}
@@ -513,11 +517,13 @@ export default function BudgetExecutionPage() {
             <StatCard
               title="총 예산"
               value={formatCurrency(reportData.totalBudget)}
+              rawValue={reportData.totalBudget}
               icon={<DollarSign className="h-4 w-4" />}
             />
             <StatCard
               title="총 집행"
               value={formatCurrency(reportData.totalExecuted)}
+              rawValue={reportData.totalExecuted}
               icon={<TrendingUp className="h-4 w-4" />}
             />
             <StatCard

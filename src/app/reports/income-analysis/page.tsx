@@ -365,7 +365,7 @@ export default function IncomeAnalysisPage() {
                   </div>
                   <div>
                     <div className="text-sm text-slate-500">인당 평균</div>
-                    <div className="text-2xl font-bold text-slate-900">
+                    <div className="text-2xl font-bold text-slate-900" title={formatFullAmount(donorData.summary.avgPerDonor)}>
                       {formatAmount(donorData.summary.avgPerDonor)}원
                     </div>
                   </div>

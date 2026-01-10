@@ -8,6 +8,7 @@ interface StatsCardProps {
   icon: LucideIcon;
   label: string;
   value: string | number;
+  rawValue?: number; // 원본 숫자 (툴팁 표시용)
   color: 'income' | 'expense' | 'balance' | 'warning';
   isSelected?: boolean;
   onClick?: () => void;
@@ -40,8 +41,13 @@ const colorMap = {
   },
 };
 
-export function StatsCard({ icon: Icon, label, value, color, isSelected, onClick }: StatsCardProps) {
+export function StatsCard({ icon: Icon, label, value, rawValue, color, isSelected, onClick }: StatsCardProps) {
   const colors = colorMap[color];
+
+  // 원본 숫자를 포맷팅하여 툴팁으로 표시
+  const tooltipText = rawValue !== undefined
+    ? new Intl.NumberFormat('ko-KR').format(rawValue) + '원'
+    : undefined;
 
   return (
     <Card
@@ -73,10 +79,13 @@ export function StatsCard({ icon: Icon, label, value, color, isSelected, onClick
 
           {/* Value and Label */}
           <div className="flex-1 min-w-0">
-            <p className={cn(
-              'font-display text-[22px] md:text-[28px] font-bold leading-none',
-              colors.textColor
-            )}>
+            <p
+              className={cn(
+                'font-display text-[22px] md:text-[28px] font-bold leading-none',
+                colors.textColor
+              )}
+              title={tooltipText}
+            >
               {value}
             </p>
             <p className={cn(

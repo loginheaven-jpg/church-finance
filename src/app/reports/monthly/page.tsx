@@ -88,6 +88,11 @@ export default function MonthlyReportPage() {
     return amount.toLocaleString();
   };
 
+  // 전체 숫자 포맷 (툴팁용)
+  const formatFullAmount = (amount: number) => {
+    return new Intl.NumberFormat('ko-KR').format(amount) + '원';
+  };
+
   const chartData = report?.months.map(m => ({
     name: `${m.month}월`,
     수입: m.income,
@@ -130,7 +135,7 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className="text-lg font-bold text-slate-700">
+                <div className="text-lg font-bold text-slate-700" title={formatFullAmount(carryoverBalance)}>
                   {formatAmount(carryoverBalance)}원
                 </div>
               </CardContent>
@@ -145,7 +150,7 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className="text-lg font-bold text-green-600">
+                <div className="text-lg font-bold text-green-600" title={formatFullAmount(totalIncome)}>
                   {formatAmount(totalIncome)}원
                 </div>
               </CardContent>
@@ -160,7 +165,7 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className="text-lg font-bold text-red-600">
+                <div className="text-lg font-bold text-red-600" title={formatFullAmount(totalExpense)}>
                   {formatAmount(totalExpense)}원
                 </div>
               </CardContent>
@@ -175,7 +180,7 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className={`text-lg font-bold ${totalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                <div className={`text-lg font-bold ${totalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`} title={formatFullAmount(totalBalance)}>
                   {totalBalance >= 0 ? '+' : ''}{formatAmount(totalBalance)}원
                 </div>
               </CardContent>
@@ -190,7 +195,7 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className="text-lg font-bold text-amber-600">
+                <div className="text-lg font-bold text-amber-600" title={formatFullAmount(currentBalance)}>
                   {formatAmount(currentBalance)}원
                 </div>
               </CardContent>

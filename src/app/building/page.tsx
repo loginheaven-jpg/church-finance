@@ -171,6 +171,7 @@ export default function BuildingPage() {
   const [data, setData] = useState<BuildingData | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [annualRepayment, setAnnualRepayment] = useState<number>(5000);
+  const [flippedCards, setFlippedCards] = useState<{card1: boolean, card2: boolean}>({card1: false, card2: false});
 
   // 데이터 로드
   useEffect(() => {
@@ -323,107 +324,105 @@ export default function BuildingPage() {
         </Button>
       </div>
 
-      {/* 상단 4개 카드 */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* 카드 1: 건축비 총액 */}
-        <Card className="border-l-4 border-l-slate-500">
+      {/* 상단 3개 카드 (클릭 토글) */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* 카드 1: 건축비 총액 ↔ 건축비 출처 */}
+        <Card
+          className="border-l-4 border-l-slate-500 cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => setFlippedCards(prev => ({...prev, card1: !prev.card1}))}
+        >
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
-              건축비 총액
+            <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              {flippedCards.card1 ? '건축비 출처' : '건축비 총액'}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">
-              {formatCurrency(data.summary.totalCost)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              토지 {formatCurrency(data.summary.landCost)} + 건물 {formatCurrency(data.summary.buildingCost)}
-            </div>
+            {flippedCards.card1 ? (
+              <>
+                <div className="space-y-2">
+                  <div>
+                    <div className="text-5xl font-bold text-green-600">32억</div>
+                    <div className="text-base text-muted-foreground">건축헌금 (~2011)</div>
+                  </div>
+                  <div>
+                    <div className="text-5xl font-bold text-red-600">21억</div>
+                    <div className="text-base text-muted-foreground">대출</div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-6xl font-bold text-slate-900">
+                  {formatCurrency(data.summary.totalCost)}
+                </div>
+                <div className="text-base text-muted-foreground mt-2">
+                  토지 {formatCurrency(data.summary.landCost)} + 건물 {formatCurrency(data.summary.buildingCost)}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
-        {/* 카드 2: 대출잔액 */}
+        {/* 카드 2: 건축지출 ↔ 원금/이자 상세 */}
+        <Card
+          className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => setFlippedCards(prev => ({...prev, card2: !prev.card2}))}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-blue-500" />
+              {flippedCards.card2 ? '건축지출 (2012~)' : '건축지출'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {flippedCards.card2 ? (
+              <>
+                <div className="space-y-2">
+                  <div>
+                    <div className="text-5xl font-bold text-blue-600">{formatCurrency(data.summary.principalPaid)}</div>
+                    <div className="text-base text-muted-foreground">원금상환</div>
+                  </div>
+                  <div>
+                    <div className="text-5xl font-bold text-red-600">{formatCurrency(data.summary.interestPaid)}</div>
+                    <div className="text-base text-muted-foreground">이자지출</div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-6xl font-bold text-blue-600">
+                  {formatCurrency(data.summary.principalPaid + data.summary.interestPaid)}
+                </div>
+                <div className="text-base text-muted-foreground mt-2">
+                  원금 {formatCurrency(data.summary.principalPaid)} + 이자 {formatCurrency(data.summary.interestPaid)}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 카드 3: 대출 잔액 */}
         <Card className="border-l-4 border-l-red-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-red-500" />
+            <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
               대출 잔액
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-600">
+            <div className="text-6xl font-bold text-red-600">
               {formatCurrency(data.summary.loanBalance)}
             </div>
-            <div className="mt-2">
-              <Progress value={data.summary.repaymentRate} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-1">
+            <div className="mt-3">
+              <Progress value={data.summary.repaymentRate} className="h-3" />
+              <p className="text-base text-muted-foreground mt-2">
                 원금 상환률 {data.summary.repaymentRate}%
               </p>
             </div>
           </CardContent>
         </Card>
-
-        {/* 카드 3: 건축헌금 누적 */}
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-green-500" />
-              건축헌금 누적
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {formatCurrency(data.summary.totalDonation)}
-            </div>
-            <div className="mt-2">
-              <Progress value={data.summary.donationRate} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-1">
-                건축비 대비 {data.summary.donationRate}%
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 카드 4: 대출 상환 현황 */}
-        <Card className="border-l-4 border-l-blue-500">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-blue-500" />
-              대출 상환
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">
-              {formatCurrency(data.summary.principalPaid + data.summary.interestPaid)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              원금 {formatCurrency(data.summary.principalPaid)} + 이자 {formatCurrency(data.summary.interestPaid)}
-            </div>
-          </CardContent>
-        </Card>
       </div>
-
-      {/* 원금/이자 상환 현황 */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">상환 현황</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-6">
-            <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm text-blue-700 mb-1">이제까지 원금상환</p>
-              <p className="text-4xl font-bold text-blue-600">{formatCurrency(data.summary.principalPaid)}</p>
-              <p className="text-xs text-muted-foreground mt-1">{data.summary.principalPaid.toLocaleString()}원</p>
-            </div>
-            <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
-              <p className="text-sm text-red-700 mb-1">이제까지 이자상환</p>
-              <p className="text-4xl font-bold text-red-600">{formatCurrency(data.summary.interestPaid)}</p>
-              <p className="text-xs text-muted-foreground mt-1">{data.summary.interestPaid.toLocaleString()}원</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* 5년 실적 분석 + 상환 시뮬레이션 */}
       <div className="grid md:grid-cols-2 gap-6">

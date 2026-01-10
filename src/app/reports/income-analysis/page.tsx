@@ -76,6 +76,26 @@ interface DonorAnalysisData {
     retainedDonors: number;
     retentionRate: number;
   };
+  // 집중도 분석 데이터
+  waterfallData: Array<{
+    group: string;
+    count: number;
+    amount: number;
+    percent: number;
+  }>;
+  lorenzData: Array<{
+    percentPeople: number;
+    equality: number;
+    actual: number;
+  }>;
+  concentration: {
+    top1: number;
+    top5: number;
+    top10: number;
+    top20: number;
+    gini: number;
+    riskLevel: string;
+  };
 }
 
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -570,6 +590,160 @@ export default function IncomeAnalysisPage() {
                     <strong>분석:</strong> 연간 헌금 빈도 분포를 통해 정기적으로 헌금하는 성도와
                     비정기적으로 헌금하는 성도의 비율을 파악할 수 있습니다.
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 헌금 집중도 분석 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 워터폴 차트 - 그룹별 분담 구조 */}
+            <Card>
+              <CardHeader>
+                <CardTitle>헌금 분담 구조</CardTitle>
+                <p className="text-sm text-slate-500">대표자 그룹별 기여도</p>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={donorData.waterfallData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" unit="%" domain={[0, 'auto']} />
+                    <YAxis dataKey="group" type="category" width={90} />
+                    <Tooltip
+                      formatter={(value, name) => {
+                        if (name === 'percent') return [`${value}%`, '비율'];
+                        return [value, name];
+                      }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-3 border rounded-lg shadow-lg">
+                              <p className="font-semibold">{data.group}</p>
+                              <p className="text-sm text-slate-600">{data.count}명</p>
+                              <p className="text-sm text-slate-600">
+                                {(data.amount / 10000).toLocaleString()}만원
+                              </p>
+                              <p className="text-sm font-bold text-blue-600">{data.percent}%</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="percent" radius={[0, 4, 4, 0]}>
+                      {donorData.waterfallData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={
+                            entry.percent > 30
+                              ? '#ef4444'
+                              : entry.percent > 15
+                              ? '#f59e0b'
+                              : '#3b82f6'
+                          }
+                        />
+                      ))}
+                      <LabelList
+                        dataKey="percent"
+                        position="right"
+                        formatter={(value: number) => `${value}%`}
+                        style={{ fontSize: 12, fontWeight: 600 }}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                  <div className="p-2 bg-red-50 rounded">
+                    <span className="text-red-600 font-semibold">상위 10명:</span>{' '}
+                    {donorData.concentration.top10}%
+                  </div>
+                  <div className="p-2 bg-amber-50 rounded">
+                    <span className="text-amber-600 font-semibold">상위 20명:</span>{' '}
+                    {donorData.concentration.top20}%
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 로렌츠 곡선 */}
+            <Card>
+              <CardHeader>
+                <CardTitle>헌금 분포 로렌츠 곡선</CardTitle>
+                <p className="text-sm text-slate-500">대각선에 가까울수록 평등, 멀수록 집중</p>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={donorData.lorenzData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="percentPeople"
+                      label={{ value: '대표자 비율 (%)', position: 'bottom', offset: -5 }}
+                      domain={[0, 100]}
+                    />
+                    <YAxis
+                      label={{ value: '누적 헌금 비율 (%)', angle: -90, position: 'insideLeft' }}
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      formatter={(value, name) => {
+                        if (name === 'equality') return [`${value}%`, '완전 평등'];
+                        if (name === 'actual') return [`${value}%`, '실제 분포'];
+                        return [value, name];
+                      }}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="equality"
+                      stroke="#94a3b8"
+                      strokeDasharray="5 5"
+                      name="완전 평등"
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="actual"
+                      stroke="#ef4444"
+                      strokeWidth={3}
+                      name="실제 분포"
+                      dot={{ r: 3 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div
+                  className={`mt-4 p-3 rounded-lg ${
+                    donorData.concentration.gini > 0.6
+                      ? 'bg-red-50'
+                      : donorData.concentration.gini > 0.4
+                      ? 'bg-amber-50'
+                      : 'bg-green-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold">
+                      지니계수: {donorData.concentration.gini}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-sm font-medium ${
+                        donorData.concentration.gini > 0.6
+                          ? 'bg-red-200 text-red-800'
+                          : donorData.concentration.gini > 0.4
+                          ? 'bg-amber-200 text-amber-800'
+                          : 'bg-green-200 text-green-800'
+                      }`}
+                    >
+                      {donorData.concentration.riskLevel}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600 mt-1">
+                    0.4 이상: 편중 위험 | 0.6 이상: 매우 심각
+                  </p>
+                  {donorData.concentration.gini > 0.4 && (
+                    <p className="text-sm mt-2">
+                      소수 헌금자 의존도가 높아 재정 안정성에 주의가 필요합니다.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

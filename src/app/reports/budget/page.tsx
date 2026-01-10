@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { ExpenseDetailModal } from '@/components/expense-detail-modal';
 
 // ============================================================================
 // Types
@@ -159,7 +160,13 @@ function StatCard({
   );
 }
 
-function SubCategoryItem({ item }: { item: BudgetReportData['categories'][0]['accounts'][0] }) {
+function SubCategoryItem({
+  item,
+  onExecutedClick
+}: {
+  item: BudgetReportData['categories'][0]['accounts'][0];
+  onExecutedClick?: (code: number, name: string) => void;
+}) {
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50">
       <td className="py-2 pl-8 text-left text-sm">
@@ -172,7 +179,14 @@ function SubCategoryItem({ item }: { item: BudgetReportData['categories'][0]['ac
         {formatCurrency(item.budgeted)}
       </td>
       <td className="py-2 px-3 text-right text-sm font-medium">
-        {formatCurrency(item.executed)}
+        <button
+          type="button"
+          onClick={() => onExecutedClick?.(item.account_code, item.account_item)}
+          className="hover:text-blue-600 hover:underline cursor-pointer transition-colors"
+          title="클릭하여 지출 내역 보기"
+        >
+          {formatCurrency(item.executed)}
+        </button>
       </td>
       <td className="py-2 px-3 text-right">
         <Badge variant={(item.syncRate ?? 0) > 100 ? "destructive" : "secondary"} className="w-16 justify-center text-xs">
@@ -188,13 +202,15 @@ function CategoryItem({
   isExpanded,
   onToggle,
   prevYear,
-  currentYear
+  currentYear,
+  onExecutedClick
 }: {
   category: BudgetReportData['categories'][0];
   isExpanded: boolean;
   onToggle: () => void;
   prevYear: number;
   currentYear: number;
+  onExecutedClick?: (code: number, name: string) => void;
 }) {
   const status = getStatus(category.syncRate);
 
@@ -229,7 +245,11 @@ function CategoryItem({
             </thead>
             <tbody>
               {category.accounts.map(item => (
-                <SubCategoryItem key={item.account_code} item={item} />
+                <SubCategoryItem
+                  key={item.account_code}
+                  item={item}
+                  onExecutedClick={onExecutedClick}
+                />
               ))}
               {/* 소계 행 */}
               <tr className="border-t border-slate-300 bg-slate-50 font-semibold text-sm">
@@ -279,6 +299,16 @@ export default function BudgetExecutionPage() {
   const [yearlyData, setYearlyData] = useState<YearlyChartData[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set([10, 20]));
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
+
+  // 지출 상세 모달 상태
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<{ code: number; name: string } | null>(null);
+
+  // 집행 금액 클릭 핸들러
+  const handleExecutedClick = (accountCode: number, accountName: string) => {
+    setSelectedAccount({ code: accountCode, name: accountName });
+    setExpenseModalOpen(true);
+  };
 
   // 단일 연도 데이터 로드
   const loadYearData = async (year: number): Promise<BudgetReportData | null> => {
@@ -626,6 +656,7 @@ export default function BudgetExecutionPage() {
               onToggle={() => handleToggleCategory(category.category_code)}
               prevYear={reportData.prevYear}
               currentYear={reportData.year}
+              onExecutedClick={handleExecutedClick}
             />
           ))}
         </CardContent>
@@ -656,6 +687,17 @@ export default function BudgetExecutionPage() {
             </ul>
           </CardContent>
         </Card>
+      )}
+
+      {/* 지출 상세 모달 */}
+      {selectedAccount && (
+        <ExpenseDetailModal
+          open={expenseModalOpen}
+          onOpenChange={setExpenseModalOpen}
+          accountCode={selectedAccount.code}
+          accountName={selectedAccount.name}
+          year={selectedYear}
+        />
       )}
     </div>
   );

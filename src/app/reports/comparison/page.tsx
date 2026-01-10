@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, BarChart3, TableIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   BarChart,
@@ -71,6 +71,7 @@ export default function ComparisonReportPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ComparisonData | null>(null);
   const [chartMode, setChartMode] = useState<ChartMode>('all');
+  const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
 
   useEffect(() => {
     loadData();
@@ -189,10 +190,6 @@ export default function ComparisonReportPage() {
     return item;
   });
 
-  // 최근 3년 데이터 (테이블용)
-  const recentYears = data.years.slice(-3);
-  const recentSummary = data.summary.slice(-3);
-
   // 차트 높이 결정 (카테고리별 표시시 2배)
   const chartHeight = chartMode === 'all' ? 350 : 600;
 
@@ -227,141 +224,176 @@ export default function ComparisonReportPage() {
         </div>
       </div>
 
-      {/* Summary Table (최근 3개년) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            최근 3개년 요약
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>구분</TableHead>
-                {recentYears.map(year => (
-                  <TableHead key={year} className="text-right">{year}년</TableHead>
-                ))}
-                <TableHead className="text-right">전년 대비</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell className="font-medium">총 수입</TableCell>
-                {recentSummary.map(s => (
-                  <TableCell key={s.year} className="text-right text-green-600">
-                    {formatFullAmount(s.totalIncome)}
-                  </TableCell>
-                ))}
-                <TableCell className="text-right">
-                  {recentSummary[2]?.incomeGrowth >= 0 ? (
-                    <span className="text-green-600 flex items-center justify-end gap-1">
-                      <TrendingUp className="h-4 w-4" />
-                      +{recentSummary[2]?.incomeGrowth}%
-                    </span>
-                  ) : (
-                    <span className="text-red-600 flex items-center justify-end gap-1">
-                      <TrendingDown className="h-4 w-4" />
-                      {recentSummary[2]?.incomeGrowth}%
-                    </span>
-                  )}
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="font-medium">총 지출</TableCell>
-                {recentSummary.map(s => (
-                  <TableCell key={s.year} className="text-right text-red-600">
-                    {formatFullAmount(s.totalExpense)}
-                  </TableCell>
-                ))}
-                <TableCell className="text-right">
-                  {recentSummary[2]?.expenseGrowth >= 0 ? (
-                    <span className="text-red-600 flex items-center justify-end gap-1">
-                      <TrendingUp className="h-4 w-4" />
-                      +{recentSummary[2]?.expenseGrowth}%
-                    </span>
-                  ) : (
-                    <span className="text-green-600 flex items-center justify-end gap-1">
-                      <TrendingDown className="h-4 w-4" />
-                      {recentSummary[2]?.expenseGrowth}%
-                    </span>
-                  )}
-                </TableCell>
-              </TableRow>
-              <TableRow className="bg-slate-50 font-bold">
-                <TableCell>수지차액</TableCell>
-                {recentSummary.map(s => (
-                  <TableCell key={s.year} className={`text-right ${s.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                    {s.balance >= 0 ? '+' : ''}{formatFullAmount(s.balance)}
-                  </TableCell>
-                ))}
-                <TableCell></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Yearly Comparison Chart */}
+      {/* Yearly Comparison - Chart/Table Toggle */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>연도별비교</CardTitle>
-            <div className="flex gap-1">
-              <Button
-                variant={chartMode === 'income' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setChartMode('income')}
-                className={chartMode === 'income' ? 'bg-green-600 hover:bg-green-700' : ''}
-              >
-                수입
-              </Button>
-              <Button
-                variant={chartMode === 'expense' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setChartMode('expense')}
-                className={chartMode === 'expense' ? 'bg-red-600 hover:bg-red-700' : ''}
-              >
-                지출
-              </Button>
-              <Button
-                variant={chartMode === 'all' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setChartMode('all')}
-              >
-                모두
-              </Button>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              연도별비교
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {/* Chart/Table Toggle */}
+              <div className="flex items-center gap-1 mr-2">
+                <Button
+                  variant={viewMode === 'chart' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('chart')}
+                  className="h-8"
+                >
+                  <BarChart3 className="h-4 w-4 mr-1" />
+                  차트
+                </Button>
+                <Button
+                  variant={viewMode === 'table' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('table')}
+                  className="h-8"
+                >
+                  <TableIcon className="h-4 w-4 mr-1" />
+                  테이블
+                </Button>
+              </div>
+              {/* Chart Mode Buttons (only for chart view) */}
+              {viewMode === 'chart' && (
+                <div className="flex gap-1">
+                  <Button
+                    variant={chartMode === 'income' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setChartMode('income')}
+                    className={chartMode === 'income' ? 'bg-green-600 hover:bg-green-700' : ''}
+                  >
+                    수입
+                  </Button>
+                  <Button
+                    variant={chartMode === 'expense' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setChartMode('expense')}
+                    className={chartMode === 'expense' ? 'bg-red-600 hover:bg-red-700' : ''}
+                  >
+                    지출
+                  </Button>
+                  <Button
+                    variant={chartMode === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setChartMode('all')}
+                  >
+                    모두
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={chartHeight}>
-            <BarChart data={yearlyChartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="year" />
-              <YAxis tickFormatter={formatAmount} />
-              <Tooltip
-                formatter={(value) => formatFullAmount(Number(value) || 0)}
-              />
-              <Legend />
-              {chartMode === 'all' ? (
-                <>
-                  <Bar dataKey="수입" fill="#22c55e" />
-                  <Bar dataKey="지출" fill="#ef4444" />
-                </>
-              ) : (
-                chartCategories.map((category, idx) => (
-                  <Bar
-                    key={category}
-                    dataKey={category}
-                    stackId="a"
-                    fill={CATEGORY_COLORS[idx % CATEGORY_COLORS.length]}
-                  />
-                ))
-              )}
-            </BarChart>
-          </ResponsiveContainer>
+          {viewMode === 'chart' ? (
+            <ResponsiveContainer width="100%" height={chartHeight}>
+              <BarChart data={yearlyChartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="year" />
+                <YAxis tickFormatter={formatAmount} />
+                <Tooltip
+                  formatter={(value) => formatFullAmount(Number(value) || 0)}
+                />
+                <Legend />
+                {chartMode === 'all' ? (
+                  <>
+                    <Bar dataKey="수입" fill="#22c55e" />
+                    <Bar dataKey="지출" fill="#ef4444" />
+                  </>
+                ) : (
+                  chartCategories.map((category, idx) => (
+                    <Bar
+                      key={category}
+                      dataKey={category}
+                      stackId="a"
+                      fill={CATEGORY_COLORS[idx % CATEGORY_COLORS.length]}
+                    />
+                  ))
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            /* Table View - 7 years */
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="sticky left-0 bg-white">구분</TableHead>
+                    {data.summary.slice(-7).map(s => (
+                      <TableHead key={s.year} className="text-right min-w-[100px]">{s.year}년</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-medium sticky left-0 bg-white">총 수입</TableCell>
+                    {data.summary.slice(-7).map(s => (
+                      <TableCell key={s.year} className="text-right text-green-600">
+                        {formatFullAmount(s.totalIncome)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium sticky left-0 bg-white flex items-center gap-1">
+                      증감률
+                    </TableCell>
+                    {data.summary.slice(-7).map(s => (
+                      <TableCell key={s.year} className="text-right">
+                        {s.incomeGrowth >= 0 ? (
+                          <span className="text-green-600 flex items-center justify-end gap-1">
+                            <TrendingUp className="h-3 w-3" />
+                            +{s.incomeGrowth}%
+                          </span>
+                        ) : (
+                          <span className="text-red-600 flex items-center justify-end gap-1">
+                            <TrendingDown className="h-3 w-3" />
+                            {s.incomeGrowth}%
+                          </span>
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium sticky left-0 bg-white">총 지출</TableCell>
+                    {data.summary.slice(-7).map(s => (
+                      <TableCell key={s.year} className="text-right text-red-600">
+                        {formatFullAmount(s.totalExpense)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium sticky left-0 bg-white flex items-center gap-1">
+                      증감률
+                    </TableCell>
+                    {data.summary.slice(-7).map(s => (
+                      <TableCell key={s.year} className="text-right">
+                        {s.expenseGrowth >= 0 ? (
+                          <span className="text-red-600 flex items-center justify-end gap-1">
+                            <TrendingUp className="h-3 w-3" />
+                            +{s.expenseGrowth}%
+                          </span>
+                        ) : (
+                          <span className="text-green-600 flex items-center justify-end gap-1">
+                            <TrendingDown className="h-3 w-3" />
+                            {s.expenseGrowth}%
+                          </span>
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow className="bg-slate-50 font-bold">
+                    <TableCell className="sticky left-0 bg-slate-50">수지차액</TableCell>
+                    {data.summary.slice(-7).map(s => (
+                      <TableCell key={s.year} className={`text-right ${s.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                        {s.balance >= 0 ? '+' : ''}{formatFullAmount(s.balance)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

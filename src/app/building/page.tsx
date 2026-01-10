@@ -95,7 +95,9 @@ interface BuildingData {
 
 function formatCurrency(amount: number): string {
   if (amount >= 100000000) {
-    return `${(amount / 100000000).toFixed(1)}억`;
+    const billions = amount / 100000000;
+    // .0 제거 (8.0억 → 8억)
+    return billions % 1 === 0 ? `${Math.round(billions)}억` : `${billions.toFixed(1)}억`;
   }
   if (amount >= 1000000) {
     return `${Math.round(amount / 1000000)}백만`;
@@ -284,20 +286,24 @@ export default function BuildingPage() {
     대출잔액: h.loanBalance / 100000000,
   }));
 
-  // 5년 실적 차트 데이터 (스택형 바 2개)
-  const recentChartData = data.recent.years.map(y => {
-    // 건축헌금만으로 부족한 부분은 일반예산에서 충당
-    const generalBudget = Math.max(0, y.repayment - y.donation);
-    return {
-      year: String(y.year),
-      // 건축헌금 바 (스택: 건축헌금 + 일반예산)
-      건축헌금: y.donation / 100000000,
-      일반예산: generalBudget / 100000000,
-      // 건축지출 바 (스택: 원금상환 + 이자지출)
-      원금상환: y.principal / 100000000,
-      이자지출: y.interest / 100000000,
-    };
-  });
+  // 5년 실적 차트 데이터 (2021~2025, 스택형 바 2개)
+  // 사용자 제공 데이터 (단위: 백만원)
+  const fiveYearData = [
+    { year: '2021', 건축헌금: 79.1, 원금상환: 195.0, 이자지출: 42.7 },
+    { year: '2022', 건축헌금: 100.0, 원금상환: 150.0, 이자지출: 53.1 },
+    { year: '2023', 건축헌금: 74.2, 원금상환: 45.2, 이자지출: 73.6 },
+    { year: '2024', 건축헌금: 63.7, 원금상환: 50.0, 이자지출: 71.3 },
+    { year: '2025', 건축헌금: 55.1, 원금상환: 50.0, 이자지출: 61.0 },
+  ];
+  const recentChartData = fiveYearData.map(y => ({
+    year: y.year,
+    // 건축헌금 바 (스택: 건축헌금 + 일반예산)
+    건축헌금: y.건축헌금 / 100,  // 백만원 → 억
+    일반예산: Math.max(0, (y.원금상환 + y.이자지출 - y.건축헌금)) / 100,
+    // 건축지출 바 (스택: 원금상환 + 이자지출)
+    원금상환: y.원금상환 / 100,
+    이자지출: y.이자지출 / 100,
+  }));
 
   return (
     <div className={cn(
@@ -331,18 +337,18 @@ export default function BuildingPage() {
           className="border-l-4 border-l-slate-500 cursor-pointer hover:shadow-lg transition-shadow h-[200px]"
           onClick={() => setFlippedCards(prev => ({...prev, card1: !prev.card1}))}
         >
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-0 pt-3">
             <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
               <Building2 className="h-5 w-5" />
               {flippedCards.card1 ? '건축비 출처' : '건축비 총액'}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col justify-center flex-1 pt-2">
             {flippedCards.card1 ? (
-              <div className="space-y-1">
+              <div className="space-y-0">
                 <div>
                   <div className="text-4xl font-bold text-green-600">32억</div>
-                  <div className="text-sm text-muted-foreground">건축헌금 (~2011)</div>
+                  <div className="text-sm text-muted-foreground">건축헌금 (2003~2011)</div>
                 </div>
                 <div>
                   <div className="text-4xl font-bold text-red-600">21억</div>
@@ -354,7 +360,7 @@ export default function BuildingPage() {
                 <div className="text-6xl font-bold text-slate-900">
                   {formatCurrency(data.summary.totalCost)}
                 </div>
-                <div className="text-base text-muted-foreground mt-2">
+                <div className="text-base text-muted-foreground mt-1">
                   토지 {formatCurrency(data.summary.landCost)} + 건물 {formatCurrency(data.summary.buildingCost)}
                 </div>
               </>
@@ -362,20 +368,20 @@ export default function BuildingPage() {
           </CardContent>
         </Card>
 
-        {/* 카드 2: 건축지출 ↔ 원금/이자 상세 */}
+        {/* 카드 2: 건축지출 (2012~2025) */}
         <Card
           className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-lg transition-shadow h-[200px]"
           onClick={() => setFlippedCards(prev => ({...prev, card2: !prev.card2}))}
         >
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-0 pt-3">
             <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-blue-500" />
-              {flippedCards.card2 ? '건축지출 (2012~)' : '건축지출'}
+              건축지출 (2012~2025)
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col justify-center flex-1 pt-2">
             {flippedCards.card2 ? (
-              <div className="space-y-1">
+              <div className="space-y-0">
                 <div>
                   <div className="text-4xl font-bold text-blue-600">{formatCurrency(data.summary.principalPaid)}</div>
                   <div className="text-sm text-muted-foreground">원금상환</div>
@@ -390,7 +396,7 @@ export default function BuildingPage() {
                 <div className="text-6xl font-bold text-blue-600">
                   {formatCurrency(data.summary.principalPaid + data.summary.interestPaid)}
                 </div>
-                <div className="text-base text-muted-foreground mt-2">
+                <div className="text-base text-muted-foreground mt-1">
                   원금 {formatCurrency(data.summary.principalPaid)} + 이자 {formatCurrency(data.summary.interestPaid)}
                 </div>
               </>
@@ -400,25 +406,66 @@ export default function BuildingPage() {
 
         {/* 카드 3: 대출 잔액 */}
         <Card className="border-l-4 border-l-red-500 h-[200px]">
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-0 pt-3">
             <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-red-500" />
               대출 잔액
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col justify-center flex-1 pt-2">
             <div className="text-6xl font-bold text-red-600">
               {formatCurrency(data.summary.loanBalance)}
             </div>
-            <div className="mt-3">
+            <div className="mt-2">
               <Progress value={data.summary.repaymentRate} className="h-3" />
-              <p className="text-base text-muted-foreground mt-2">
+              <p className="text-base text-muted-foreground mt-1">
                 원금 상환률 {data.summary.repaymentRate}%
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* 금액 구성 (가로 누적 막대) */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">금액 구성 (2012~2025)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* 수입 막대 */}
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="font-medium">수입</span>
+                <span className="text-muted-foreground">18.3억</span>
+              </div>
+              <div className="flex h-8 rounded-lg overflow-hidden">
+                <div className="bg-green-500 flex items-center justify-center text-white text-xs font-medium" style={{ width: '66.7%' }}>
+                  건축헌금 12.2억
+                </div>
+                <div className="bg-amber-500 flex items-center justify-center text-white text-xs font-medium" style={{ width: '33.3%' }}>
+                  일반예산 6.1억
+                </div>
+              </div>
+            </div>
+            {/* 지출 막대 */}
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="font-medium">지출</span>
+                <span className="text-muted-foreground">18.3억</span>
+              </div>
+              <div className="flex h-8 rounded-lg overflow-hidden">
+                <div className="bg-orange-500 flex items-center justify-center text-white text-xs font-medium" style={{ width: '56.3%' }}>
+                  이자 10.3억
+                </div>
+                <div className="bg-blue-500 flex items-center justify-center text-white text-xs font-medium" style={{ width: '43.7%' }}>
+                  원금 8억
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 5년 실적 분석 + 상환 시뮬레이션 */}
       <div className="grid md:grid-cols-2 gap-6">
@@ -427,7 +474,7 @@ export default function BuildingPage() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingDown className="h-5 w-5" />
-              5개년 실적 분석 ({data.recent.years[0]?.year}-{data.recent.years[data.recent.years.length - 1]?.year})
+              5개년 실적 분석 (2021-2025)
             </CardTitle>
             <CardDescription>
               건축헌금/일반예산 vs 원금상환/이자지출
@@ -446,10 +493,10 @@ export default function BuildingPage() {
                 <Legend />
                 {/* 건축헌금 스택 */}
                 <Bar dataKey="건축헌금" stackId="income" fill="#22c55e" name="건축헌금" />
-                <Bar dataKey="일반예산" stackId="income" fill="#86efac" name="일반예산" />
+                <Bar dataKey="일반예산" stackId="income" fill="#f59e0b" name="일반예산" />
                 {/* 건축지출 스택 */}
                 <Bar dataKey="원금상환" stackId="expense" fill="#3b82f6" name="원금상환" />
-                <Bar dataKey="이자지출" stackId="expense" fill="#ef4444" name="이자지출" />
+                <Bar dataKey="이자지출" stackId="expense" fill="#f97316" name="이자지출" />
               </BarChart>
             </ResponsiveContainer>
 
@@ -459,11 +506,11 @@ export default function BuildingPage() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-green-600">건축헌금</span>
-                    <span className="font-bold">{formatCurrency(data.recent.totalDonation)}</span>
+                    <span className="font-bold">3.7억</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-green-400">일반예산</span>
-                    <span className="font-bold">{formatCurrency(data.recent.shortage)}</span>
+                    <span className="text-amber-500">일반예산</span>
+                    <span className="font-bold">4.2억</span>
                   </div>
                 </div>
               </div>
@@ -472,11 +519,11 @@ export default function BuildingPage() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-blue-600">원금상환</span>
-                    <span className="font-bold">{formatCurrency(data.recent.totalPrincipal)}</span>
+                    <span className="font-bold">4.9억</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-red-500">이자지출</span>
-                    <span className="font-bold">{formatCurrency(data.recent.totalInterest)}</span>
+                    <span className="text-orange-500">이자지출</span>
+                    <span className="font-bold">3억</span>
                   </div>
                 </div>
               </div>
@@ -485,7 +532,7 @@ export default function BuildingPage() {
             <Alert className="mt-4">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-sm">
-                건축헌금만으로 부족한 <strong>{formatCurrency(data.recent.shortage)}</strong>은 일반 재정에서 충당되었습니다.
+                건축헌금만으로 부족한 <strong>4.2억</strong>은 일반 재정에서 충당되었습니다.
               </AlertDescription>
             </Alert>
           </CardContent>

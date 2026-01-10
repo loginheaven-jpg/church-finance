@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getIncomeRecords, getExpenseRecords } from '@/lib/google-sheets';
+import {
+  getIncomeRecords,
+  getExpenseRecords,
+  getBuildingSummary,
+  getBuildingYearlyDonations,
+} from '@/lib/google-sheets';
 
 // 건축 히스토리 데이터 타입
 interface BuildingHistory {
@@ -25,9 +30,8 @@ interface RecentYear {
   interest: number;
 }
 
-// 건축 히스토리 데이터 (실제 엑셀 데이터 기반)
-const historyData: BuildingHistory[] = [
-  // 2003: 토지 매입
+// 2003~2011 히스토리 데이터 (고정 - 역사적 마일스톤)
+const earlyHistoryData: BuildingHistory[] = [
   {
     year: 2003,
     yearlyDonation: 0,
@@ -37,7 +41,6 @@ const historyData: BuildingHistory[] = [
     loanBalance: 1800000000,
     milestone: { title: '토지 매입', description: '18억원', icon: '🏞️' }
   },
-  // 2004-2010: 토지 매입 후 준비 기간
   { year: 2004, yearlyDonation: 200000000, cumulativeDonation: 200000000, principalPaid: 0, interestPaid: 72000000, loanBalance: 1800000000 },
   { year: 2005, yearlyDonation: 250000000, cumulativeDonation: 450000000, principalPaid: 0, interestPaid: 144000000, loanBalance: 1800000000 },
   { year: 2006, yearlyDonation: 300000000, cumulativeDonation: 750000000, principalPaid: 0, interestPaid: 216000000, loanBalance: 1800000000 },
@@ -45,7 +48,6 @@ const historyData: BuildingHistory[] = [
   { year: 2008, yearlyDonation: 400000000, cumulativeDonation: 1500000000, principalPaid: 0, interestPaid: 360000000, loanBalance: 1800000000 },
   { year: 2009, yearlyDonation: 450000000, cumulativeDonation: 1950000000, principalPaid: 0, interestPaid: 432000000, loanBalance: 1800000000 },
   { year: 2010, yearlyDonation: 500000000, cumulativeDonation: 2450000000, principalPaid: 0, interestPaid: 504000000, loanBalance: 1800000000 },
-  // 2011: 건축 완공
   {
     year: 2011,
     yearlyDonation: 750000000,
@@ -55,59 +57,47 @@ const historyData: BuildingHistory[] = [
     loanBalance: 2100000000,
     milestone: { title: '건축 완공', description: '34억원', icon: '🏛️' }
   },
-  // 2012-2025: 실제 데이터
-  { year: 2012, yearlyDonation: 105096619, cumulativeDonation: 3305096619, principalPaid: 0, interestPaid: 660000000, loanBalance: 2100000000 },
-  { year: 2013, yearlyDonation: 91002179, cumulativeDonation: 3396098798, principalPaid: 0, interestPaid: 744000000, loanBalance: 2100000000 },
-  { year: 2014, yearlyDonation: 99035305, cumulativeDonation: 3495134103, principalPaid: 100000000, interestPaid: 820000000, loanBalance: 2000000000 },
-  { year: 2015, yearlyDonation: 119893000, cumulativeDonation: 3615027103, principalPaid: 200000000, interestPaid: 890000000, loanBalance: 1900000000 },
-  { year: 2016, yearlyDonation: 104589426, cumulativeDonation: 3719616529, principalPaid: 300000000, interestPaid: 950000000, loanBalance: 1800000000 },
-  { year: 2017, yearlyDonation: 88913105, cumulativeDonation: 3808529634, principalPaid: 350000000, interestPaid: 1005000000, loanBalance: 1750000000 },
-  { year: 2018, yearlyDonation: 47206219, cumulativeDonation: 3855735853, principalPaid: 400000000, interestPaid: 1055000000, loanBalance: 1700000000 },
-  { year: 2019, yearlyDonation: 127762000, cumulativeDonation: 3983497853, principalPaid: 500000000, interestPaid: 1100000000, loanBalance: 1600000000 },
-  { year: 2020, yearlyDonation: 68650000, cumulativeDonation: 4052147853, principalPaid: 560000000, interestPaid: 1143000000, loanBalance: 1540000000 },
-  { year: 2021, yearlyDonation: 79060000, cumulativeDonation: 4131207853, principalPaid: 640000000, interestPaid: 1203000000, loanBalance: 1460000000 },
-  { year: 2022, yearlyDonation: 99960000, cumulativeDonation: 4231167853, principalPaid: 690000000, interestPaid: 1258000000, loanBalance: 1410000000 },
-  { year: 2023, yearlyDonation: 74168725, cumulativeDonation: 4305336578, principalPaid: 740000000, interestPaid: 1313000000, loanBalance: 1360000000 },
-  { year: 2024, yearlyDonation: 63705000, cumulativeDonation: 4369041578, principalPaid: 780000000, interestPaid: 1363000000, loanBalance: 1320000000 },
-  {
-    year: 2025,
-    yearlyDonation: 55055000,
-    cumulativeDonation: 4424096578,
-    principalPaid: 800000000,          // 엑셀 기준 누적 원금상환 8억
-    interestPaid: 1026764421,          // 엑셀 기준 누적 이자지출 10.27억
-    loanBalance: 1250000000,
-    milestone: { title: '현재', description: '잔액 12.5억', icon: '📍' }
-  },
-  // 2026-2030: 목표 시나리오
-  { year: 2026, yearlyDonation: 250000000, cumulativeDonation: 4674096578, principalPaid: 1100000000, interestPaid: 1460000000, loanBalance: 1000000000 },
-  { year: 2027, yearlyDonation: 250000000, cumulativeDonation: 4924096578, principalPaid: 1350000000, interestPaid: 1500000000, loanBalance: 750000000 },
-  { year: 2028, yearlyDonation: 250000000, cumulativeDonation: 5174096578, principalPaid: 1600000000, interestPaid: 1530000000, loanBalance: 500000000 },
-  { year: 2029, yearlyDonation: 250000000, cumulativeDonation: 5424096578, principalPaid: 1850000000, interestPaid: 1550000000, loanBalance: 250000000 },
-  {
-    year: 2030,
-    yearlyDonation: 250000000,
-    cumulativeDonation: 5674096578,
-    principalPaid: 2100000000, // 완전 상환
-    interestPaid: 1560000000,
-    loanBalance: 0,
-    milestone: { title: '목표 완료', description: '대출 제로!', icon: '🎯' }
-  }
 ];
 
-// 최근 5년 데이터
-const recentData: RecentYear[] = [
-  { year: 2020, donation: 68650000, repayment: 203000000, principal: 160000000, interest: 43000000 },
-  { year: 2021, donation: 79060000, repayment: 240000000, principal: 180000000, interest: 60000000 },
-  { year: 2022, donation: 99960000, repayment: 205000000, principal: 150000000, interest: 55000000 },
-  { year: 2023, donation: 74168725, repayment: 175000000, principal: 120000000, interest: 55000000 },
-  { year: 2024, donation: 63705000, repayment: 165000000, principal: 115000000, interest: 50000000 }
-];
+// 연도별 누적 데이터 (2012~2025 기준, 시트에서 읽지 못할 경우 폴백)
+const yearlyProgressData: Record<number, { principalPaid: number; interestPaid: number; loanBalance: number }> = {
+  2012: { principalPaid: 0, interestPaid: 660000000, loanBalance: 2100000000 },
+  2013: { principalPaid: 0, interestPaid: 744000000, loanBalance: 2100000000 },
+  2014: { principalPaid: 100000000, interestPaid: 820000000, loanBalance: 2000000000 },
+  2015: { principalPaid: 200000000, interestPaid: 890000000, loanBalance: 1900000000 },
+  2016: { principalPaid: 300000000, interestPaid: 950000000, loanBalance: 1800000000 },
+  2017: { principalPaid: 350000000, interestPaid: 1005000000, loanBalance: 1750000000 },
+  2018: { principalPaid: 400000000, interestPaid: 1055000000, loanBalance: 1700000000 },
+  2019: { principalPaid: 500000000, interestPaid: 1100000000, loanBalance: 1600000000 },
+  2020: { principalPaid: 560000000, interestPaid: 1143000000, loanBalance: 1540000000 },
+  2021: { principalPaid: 640000000, interestPaid: 1203000000, loanBalance: 1460000000 },
+  2022: { principalPaid: 690000000, interestPaid: 1258000000, loanBalance: 1410000000 },
+  2023: { principalPaid: 740000000, interestPaid: 1313000000, loanBalance: 1360000000 },
+  2024: { principalPaid: 780000000, interestPaid: 1363000000, loanBalance: 1320000000 },
+  2025: { principalPaid: 800000000, interestPaid: 1026764421, loanBalance: 1300000000 },
+};
+
+// 연도별 (원금상환, 이자지출) 분리 데이터
+const yearlyRepaymentData: Record<number, { principal: number; interest: number }> = {
+  2020: { principal: 60000000, interest: 43000000 },
+  2021: { principal: 80000000, interest: 60000000 },
+  2022: { principal: 50000000, interest: 55000000 },
+  2023: { principal: 50000000, interest: 55000000 },
+  2024: { principal: 40000000, interest: 50000000 },
+  2025: { principal: 20000000, interest: 49000000 },
+};
 
 export async function GET(request: NextRequest) {
   try {
     const currentYear = new Date().getFullYear();
 
-    // 금년 실제 데이터 조회 (Google Sheets)
+    // 1. Google Sheets에서 건축 요약 데이터 읽기
+    const [sheetSummary, sheetDonations] = await Promise.all([
+      getBuildingSummary(),
+      getBuildingYearlyDonations(),
+    ]);
+
+    // 2. 금년 실제 데이터 조회 (수입부/지출부)
     const [incomeRecords, expenseRecords] = await Promise.all([
       getIncomeRecords(`${currentYear}-01-01`, `${currentYear}-12-31`),
       getExpenseRecords(`${currentYear}-01-01`, `${currentYear}-12-31`),
@@ -130,104 +120,188 @@ export async function GET(request: NextRequest) {
 
     const currentYearRepayment = currentYearPrincipal + currentYearInterest;
 
-    // recentData 동적 업데이트 (금년 데이터가 있으면 교체)
-    const dynamicRecentData = recentData.map(d => {
-      if (d.year === currentYear) {
-        return {
-          year: currentYear,
+    // 3. 히스토리 데이터 구성 (2012년 이후는 시트 데이터 사용)
+    const historyData: BuildingHistory[] = [...earlyHistoryData];
+
+    // 시트에서 읽은 연도별 헌금을 Map으로 변환
+    const donationByYear = new Map<number, number>();
+    sheetDonations.forEach(d => donationByYear.set(d.year, d.donation));
+
+    // 2012~2025 히스토리 추가
+    let prevCumulativeDonation = 3200000000; // 2011년 누적
+    for (let year = 2012; year <= 2025; year++) {
+      const yearlyDonation = donationByYear.get(year) || 0;
+      prevCumulativeDonation += yearlyDonation;
+
+      const progress = yearlyProgressData[year] || {
+        principalPaid: 0,
+        interestPaid: 0,
+        loanBalance: 2100000000,
+      };
+
+      historyData.push({
+        year,
+        yearlyDonation,
+        cumulativeDonation: prevCumulativeDonation,
+        principalPaid: progress.principalPaid,
+        interestPaid: progress.interestPaid,
+        loanBalance: year === 2025 ? sheetSummary.loanBalance : progress.loanBalance,
+        ...(year === 2025 && {
+          milestone: {
+            title: '현재',
+            description: `잔액 ${(sheetSummary.loanBalance / 100000000).toFixed(1)}억`,
+            icon: '📍'
+          }
+        })
+      });
+    }
+
+    // 금년 데이터 추가 (2026년 이후)
+    if (currentYear > 2025) {
+      const lastYearData = historyData[historyData.length - 1];
+      const cumulativeDonation = lastYearData.cumulativeDonation + currentYearDonation;
+      const principalPaid = sheetSummary.cumulativePrincipal + currentYearPrincipal;
+      const interestPaid = sheetSummary.cumulativeInterest + currentYearInterest;
+      const loanBalance = sheetSummary.loanBalance - currentYearPrincipal;
+
+      historyData.push({
+        year: currentYear,
+        yearlyDonation: currentYearDonation,
+        cumulativeDonation,
+        principalPaid,
+        interestPaid,
+        loanBalance: Math.max(0, loanBalance),
+        milestone: {
+          title: '금년',
+          description: `잔액 ${(Math.max(0, loanBalance) / 100000000).toFixed(1)}억`,
+          icon: '📌'
+        }
+      });
+    }
+
+    // 4. 목표 시나리오 (2027~2030) 추가
+    const lastActualData = historyData[historyData.length - 1];
+    const remainingYears = 2030 - currentYear;
+    const annualTarget = remainingYears > 0 ? Math.ceil(lastActualData.loanBalance / remainingYears) : 0;
+
+    for (let year = currentYear + 1; year <= 2030; year++) {
+      const yearsFromNow = year - currentYear;
+      const projectedPrincipal = Math.min(annualTarget * yearsFromNow, lastActualData.loanBalance);
+      const projectedBalance = Math.max(0, lastActualData.loanBalance - projectedPrincipal);
+      const prevData = historyData[historyData.length - 1];
+
+      historyData.push({
+        year,
+        yearlyDonation: 250000000, // 목표 연간 헌금
+        cumulativeDonation: prevData.cumulativeDonation + 250000000,
+        principalPaid: lastActualData.principalPaid + projectedPrincipal,
+        interestPaid: prevData.interestPaid + 40000000, // 예상 이자
+        loanBalance: projectedBalance,
+        ...(year === 2030 && {
+          milestone: { title: '목표 완료', description: '대출 제로!', icon: '🎯' }
+        })
+      });
+    }
+
+    // 5. 최근 5년 데이터 동적 구성 (currentYear-4 ~ currentYear)
+    const recentYears: RecentYear[] = [];
+    for (let year = currentYear - 4; year <= currentYear; year++) {
+      if (year === currentYear) {
+        // 금년: 수입부/지출부에서 계산
+        recentYears.push({
+          year,
           donation: currentYearDonation,
           repayment: currentYearRepayment,
           principal: currentYearPrincipal,
-          interest: currentYearInterest
-        };
-      }
-      return d;
-    });
-
-    // 금년이 recentData에 없으면 추가
-    if (!dynamicRecentData.find(d => d.year === currentYear)) {
-      dynamicRecentData.push({
-        year: currentYear,
-        donation: currentYearDonation,
-        repayment: currentYearRepayment,
-        principal: currentYearPrincipal,
-        interest: currentYearInterest
-      });
-      // 가장 오래된 연도 제거 (5년 유지)
-      dynamicRecentData.sort((a, b) => a.year - b.year);
-      if (dynamicRecentData.length > 5) {
-        dynamicRecentData.shift();
+          interest: currentYearInterest,
+        });
+      } else if (year >= 2020 && year <= 2025) {
+        // 과거년도: 시트 헌금 + 하드코딩된 원금/이자 데이터
+        const donation = donationByYear.get(year) || 0;
+        const repayment = yearlyRepaymentData[year] || { principal: 0, interest: 0 };
+        recentYears.push({
+          year,
+          donation,
+          repayment: repayment.principal + repayment.interest,
+          principal: repayment.principal,
+          interest: repayment.interest,
+        });
       }
     }
 
-    // 합계 계산 (동적 데이터 사용)
-    const totalDonation5Years = dynamicRecentData.reduce((sum, d) => sum + d.donation, 0);
-    const totalRepayment5Years = dynamicRecentData.reduce((sum, d) => sum + d.repayment, 0);
+    // 합계 계산
+    const totalDonation5Years = recentYears.reduce((sum, d) => sum + d.donation, 0);
+    const totalRepayment5Years = recentYears.reduce((sum, d) => sum + d.repayment, 0);
+    const totalPrincipal5Years = recentYears.reduce((sum, d) => sum + d.principal, 0);
+    const totalInterest5Years = recentYears.reduce((sum, d) => sum + d.interest, 0);
     const shortage5Years = totalRepayment5Years - totalDonation5Years;
 
-    // 건축 개요 (엑셀 데이터 기준)
+    // 6. 건축 개요 (시트 데이터 사용)
+    const totalDonation = sheetSummary.donationBefore2011 + sheetSummary.donationAfter2012 +
+      (currentYear > 2025 ? currentYearDonation : 0);
+    const totalPrincipalPaid = sheetSummary.cumulativePrincipal +
+      (currentYear > 2025 ? currentYearPrincipal : 0);
+    const actualLoanBalance = sheetSummary.loanBalance -
+      (currentYear > 2025 ? currentYearPrincipal : 0);
+
     const summary = {
-      totalCost: 5200000000,                // 총 건축비 52억
-      landCost: 1800000000,                 // 토지 18억
-      buildingCost: 3400000000,             // 건물 34억
-      totalDonation: 4420000000,            // 누적 헌금 44.2억 (헌금~11년 32억 + 헌금12년~ 12.2억)
-      totalLoan: 2100000000,                // 총 대출 21억
-      principalPaid: 800000000,             // 원금 상환 누적 8억 (엑셀 기준)
-      interestPaid: 1026764421,             // 이자 지출 누적 10.27억 (엑셀 기준)
-      loanBalance: 1250000000,              // 남은 대출 12.5억
-      donationRate: 85.0,                   // 헌금 비율 (44.2억 / 52억)
-      repaymentRate: 38.1,                  // 상환 비율 (8억 / 21억)
+      totalCost: sheetSummary.totalCost || 5200000000,
+      landCost: sheetSummary.landCost || 1800000000,
+      buildingCost: sheetSummary.buildingCost || 3400000000,
+      totalDonation,
+      totalLoan: sheetSummary.totalLoan || 2100000000,
+      principalPaid: totalPrincipalPaid,
+      interestPaid: sheetSummary.cumulativeInterest + (currentYear > 2025 ? currentYearInterest : 0),
+      loanBalance: Math.max(0, actualLoanBalance),
+      donationRate: Math.round((totalDonation / (sheetSummary.totalCost || 5200000000)) * 1000) / 10,
+      repaymentRate: Math.round((totalPrincipalPaid / (sheetSummary.totalLoan || 2100000000)) * 1000) / 10,
     };
 
-    // 5개년 목표
+    // 7. 5개년 목표 계산
+    const yearsUntil2030 = Math.max(1, 2030 - currentYear);
+    const monthlyRequired = Math.ceil(summary.loanBalance / yearsUntil2030 / 12);
+
     const target = {
-      remainingLoan: 1250000000,            // 남은 대출 12.5억
+      remainingLoan: summary.loanBalance,
       targetYear: 2030,
-      yearsRemaining: 5,
-      annualRequired: 250000000,            // 연간 필요액 2.5억
-      monthlyRequired: 21000000,            // 월간 필요액 2,100만원
+      yearsRemaining: yearsUntil2030,
+      annualRequired: Math.ceil(summary.loanBalance / yearsUntil2030),
+      monthlyRequired,
       scenarios: [
-        { households: 100, amountPerMonth: 210000, total: 21000000 },
-        { households: 210, amountPerMonth: 100000, total: 21000000 },
-        { households: 420, amountPerMonth: 50000, total: 21000000 },
+        { households: 100, amountPerMonth: Math.ceil(monthlyRequired / 100), total: monthlyRequired },
+        { households: 210, amountPerMonth: Math.ceil(monthlyRequired / 210), total: monthlyRequired },
+        { households: 420, amountPerMonth: Math.ceil(monthlyRequired / 420), total: monthlyRequired },
       ]
     };
 
-    // 최근 5년 통계 (원금/이자 분리)
-    const totalPrincipal5Years = dynamicRecentData.reduce((sum, d) => sum + d.principal, 0);
-    const totalInterest5Years = dynamicRecentData.reduce((sum, d) => sum + d.interest, 0);
-
+    // 8. 최근 통계
     const recentStats = {
       totalDonation: totalDonation5Years,
       totalRepayment: totalRepayment5Years,
       totalPrincipal: totalPrincipal5Years,
       totalInterest: totalInterest5Years,
       shortage: shortage5Years,
-      years: dynamicRecentData
+      years: recentYears
     };
 
-    // 완납 예상 계산
-    const avgPrincipalPerYear = totalPrincipal5Years / dynamicRecentData.length;
-    const avgInterestPerYear = totalInterest5Years / dynamicRecentData.length;
-    const remainingLoan = summary.loanBalance;
+    // 9. 완납 예상 계산
+    const avgPrincipalPerYear = totalPrincipal5Years / recentYears.length;
+    const avgInterestPerYear = totalInterest5Years / recentYears.length;
 
-    // 현재 추세로 예상 완납 년도
     const yearsToPayoff = avgPrincipalPerYear > 0
-      ? Math.ceil(remainingLoan / avgPrincipalPerYear)
+      ? Math.ceil(summary.loanBalance / avgPrincipalPerYear)
       : 999;
     const projectedPayoffYear = currentYear + yearsToPayoff;
 
-    // 2030년 목표 달성을 위한 필요 금액
-    const yearsUntil2030 = 2030 - currentYear;
     const requiredAnnualPrincipal = yearsUntil2030 > 0
-      ? Math.ceil(remainingLoan / yearsUntil2030)
-      : remainingLoan;
+      ? Math.ceil(summary.loanBalance / yearsUntil2030)
+      : summary.loanBalance;
     const additionalRequired = requiredAnnualPrincipal - avgPrincipalPerYear;
 
-    // 완납까지 총 예상 이자 (현재 금리 유지 가정)
-    const avgInterestRate = avgInterestPerYear / remainingLoan; // 대략적인 이율
+    // 완납까지 총 예상 이자
+    const avgInterestRate = summary.loanBalance > 0 ? avgInterestPerYear / summary.loanBalance : 0.04;
     let projectedTotalInterest = summary.interestPaid;
-    let tempBalance = remainingLoan;
+    let tempBalance = summary.loanBalance;
     for (let i = 0; i < yearsToPayoff && tempBalance > 0; i++) {
       projectedTotalInterest += tempBalance * avgInterestRate;
       tempBalance -= avgPrincipalPerYear;

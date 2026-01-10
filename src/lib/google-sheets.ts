@@ -67,6 +67,7 @@ const FINANCE_CONFIG = {
     manualReceipts: '수작업발급이력',
     carryoverBalance: '이월잔액',
     pledgeDonations: '작정헌금',
+    buildingStatus: '2025건축헌금현황',
   },
 };
 
@@ -1288,4 +1289,86 @@ export async function deleteBudget(year: number, accountCode: number): Promise<v
       ],
     },
   });
+}
+
+// ============================================
+// 건축헌금현황 관련
+// ============================================
+
+export interface BuildingSummaryData {
+  landCost: number;              // 토지 18억
+  buildingCost: number;          // 건물 34억
+  totalCost: number;             // 합계 52억
+  donationBefore2011: number;    // 헌금(~11년) 32억
+  totalLoan: number;             // 대출 21억
+  donationAfter2012: number;     // 헌금(12년~)
+  currentYearInterest: number;   // 금년 이자지출
+  currentYearPrincipal: number;  // 금년 원금상환
+  cumulativeInterest: number;    // 누적 이자지출
+  cumulativePrincipal: number;   // 누적 원금상환
+  loanBalance: number;           // 대출잔금
+}
+
+export interface BuildingYearlyDonation {
+  year: number;
+  donation: number;
+}
+
+/**
+ * 건축헌금현황 요약 데이터 읽기 (고정 셀 위치 참조)
+ * 시트: 2025건축헌금현황 (대시보드 형태)
+ */
+export async function getBuildingSummary(): Promise<BuildingSummaryData> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.buildingStatus, 'A:C');
+
+  const parseNum = (val: string | undefined) => {
+    if (!val) return 0;
+    return Number(val.replace(/,/g, '')) || 0;
+  };
+
+  // 시트의 고정 위치에서 값 추출
+  // 행 인덱스는 0-based (실제 시트 행 -1)
+  return {
+    landCost: parseNum(rows[2]?.[2]),              // C3: 토지
+    buildingCost: parseNum(rows[3]?.[2]),          // C4: 건물
+    totalCost: parseNum(rows[4]?.[2]),             // C5: 건축비 합계
+    donationBefore2011: parseNum(rows[7]?.[2]),    // C8: 헌금(~11년)
+    totalLoan: parseNum(rows[8]?.[2]),             // C9: 대출
+    donationAfter2012: parseNum(rows[9]?.[2]),     // C10: 헌금(12년~)
+    currentYearInterest: parseNum(rows[11]?.[2]),  // C12: 금년 이자지출
+    currentYearPrincipal: parseNum(rows[12]?.[2]), // C13: 금년 원금상환
+    cumulativeInterest: parseNum(rows[14]?.[2]),   // C15: 누적 이자지출
+    cumulativePrincipal: parseNum(rows[15]?.[2]),  // C16: 누적 원금상환
+    loanBalance: parseNum(rows[16]?.[2]),          // C17: 대출잔금
+  };
+}
+
+/**
+ * 연도별 건축헌금 읽기 (2012년 이후)
+ * 시트: 2025건축헌금현황 우측 섹션 (E~G열)
+ */
+export async function getBuildingYearlyDonations(): Promise<BuildingYearlyDonation[]> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.buildingStatus, 'E:G');
+
+  const parseNum = (val: string | undefined) => {
+    if (!val) return 0;
+    return Number(val.replace(/,/g, '')) || 0;
+  };
+
+  const donations: BuildingYearlyDonation[] = [];
+
+  // 데이터 행 파싱 (헤더 건너뛰고, 2012년부터)
+  for (let i = 3; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length < 3) continue;
+
+    const year = Number(row[0]);  // E열: 연도
+    const amount = parseNum(row[2]);  // G열: 금액
+
+    if (year >= 2012 && year <= 2030 && amount >= 0) {
+      donations.push({ year, donation: amount });
+    }
+  }
+
+  return donations.sort((a, b) => a.year - b.year);
 }

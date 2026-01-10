@@ -334,33 +334,33 @@ export default function BuildingPage() {
       <div className="grid gap-4 md:grid-cols-3">
         {/* 카드 1: 건축비 총액 ↔ 건축비 출처 */}
         <Card
-          className="border-l-4 border-l-slate-500 cursor-pointer hover:shadow-lg transition-shadow h-[200px]"
+          className="border-l-4 border-l-slate-500 cursor-pointer hover:shadow-lg transition-shadow h-[200px] flex flex-col"
           onClick={() => setFlippedCards(prev => ({...prev, card1: !prev.card1}))}
         >
-          <CardHeader className="pb-0 pt-3">
-            <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
+          <CardHeader className="pb-0 pt-2 shrink-0">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
               {flippedCards.card1 ? '건축비 출처' : '건축비 총액'}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col justify-center flex-1 pt-2">
+          <CardContent className="flex flex-col justify-center flex-1 pt-0">
             {flippedCards.card1 ? (
-              <div className="space-y-0">
-                <div>
-                  <div className="text-4xl font-bold text-green-600">32억</div>
+              <div className="space-y-1">
+                <div className="flex items-baseline gap-2">
+                  <div className="text-3xl font-bold text-green-600">32억</div>
                   <div className="text-sm text-muted-foreground">건축헌금 (2003~2011)</div>
                 </div>
-                <div>
-                  <div className="text-4xl font-bold text-red-600">21억</div>
+                <div className="flex items-baseline gap-2">
+                  <div className="text-3xl font-bold text-red-600">21억</div>
                   <div className="text-sm text-muted-foreground">대출</div>
                 </div>
               </div>
             ) : (
               <>
-                <div className="text-6xl font-bold text-slate-900">
+                <div className="text-5xl font-bold text-slate-900">
                   {formatCurrency(data.summary.totalCost)}
                 </div>
-                <div className="text-base text-muted-foreground mt-1">
+                <div className="text-sm text-muted-foreground mt-1">
                   토지 {formatCurrency(data.summary.landCost)} + 건물 {formatCurrency(data.summary.buildingCost)}
                 </div>
               </>
@@ -370,33 +370,33 @@ export default function BuildingPage() {
 
         {/* 카드 2: 건축지출 (2012~2025) */}
         <Card
-          className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-lg transition-shadow h-[200px]"
+          className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-lg transition-shadow h-[200px] flex flex-col"
           onClick={() => setFlippedCards(prev => ({...prev, card2: !prev.card2}))}
         >
-          <CardHeader className="pb-0 pt-3">
-            <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-blue-500" />
+          <CardHeader className="pb-0 pt-2 shrink-0">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-blue-500" />
               건축지출 (2012~2025)
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col justify-center flex-1 pt-2">
+          <CardContent className="flex flex-col justify-center flex-1 pt-0">
             {flippedCards.card2 ? (
-              <div className="space-y-0">
-                <div>
-                  <div className="text-4xl font-bold text-blue-600">{formatCurrency(data.summary.principalPaid)}</div>
+              <div className="space-y-1">
+                <div className="flex items-baseline gap-2">
+                  <div className="text-3xl font-bold text-blue-600">{formatCurrency(data.summary.principalPaid)}</div>
                   <div className="text-sm text-muted-foreground">원금상환</div>
                 </div>
-                <div>
-                  <div className="text-4xl font-bold text-red-600">{formatCurrency(data.summary.interestPaid)}</div>
+                <div className="flex items-baseline gap-2">
+                  <div className="text-3xl font-bold text-red-600">{formatCurrency(data.summary.interestPaid)}</div>
                   <div className="text-sm text-muted-foreground">이자지출</div>
                 </div>
               </div>
             ) : (
               <>
-                <div className="text-6xl font-bold text-blue-600">
+                <div className="text-5xl font-bold text-blue-600">
                   {formatCurrency(data.summary.principalPaid + data.summary.interestPaid)}
                 </div>
-                <div className="text-base text-muted-foreground mt-1">
+                <div className="text-sm text-muted-foreground mt-1">
                   원금 {formatCurrency(data.summary.principalPaid)} + 이자 {formatCurrency(data.summary.interestPaid)}
                 </div>
               </>
@@ -405,20 +405,20 @@ export default function BuildingPage() {
         </Card>
 
         {/* 카드 3: 대출 잔액 */}
-        <Card className="border-l-4 border-l-red-500 h-[200px]">
-          <CardHeader className="pb-0 pt-3">
-            <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-500" />
+        <Card className="border-l-4 border-l-red-500 h-[200px] flex flex-col">
+          <CardHeader className="pb-0 pt-2 shrink-0">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-red-500" />
               대출 잔액
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col justify-center flex-1 pt-2">
-            <div className="text-6xl font-bold text-red-600">
+          <CardContent className="flex flex-col justify-center flex-1 pt-0">
+            <div className="text-5xl font-bold text-red-600">
               {formatCurrency(data.summary.loanBalance)}
             </div>
             <div className="mt-2">
               <Progress value={data.summary.repaymentRate} className="h-3" />
-              <p className="text-base text-muted-foreground mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 원금 상환률 {data.summary.repaymentRate}%
               </p>
             </div>

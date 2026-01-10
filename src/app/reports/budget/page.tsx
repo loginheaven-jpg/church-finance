@@ -91,21 +91,22 @@ interface Insight {
 // Utils
 // ============================================================================
 
-function formatCurrency(amount: number): string {
-  if (amount >= 100000000) {
-    return `${(amount / 100000000).toFixed(1)}억`;
+function formatCurrency(amount: number | null | undefined): string {
+  const val = amount ?? 0;
+  if (val >= 100000000) {
+    return `${(val / 100000000).toFixed(1)}억`;
   }
-  if (amount >= 10000000) {
-    return `${(amount / 10000000).toFixed(1)}천만`;
+  if (val >= 10000000) {
+    return `${(val / 10000000).toFixed(1)}천만`;
   }
-  if (amount >= 1000000) {
-    return `${(amount / 1000000).toFixed(1)}백만`;
+  if (val >= 1000000) {
+    return `${(val / 1000000).toFixed(1)}백만`;
   }
-  return `${(amount / 10000).toFixed(0)}만`;
+  return `${(val / 10000).toFixed(0)}만`;
 }
 
-function formatFullCurrency(amount: number): string {
-  return amount.toLocaleString() + '원';
+function formatFullCurrency(amount: number | null | undefined): string {
+  return (amount ?? 0).toLocaleString() + '원';
 }
 
 function getStatus(syncRate: number): 'danger' | 'warning' | 'normal' {
@@ -174,8 +175,8 @@ function SubCategoryItem({ item }: { item: BudgetReportData['categories'][0]['ac
         {formatCurrency(item.executed)}
       </td>
       <td className="py-2 px-3 text-right">
-        <Badge variant={item.syncRate > 100 ? "destructive" : "secondary"} className="w-16 justify-center text-xs">
-          {item.syncRate.toFixed(1)}%
+        <Badge variant={(item.syncRate ?? 0) > 100 ? "destructive" : "secondary"} className="w-16 justify-center text-xs">
+          {(item.syncRate ?? 0).toFixed(1)}%
         </Badge>
       </td>
     </tr>
@@ -244,18 +245,18 @@ function CategoryItem({
                 </td>
                 <td className="py-2 px-3 text-right">
                   <Badge
-                    variant={category.syncRate > 100 ? "destructive" : "secondary"}
+                    variant={(category.syncRate ?? 0) > 100 ? "destructive" : "secondary"}
                     className="w-16 justify-center text-xs"
                   >
-                    {category.syncRate.toFixed(1)}%
+                    {(category.syncRate ?? 0).toFixed(1)}%
                   </Badge>
                 </td>
               </tr>
             </tbody>
           </table>
-          {category.syncRate > 100 && (
+          {(category.syncRate ?? 0) > 100 && (
             <div className="text-xs text-red-600 mt-2 pl-8">
-              동기예산 초과: +{formatFullCurrency(Math.round((category.syncRate - 100) * category.budget / 100))}
+              동기예산 초과: +{formatFullCurrency(Math.round(((category.syncRate ?? 0) - 100) * (category.budget ?? 0) / 100))}
             </div>
           )}
         </div>
@@ -588,14 +589,14 @@ export default function BudgetExecutionPage() {
                   {yearlyData.map(row => (
                     <tr key={row.year} className="border-b">
                       <td className="p-2 font-medium">{row.year}년</td>
-                      <td className="text-right p-2">{formatFullCurrency(row.budget)}</td>
-                      <td className="text-right p-2">{formatFullCurrency(row.executed)}</td>
-                      <td className="text-right p-2">{row.executionRate.toFixed(1)}%</td>
+                      <td className="text-right p-2">{formatFullCurrency(row.budget || 0)}</td>
+                      <td className="text-right p-2">{formatFullCurrency(row.executed || 0)}</td>
+                      <td className="text-right p-2">{(row.executionRate ?? 0).toFixed(1)}%</td>
                       <td className={cn(
                         "text-right p-2 font-medium",
-                        row.syncRate > 100 ? "text-red-600" : "text-blue-600"
+                        (row.syncRate || 0) > 100 ? "text-red-600" : "text-blue-600"
                       )}>
-                        {row.syncRate.toFixed(1)}%
+                        {(row.syncRate ?? 0).toFixed(1)}%
                       </td>
                     </tr>
                   ))}

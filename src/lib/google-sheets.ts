@@ -277,9 +277,13 @@ export async function getSheetData<T>(sheetName: string): Promise<T[]> {
     headers.forEach((header, index) => {
       let value: unknown = row[index];
 
-      // 숫자 변환
-      if (value && !isNaN(Number(value)) && value !== '') {
-        value = Number(value);
+      // 숫자 변환 (콤마 포함 문자열도 처리)
+      if (typeof value === 'string' && value !== '') {
+        // 콤마 제거 후 숫자 변환 시도
+        const cleanValue = value.replace(/,/g, '');
+        if (!isNaN(Number(cleanValue)) && cleanValue !== '') {
+          value = Number(cleanValue);
+        }
       }
       // 불리언 변환
       if (value === 'true' || value === 'TRUE') value = true;

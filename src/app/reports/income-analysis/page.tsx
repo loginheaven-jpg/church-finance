@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, ChevronLeft, ChevronRight, TrendingUp, Users } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, TrendingUp, Users, UserPlus, UserMinus } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   BarChart,
@@ -42,7 +42,38 @@ interface IncomeAnalysisData {
   byCode: Array<{ code: number; name: string; category: string; amount: number; count: number }>;
   byMonth: Array<{ month: number; income: number; count: number }>;
   bySource: Array<{ source: string; amount: number; count: number }>;
-  topDonors: Array<{ representative: string; amount: number; count: number }>;
+}
+
+interface DonorAnalysisData {
+  year: number;
+  summary: {
+    totalDonors: number;
+    totalAmount: number;
+    avgPerDonor: number;
+    totalTransactions: number;
+  };
+  amountDistribution: Array<{
+    label: string;
+    count: number;
+    totalAmount: number;
+    percentage: number;
+  }>;
+  monthlyDonors: Array<{
+    month: number;
+    count: number;
+    amount: number;
+  }>;
+  frequencyDistribution: Array<{
+    label: string;
+    count: number;
+    percentage: number;
+  }>;
+  retention: {
+    newDonors: number;
+    lostDonors: number;
+    retainedDonors: number;
+    retentionRate: number;
+  };
 }
 
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -51,6 +82,7 @@ export default function IncomeAnalysisPage() {
   const { year, setYear } = useYear();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<IncomeAnalysisData | null>(null);
+  const [donorData, setDonorData] = useState<DonorAnalysisData | null>(null);
 
   useEffect(() => {
     loadData();
@@ -59,13 +91,23 @@ export default function IncomeAnalysisPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/reports/income-analysis?year=${year}`);
-      const result = await res.json();
+      const [incomeRes, donorRes] = await Promise.all([
+        fetch(`/api/reports/income-analysis?year=${year}`),
+        fetch(`/api/reports/donor-analysis?year=${year}`),
+      ]);
+      const [incomeResult, donorResult] = await Promise.all([
+        incomeRes.json(),
+        donorRes.json(),
+      ]);
 
-      if (result.success) {
-        setData(result.data);
+      if (incomeResult.success) {
+        setData(incomeResult.data);
       } else {
-        toast.error(result.error || '데이터를 불러오는 데 실패했습니다');
+        toast.error(incomeResult.error || '수입 데이터를 불러오는 데 실패했습니다');
+      }
+
+      if (donorResult.success) {
+        setDonorData(donorResult.data);
       }
     } catch (error) {
       console.error('Load error:', error);
@@ -295,40 +337,233 @@ export default function IncomeAnalysisPage() {
         </CardContent>
       </Card>
 
-      {/* Top Donors */}
-      <Card>
-        <CardHeader>
-          <CardTitle>상위 헌금자 (Top 20)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">순위</TableHead>
-                <TableHead>대표자</TableHead>
-                <TableHead className="text-right">총 헌금액</TableHead>
-                <TableHead className="text-right">헌금 횟수</TableHead>
-                <TableHead className="text-right">평균</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.topDonors.map((donor, idx) => (
-                <TableRow key={donor.representative}>
-                  <TableCell className="font-medium">{idx + 1}</TableCell>
-                  <TableCell>{donor.representative}</TableCell>
-                  <TableCell className="text-right text-green-600 font-medium">
-                    {formatFullAmount(donor.amount)}
-                  </TableCell>
-                  <TableCell className="text-right">{donor.count}회</TableCell>
-                  <TableCell className="text-right">
-                    {formatFullAmount(Math.round(donor.amount / donor.count))}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* 헌금자 분석 섹션 */}
+      {donorData && (
+        <>
+          {/* 헌금자 Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-blue-100 rounded-full">
+                    <Users className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <div className="text-sm text-slate-500">총 헌금자</div>
+                    <div className="text-2xl font-bold text-slate-900">
+                      {donorData.summary.totalDonors.toLocaleString()}명
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-green-100 rounded-full">
+                    <TrendingUp className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <div className="text-sm text-slate-500">인당 평균</div>
+                    <div className="text-2xl font-bold text-slate-900">
+                      {formatAmount(donorData.summary.avgPerDonor)}원
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-emerald-100 rounded-full">
+                    <UserPlus className="h-6 w-6 text-emerald-600" />
+                  </div>
+                  <div>
+                    <div className="text-sm text-slate-500">신규 헌금자</div>
+                    <div className="text-2xl font-bold text-emerald-600">
+                      +{donorData.retention.newDonors}명
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-red-100 rounded-full">
+                    <UserMinus className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div>
+                    <div className="text-sm text-slate-500">이탈 헌금자</div>
+                    <div className="text-2xl font-bold text-red-600">
+                      -{donorData.retention.lostDonors}명
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 유지율 카드 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>전년 대비 헌금자 현황</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <div className="text-3xl font-bold text-blue-600">
+                    {donorData.retention.retainedDonors}명
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">유지</div>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <div className="text-3xl font-bold text-emerald-600">
+                    +{donorData.retention.newDonors}명
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">신규</div>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <div className="text-3xl font-bold text-red-600">
+                    -{donorData.retention.lostDonors}명
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">이탈</div>
+                </div>
+              </div>
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg text-center">
+                <span className="text-sm text-slate-600">전년 대비 유지율: </span>
+                <span className="text-lg font-bold text-blue-600">
+                  {donorData.retention.retentionRate}%
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 월별 헌금자 수 추이 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>월별 헌금자 수 추이</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={donorData.monthlyDonors.map(m => ({
+                  name: `${m.month}월`,
+                  헌금자수: m.count,
+                  헌금액: m.amount,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" tickFormatter={formatAmount} />
+                  <Tooltip
+                    formatter={(value, name) =>
+                      name === '헌금액'
+                        ? [Number(value).toLocaleString() + '원', name]
+                        : [value + '명', name]
+                    }
+                  />
+                  <Legend />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="헌금자수"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="헌금액"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* 금액 분포 & 빈도 분포 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>월평균 헌금액 분포</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={donorData.amountDistribution.map(d => ({
+                        name: d.label,
+                        value: d.count,
+                      }))}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                    >
+                      {donorData.amountDistribution.map((_, idx) => (
+                        <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [value + '명', '헌금자수']} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="mt-4 space-y-2">
+                  {donorData.amountDistribution.map((d, idx) => (
+                    <div key={d.label} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                        />
+                        <span>{d.label}</span>
+                      </div>
+                      <span className="font-medium">{d.count}명 ({d.percentage}%)</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>연간 헌금 빈도 분포</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={donorData.frequencyDistribution.map(f => ({
+                    name: f.label,
+                    헌금자수: f.count,
+                    비율: f.percentage,
+                  }))} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="name" width={80} />
+                    <Tooltip formatter={(value) => [value + '명', '헌금자수']} />
+                    <Bar dataKey="헌금자수" fill="#3b82f6" radius={[0, 4, 4, 0]}>
+                      <LabelList
+                        dataKey="헌금자수"
+                        position="right"
+                        formatter={(value) => `${value}명`}
+                        style={{ fontSize: 11 }}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="mt-4 p-3 bg-slate-50 rounded-lg">
+                  <div className="text-sm text-slate-600">
+                    <strong>분석:</strong> 연간 헌금 빈도 분포를 통해 정기적으로 헌금하는 성도와
+                    비정기적으로 헌금하는 성도의 비율을 파악할 수 있습니다.
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 }

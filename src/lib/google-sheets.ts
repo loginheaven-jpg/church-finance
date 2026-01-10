@@ -68,6 +68,7 @@ const FINANCE_CONFIG = {
     carryoverBalance: '이월잔액',
     pledgeDonations: '작정헌금',
     buildingStatus: '2025건축헌금현황',
+    yearlyBudget: '연도별예산',
   },
 };
 
@@ -728,9 +729,80 @@ export async function deleteDonorInfo(
 // 예산 관련
 // ============================================
 
+/**
+ * 연도별예산 시트에서 예산 데이터 읽기 (피벗 형태 → Budget[] 변환)
+ * 시트 구조: B=분야코드, C=계정코드, D=항목명, E~=연도별 금액
+ */
+async function getBudgetFromYearlySheet(year: number): Promise<Budget[]> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.yearlyBudget, 'A:Z');
+  if (!rows || rows.length < 2) return [];
+
+  // 헤더에서 연도 컬럼 위치 찾기
+  const headers = rows[0];
+  const yearColIndex = headers.findIndex(h => String(h) === String(year));
+  if (yearColIndex === -1) return [];
+
+  // 지출부코드에서 분야명 조회용 맵 생성
+  const expenseCodes = await getExpenseCodes();
+  const categoryNameMap = new Map<number, string>();
+  expenseCodes.forEach(c => {
+    if (!categoryNameMap.has(c.category_code)) {
+      categoryNameMap.set(c.category_code, c.category_item);
+    }
+  });
+
+  // 숫자 파싱 헬퍼
+  const parseNum = (val: string | undefined) => {
+    if (!val) return 0;
+    return Number(String(val).replace(/,/g, '')) || 0;
+  };
+
+  // 각 행을 Budget 객체로 변환
+  const budgets: Budget[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length < 4) continue;
+
+    const categoryCode = Number(row[1]); // B열: 분야코드
+    const accountCode = Number(row[2]);  // C열: 계정코드
+    const accountItem = String(row[3] || '');  // D열: 항목명
+    const amount = parseNum(row[yearColIndex]);
+
+    if (accountCode && amount > 0) {
+      budgets.push({
+        year,
+        category_code: categoryCode,
+        category_item: categoryNameMap.get(categoryCode) || `분야${categoryCode}`,
+        account_code: accountCode,
+        account_item: accountItem,
+        budgeted_amount: amount,
+      });
+    }
+  }
+
+  return budgets;
+}
+
+/**
+ * 예산 조회
+ * - 당년: '연도별예산' 시트에서 읽기 (동적 업데이트됨)
+ * - 과거년도: 기존 '예산' 시트에서 읽기
+ */
 export async function getBudget(year: number): Promise<Budget[]> {
-  const data = await getSheetData<Budget>(FINANCE_CONFIG.sheets.budget);
-  return data.filter(b => b.year === year);
+  // 현재 한국시간 기준 연도
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const currentYear = kst.getFullYear();
+
+  if (year === currentYear) {
+    // 당년: '연도별예산' 시트에서 읽기
+    return getBudgetFromYearlySheet(year);
+  } else {
+    // 과거년도: 기존 '예산' 시트에서 읽기
+    const data = await getSheetData<Budget>(FINANCE_CONFIG.sheets.budget);
+    return data.filter(b => b.year === year);
+  }
 }
 
 // ============================================

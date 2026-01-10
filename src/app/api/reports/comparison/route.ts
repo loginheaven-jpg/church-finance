@@ -16,9 +16,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const endYear = Number(searchParams.get('year')) || new Date().getFullYear();
-    const yearCount = Number(searchParams.get('count')) || 10; // 기본 10개년
-    const years = Array.from({ length: yearCount }, (_, i) => endYear - yearCount + 1 + i);
-    const years3 = [endYear - 2, endYear - 1, endYear]; // 월별 추이용 3개년
+    const startYear = 2019; // 2019년부터 시작 (2018년 이전 데이터 제외)
+    const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
+    const years3 = [endYear - 2, endYear - 1, endYear].filter(y => y >= startYear); // 월별 추이용 3개년
 
     // 코드 정보 조회
     const [incomeCodes, expenseCodes] = await Promise.all([

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +27,11 @@ import {
 } from 'recharts';
 import { useYear } from '@/contexts/YearContext';
 
+interface CategoryData {
+  name: string;
+  amount: number;
+}
+
 interface ComparisonData {
   years: number[];
   summary: Array<{
@@ -37,22 +42,35 @@ interface ComparisonData {
     incomeGrowth: number;
     expenseGrowth: number;
   }>;
+  incomeByCategory: Array<{
+    year: number;
+    categories: Record<number, CategoryData>;
+  }>;
+  expenseByCategory: Array<{
+    year: number;
+    categories: Record<number, CategoryData>;
+  }>;
   monthlyTrend: Array<{
     year: number;
     income: number[];
     expense: number[];
   }>;
-  longTermTrend: Array<{
-    year: number;
-    income: number;
-    expense: number;
-  }>;
 }
+
+type ChartMode = 'all' | 'income' | 'expense';
+
+// 색상 팔레트 (카테고리별)
+const CATEGORY_COLORS = [
+  '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16',
+  '#06b6d4', '#a855f7',
+];
 
 export default function ComparisonReportPage() {
   const { year: endYear, setYear: setEndYear } = useYear();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ComparisonData | null>(null);
+  const [chartMode, setChartMode] = useState<ChartMode>('all');
 
   useEffect(() => {
     loadData();
@@ -61,7 +79,7 @@ export default function ComparisonReportPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/reports/comparison?year=${endYear}`);
+      const res = await fetch(`/api/reports/comparison?year=${endYear}&count=10`);
       const result = await res.json();
 
       if (result.success) {
@@ -91,6 +109,56 @@ export default function ComparisonReportPage() {
     return amount.toLocaleString() + '원';
   };
 
+  // 연도별 차트 데이터 생성
+  const yearlyChartData = useMemo(() => {
+    if (!data) return [];
+
+    if (chartMode === 'all') {
+      // 모두: 단순 수입/지출 바
+      return data.summary.map(s => ({
+        year: `${s.year}`,
+        수입: s.totalIncome,
+        지출: s.totalExpense,
+      }));
+    }
+
+    // 수입 또는 지출: 카테고리별 누적 바
+    const categorySource = chartMode === 'income' ? data.incomeByCategory : data.expenseByCategory;
+    if (!categorySource) return [];
+
+    return data.years.map((year, idx) => {
+      const yearCategoryData = categorySource[idx]?.categories || {};
+      const item: Record<string, string | number> = { year: `${year}` };
+
+      Object.values(yearCategoryData).forEach(cat => {
+        item[cat.name] = cat.amount;
+      });
+
+      return item;
+    });
+  }, [data, chartMode]);
+
+  // 차트에 표시할 카테고리 목록
+  const chartCategories = useMemo(() => {
+    if (!data || chartMode === 'all') return [];
+
+    const categorySource = chartMode === 'income' ? data.incomeByCategory : data.expenseByCategory;
+    if (!categorySource) return [];
+
+    const categoryTotals = new Map<string, number>();
+
+    categorySource.forEach(yearData => {
+      Object.values(yearData.categories).forEach(cat => {
+        categoryTotals.set(cat.name, (categoryTotals.get(cat.name) || 0) + cat.amount);
+      });
+    });
+
+    // 총액 기준 정렬
+    return Array.from(categoryTotals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+  }, [data, chartMode]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -107,15 +175,7 @@ export default function ComparisonReportPage() {
     );
   }
 
-  // 연도별 수입/지출 차트 데이터
-  const yearlyChartData = data.summary.map(s => ({
-    year: `${s.year}년`,
-    수입: s.totalIncome,
-    지출: s.totalExpense,
-    수지차액: s.balance,
-  }));
-
-  // 월별 추이 차트 데이터
+  // 월별 추이 차트 데이터 (3개년만)
   const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
   const monthlyChartData = months.map((month, idx) => {
     const item: Record<string, string | number> = { month };
@@ -126,14 +186,21 @@ export default function ComparisonReportPage() {
     return item;
   });
 
+  // 최근 3년 데이터 (테이블용)
+  const recentYears = data.years.slice(-3);
+  const recentSummary = data.summary.slice(-3);
+
+  // 차트 높이 결정 (카테고리별 표시시 2배)
+  const chartHeight = chartMode === 'all' ? 350 : 600;
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">3개년 비교 보고서</h1>
+          <h1 className="text-2xl font-bold text-slate-900">연간 비교</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {data.years[0]}년 ~ {data.years[2]}년 재정 현황 비교
+            {data.years[0]}년 ~ {data.years[data.years.length - 1]}년 재정 현황 비교
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -157,12 +224,12 @@ export default function ComparisonReportPage() {
         </div>
       </div>
 
-      {/* Summary Table */}
+      {/* Summary Table (최근 3개년) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            연도별 요약
+            최근 3개년 요약
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -170,7 +237,7 @@ export default function ComparisonReportPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>구분</TableHead>
-                {data.years.map(year => (
+                {recentYears.map(year => (
                   <TableHead key={year} className="text-right">{year}년</TableHead>
                 ))}
                 <TableHead className="text-right">전년 대비</TableHead>
@@ -179,49 +246,49 @@ export default function ComparisonReportPage() {
             <TableBody>
               <TableRow>
                 <TableCell className="font-medium">총 수입</TableCell>
-                {data.summary.map(s => (
+                {recentSummary.map(s => (
                   <TableCell key={s.year} className="text-right text-green-600">
                     {formatFullAmount(s.totalIncome)}
                   </TableCell>
                 ))}
                 <TableCell className="text-right">
-                  {data.summary[2].incomeGrowth >= 0 ? (
+                  {recentSummary[2]?.incomeGrowth >= 0 ? (
                     <span className="text-green-600 flex items-center justify-end gap-1">
                       <TrendingUp className="h-4 w-4" />
-                      +{data.summary[2].incomeGrowth}%
+                      +{recentSummary[2]?.incomeGrowth}%
                     </span>
                   ) : (
                     <span className="text-red-600 flex items-center justify-end gap-1">
                       <TrendingDown className="h-4 w-4" />
-                      {data.summary[2].incomeGrowth}%
+                      {recentSummary[2]?.incomeGrowth}%
                     </span>
                   )}
                 </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">총 지출</TableCell>
-                {data.summary.map(s => (
+                {recentSummary.map(s => (
                   <TableCell key={s.year} className="text-right text-red-600">
                     {formatFullAmount(s.totalExpense)}
                   </TableCell>
                 ))}
                 <TableCell className="text-right">
-                  {data.summary[2].expenseGrowth >= 0 ? (
+                  {recentSummary[2]?.expenseGrowth >= 0 ? (
                     <span className="text-red-600 flex items-center justify-end gap-1">
                       <TrendingUp className="h-4 w-4" />
-                      +{data.summary[2].expenseGrowth}%
+                      +{recentSummary[2]?.expenseGrowth}%
                     </span>
                   ) : (
                     <span className="text-green-600 flex items-center justify-end gap-1">
                       <TrendingDown className="h-4 w-4" />
-                      {data.summary[2].expenseGrowth}%
+                      {recentSummary[2]?.expenseGrowth}%
                     </span>
                   )}
                 </TableCell>
               </TableRow>
               <TableRow className="bg-slate-50 font-bold">
                 <TableCell>수지차액</TableCell>
-                {data.summary.map(s => (
+                {recentSummary.map(s => (
                   <TableCell key={s.year} className={`text-right ${s.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                     {s.balance >= 0 ? '+' : ''}{formatFullAmount(s.balance)}
                   </TableCell>
@@ -236,10 +303,37 @@ export default function ComparisonReportPage() {
       {/* Yearly Comparison Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>연도별 수입/지출 비교</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>연도별비교</CardTitle>
+            <div className="flex gap-1">
+              <Button
+                variant={chartMode === 'income' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setChartMode('income')}
+                className={chartMode === 'income' ? 'bg-green-600 hover:bg-green-700' : ''}
+              >
+                수입
+              </Button>
+              <Button
+                variant={chartMode === 'expense' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setChartMode('expense')}
+                className={chartMode === 'expense' ? 'bg-red-600 hover:bg-red-700' : ''}
+              >
+                지출
+              </Button>
+              <Button
+                variant={chartMode === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setChartMode('all')}
+              >
+                모두
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={yearlyChartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="year" />
@@ -248,17 +342,30 @@ export default function ComparisonReportPage() {
                 formatter={(value) => formatFullAmount(Number(value) || 0)}
               />
               <Legend />
-              <Bar dataKey="수입" fill="#22c55e" />
-              <Bar dataKey="지출" fill="#ef4444" />
+              {chartMode === 'all' ? (
+                <>
+                  <Bar dataKey="수입" fill="#22c55e" />
+                  <Bar dataKey="지출" fill="#ef4444" />
+                </>
+              ) : (
+                chartCategories.map((category, idx) => (
+                  <Bar
+                    key={category}
+                    dataKey={category}
+                    stackId="a"
+                    fill={CATEGORY_COLORS[idx % CATEGORY_COLORS.length]}
+                  />
+                ))
+              )}
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
 
-      {/* Monthly Trend Chart */}
+      {/* Monthly Income Trend Chart (3개년) */}
       <Card>
         <CardHeader>
-          <CardTitle>월별 수입 추이</CardTitle>
+          <CardTitle>월별 수입 추이 (3개년)</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
@@ -270,12 +377,12 @@ export default function ComparisonReportPage() {
                 formatter={(value) => formatFullAmount(Number(value) || 0)}
               />
               <Legend />
-              {data.years.map((year, idx) => (
+              {data.monthlyTrend.map((trend, idx) => (
                 <Line
-                  key={year}
+                  key={trend.year}
                   type="monotone"
-                  dataKey={`${year}수입`}
-                  name={`${year}년`}
+                  dataKey={`${trend.year}수입`}
+                  name={`${trend.year}년`}
                   stroke={['#94a3b8', '#3b82f6', '#22c55e'][idx]}
                   strokeWidth={idx === 2 ? 3 : 1}
                 />
@@ -285,10 +392,10 @@ export default function ComparisonReportPage() {
         </CardContent>
       </Card>
 
-      {/* Monthly Expense Trend Chart */}
+      {/* Monthly Expense Trend Chart (3개년) */}
       <Card>
         <CardHeader>
-          <CardTitle>월별 지출 추이</CardTitle>
+          <CardTitle>월별 지출 추이 (3개년)</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
@@ -300,12 +407,12 @@ export default function ComparisonReportPage() {
                 formatter={(value) => formatFullAmount(Number(value) || 0)}
               />
               <Legend />
-              {data.years.map((year, idx) => (
+              {data.monthlyTrend.map((trend, idx) => (
                 <Line
-                  key={year}
+                  key={trend.year}
                   type="monotone"
-                  dataKey={`${year}지출`}
-                  name={`${year}년`}
+                  dataKey={`${trend.year}지출`}
+                  name={`${trend.year}년`}
                   stroke={['#94a3b8', '#f97316', '#ef4444'][idx]}
                   strokeWidth={idx === 2 ? 3 : 1}
                 />
@@ -314,48 +421,6 @@ export default function ComparisonReportPage() {
           </ResponsiveContainer>
         </CardContent>
       </Card>
-
-      {/* Long-term Trend Chart (2003~현재) */}
-      {data.longTermTrend && data.longTermTrend.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>연간 수입/지출 추이 (2003년~현재)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={data.longTermTrend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="year"
-                  tickFormatter={(year) => `${year}`}
-                />
-                <YAxis tickFormatter={formatAmount} />
-                <Tooltip
-                  formatter={(value) => formatFullAmount(Number(value) || 0)}
-                  labelFormatter={(year) => `${year}년`}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="income"
-                  name="수입"
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                  dot={{ fill: '#22c55e', r: 3 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="expense"
-                  name="지출"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  dot={{ fill: '#ef4444', r: 3 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

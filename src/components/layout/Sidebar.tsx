@@ -53,10 +53,10 @@ const menuSections: MenuSection[] = [
     items: [
       { href: '/reports/weekly', label: '주간 요약', icon: FileText },
       { href: '/reports/monthly', label: '연간 요약', icon: BarChart3 },
+      { href: '/reports/comparison', label: '연간 비교', icon: Scale },
       { href: '/reports/budget', label: '예산 집행', icon: Receipt },
       { href: '/reports/income-analysis', label: '수입 분석', icon: TrendingUp },
       { href: '/reports/expense-analysis', label: '지출 분석', icon: TrendingDown },
-      { href: '/reports/comparison', label: '3개년 비교', icon: Scale },
       { href: '/reports/custom', label: '커스텀 보고서', icon: FileBarChart },
     ],
   },

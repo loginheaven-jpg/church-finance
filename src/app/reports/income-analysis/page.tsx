@@ -647,7 +647,7 @@ export default function IncomeAnalysisPage() {
                       <LabelList
                         dataKey="percent"
                         position="right"
-                        formatter={(value: number) => `${value}%`}
+                        formatter={(value) => `${value}%`}
                         style={{ fontSize: 12, fontWeight: 600 }}
                       />
                     </Bar>

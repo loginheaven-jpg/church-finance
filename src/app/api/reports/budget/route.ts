@@ -43,9 +43,9 @@ export async function GET(request: NextRequest) {
     const daysPassed = getDaysPassed(year, endDate);
     const daysInYear = isLeapYear(year) ? 366 : 365;
 
-    // 전년도 동일 기간 계산
+    // 전년도 연간 전체 (예산 비교용)
     const prevYear = year - 1;
-    const prevYearEndDate = `${prevYear}-${endDate.slice(5)}`; // 동일 월-일
+    const prevYearEndDate = `${prevYear}-12-31`; // 항상 연말까지
 
     // 예산, 당년 지출, 전년 지출 데이터 조회
     const [budgetData, expenseRecords, prevYearExpenseRecords] = await Promise.all([

@@ -432,34 +432,34 @@ export default function BuildingPage() {
           <CardTitle className="text-lg">금액 구성 (2012~2025)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {/* 수입 막대 */}
+          <div className="space-y-6 mx-auto" style={{ width: '90%' }}>
+            {/* 지출 막대 (위) */}
             <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="font-medium">수입</span>
-                <span className="text-muted-foreground">18.3억</span>
+              <div className="flex justify-between text-base mb-2">
+                <span className="font-semibold">지출</span>
+                <span className="text-muted-foreground font-medium">18.3억</span>
               </div>
-              <div className="flex h-8 rounded-lg overflow-hidden">
-                <div className="bg-green-500 flex items-center justify-center text-white text-xs font-medium" style={{ width: '66.7%' }}>
-                  건축헌금 12.2억
+              <div className="flex h-14 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-center text-white text-base font-bold" style={{ width: '56.3%', backgroundColor: '#ea580c' }}>
+                  이자 10.3억
                 </div>
-                <div className="bg-amber-500 flex items-center justify-center text-white text-xs font-medium" style={{ width: '33.3%' }}>
-                  일반예산 6.1억
+                <div className="flex items-center justify-center text-white text-base font-bold" style={{ width: '43.7%', backgroundColor: '#f97316' }}>
+                  원금 8억
                 </div>
               </div>
             </div>
-            {/* 지출 막대 */}
+            {/* 수입 막대 (아래) */}
             <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="font-medium">지출</span>
-                <span className="text-muted-foreground">18.3억</span>
+              <div className="flex justify-between text-base mb-2">
+                <span className="font-semibold">수입</span>
+                <span className="text-muted-foreground font-medium">18.3억</span>
               </div>
-              <div className="flex h-8 rounded-lg overflow-hidden">
-                <div className="bg-orange-500 flex items-center justify-center text-white text-xs font-medium" style={{ width: '56.3%' }}>
-                  이자 10.3억
+              <div className="flex h-14 rounded-lg overflow-hidden">
+                <div className="bg-green-500 flex items-center justify-center text-white text-base font-bold" style={{ width: '66.7%' }}>
+                  건축헌금 12.2억
                 </div>
-                <div className="bg-blue-500 flex items-center justify-center text-white text-xs font-medium" style={{ width: '43.7%' }}>
-                  원금 8억
+                <div className="flex items-center justify-center text-white text-base font-bold" style={{ width: '33.3%', backgroundColor: '#166534' }}>
+                  일반예산 6.1억
                 </div>
               </div>
             </div>
@@ -493,10 +493,10 @@ export default function BuildingPage() {
                 <Legend />
                 {/* 건축헌금 스택 */}
                 <Bar dataKey="건축헌금" stackId="income" fill="#22c55e" name="건축헌금" />
-                <Bar dataKey="일반예산" stackId="income" fill="#f59e0b" name="일반예산" />
+                <Bar dataKey="일반예산" stackId="income" fill="#166534" name="일반예산" />
                 {/* 건축지출 스택 */}
-                <Bar dataKey="원금상환" stackId="expense" fill="#3b82f6" name="원금상환" />
-                <Bar dataKey="이자지출" stackId="expense" fill="#f97316" name="이자지출" />
+                <Bar dataKey="원금상환" stackId="expense" fill="#f97316" name="원금상환" />
+                <Bar dataKey="이자지출" stackId="expense" fill="#ea580c" name="이자지출" />
               </BarChart>
             </ResponsiveContainer>
 
@@ -505,24 +505,24 @@ export default function BuildingPage() {
                 <p className="text-xs font-semibold text-green-700 mb-2">건축헌금 + 일반예산</p>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-green-600">건축헌금</span>
+                    <span className="text-green-500">건축헌금</span>
                     <span className="font-bold">3.7억</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-amber-500">일반예산</span>
+                    <span className="text-green-800">일반예산</span>
                     <span className="font-bold">4.2억</span>
                   </div>
                 </div>
               </div>
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-xs font-semibold text-blue-700 mb-2">원금상환 + 이자지출</p>
+              <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <p className="text-xs font-semibold text-orange-700 mb-2">원금상환 + 이자지출</p>
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-blue-600">원금상환</span>
+                    <span className="text-orange-500">원금상환</span>
                     <span className="font-bold">4.9억</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-orange-500">이자지출</span>
+                    <span className="text-orange-600">이자지출</span>
                     <span className="font-bold">3억</span>
                   </div>
                 </div>

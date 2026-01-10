@@ -23,6 +23,7 @@ import {
   Legend,
   ResponsiveContainer,
   Cell,
+  LabelList,
 } from 'recharts';
 import { useYear } from '@/contexts/YearContext';
 
@@ -228,7 +229,7 @@ export default function MonthlyReportPage() {
               {viewMode === 'chart' ? (
                 <div className="h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <BarChart data={chartData} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                       <YAxis
@@ -240,8 +241,22 @@ export default function MonthlyReportPage() {
                         labelStyle={{ fontWeight: 'bold' }}
                       />
                       <Legend />
-                      <Bar dataKey="수입" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="지출" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="수입" fill="#22c55e" radius={[4, 4, 0, 0]}>
+                        <LabelList
+                          dataKey="수입"
+                          position="top"
+                          formatter={(value) => formatAmount(Number(value) || 0)}
+                          style={{ fontSize: 10, fill: '#16a34a' }}
+                        />
+                      </Bar>
+                      <Bar dataKey="지출" fill="#ef4444" radius={[4, 4, 0, 0]}>
+                        <LabelList
+                          dataKey="지출"
+                          position="top"
+                          formatter={(value) => formatAmount(Number(value) || 0)}
+                          style={{ fontSize: 10, fill: '#dc2626' }}
+                        />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

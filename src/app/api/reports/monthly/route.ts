@@ -95,7 +95,9 @@ export async function GET(request: NextRequest) {
           }
           return b.transaction_date.localeCompare(a.transaction_date);
         });
-      endBalance = sortedBank[0]?.balance || 0;
+      // 은행 데이터가 없으면 이월금 + 수입 - 지출로 계산
+      const lastBankBalance = sortedBank[0]?.balance;
+      endBalance = lastBankBalance ?? (carryoverBalance + totalIncome - totalExpense);
     } else {
       // 과거 연도: 이월금 + 연간수입 - 연간지출
       endBalance = carryoverBalance + totalIncome - totalExpense;

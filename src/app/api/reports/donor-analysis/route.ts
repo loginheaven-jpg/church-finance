@@ -11,30 +11,38 @@ export async function GET(request: NextRequest) {
 
     const incomeRecords = await getIncomeRecords(startDate, endDate);
 
-    // 헌금자별 집계 (representative 기준)
-    const donorMap = new Map<string, {
+    // 헌금자별 집계 (representative 기준 = 가구)
+    const householdMap = new Map<string, {
       representative: string;
       totalAmount: number;
       count: number;
       months: Set<number>;
     }>();
 
+    // 개인별 집계 (donor_name 기준)
+    const individualSet = new Set<string>();
+
     incomeRecords.forEach(r => {
-      const key = r.representative || r.donor_name || '익명';
+      // 개인 집계
+      const individualKey = r.donor_name || '익명';
+      individualSet.add(individualKey);
+
+      // 가구 집계
+      const householdKey = r.representative || r.donor_name || '익명';
       const month = new Date(r.date).getMonth() + 1;
 
-      if (!donorMap.has(key)) {
-        donorMap.set(key, {
-          representative: key,
+      if (!householdMap.has(householdKey)) {
+        householdMap.set(householdKey, {
+          representative: householdKey,
           totalAmount: 0,
           count: 0,
           months: new Set(),
         });
       }
-      const donor = donorMap.get(key)!;
-      donor.totalAmount += r.amount;
-      donor.count += 1;
-      donor.months.add(month);
+      const household = householdMap.get(householdKey)!;
+      household.totalAmount += r.amount;
+      household.count += 1;
+      household.months.add(month);
     });
 
     // 금액 분포 계산 (익명 통계)
@@ -46,12 +54,12 @@ export async function GET(request: NextRequest) {
       { label: '100만 이상', min: 1000000, max: Infinity, count: 0, totalAmount: 0 },
     ];
 
-    donorMap.forEach(donor => {
-      const avgPerMonth = donor.totalAmount / 12;
+    householdMap.forEach(household => {
+      const avgPerMonth = household.totalAmount / 12;
       for (const range of amountRanges) {
         if (avgPerMonth >= range.min && avgPerMonth < range.max) {
           range.count += 1;
-          range.totalAmount += donor.totalAmount;
+          range.totalAmount += household.totalAmount;
           break;
         }
       }
@@ -84,9 +92,9 @@ export async function GET(request: NextRequest) {
       { label: '25회 이상', min: 25, max: Infinity, count: 0 },
     ];
 
-    donorMap.forEach(donor => {
+    householdMap.forEach(household => {
       for (const freq of frequencyDistribution) {
-        if (donor.count >= freq.min && donor.count <= freq.max) {
+        if (household.count >= freq.min && household.count <= freq.max) {
           freq.count += 1;
           break;
         }
@@ -100,7 +108,7 @@ export async function GET(request: NextRequest) {
 
     const prevDonorSet = new Set(prevIncomeRecords.map(r => r.representative || r.donor_name));
     const currDonorSet = new Set<string>();
-    donorMap.forEach((_, key) => currDonorSet.add(key));
+    householdMap.forEach((_, key) => currDonorSet.add(key));
 
     // 신규 헌금자: 올해는 있지만 작년에는 없었던
     const newDonors = Array.from(currDonorSet).filter(d => !prevDonorSet.has(d));
@@ -110,31 +118,35 @@ export async function GET(request: NextRequest) {
     const retainedDonors = Array.from(currDonorSet).filter(d => prevDonorSet.has(d));
 
     // 요약
-    const totalDonors = donorMap.size;
+    const totalIndividuals = individualSet.size;  // 개인 수
+    const totalHouseholds = householdMap.size;     // 가구 수
     const totalAmount = incomeRecords.reduce((sum, r) => sum + r.amount, 0);
-    const avgPerDonor = totalDonors > 0 ? Math.round(totalAmount / totalDonors) : 0;
+    const avgPerIndividual = totalIndividuals > 0 ? Math.round(totalAmount / totalIndividuals) : 0;
+    const avgPerHousehold = totalHouseholds > 0 ? Math.round(totalAmount / totalHouseholds) : 0;
 
     return NextResponse.json({
       success: true,
       data: {
         year,
         summary: {
-          totalDonors,
+          totalDonors: totalIndividuals,           // 기존 호환성 (개인 수)
+          totalHouseholds,                         // 가구 수
           totalAmount,
-          avgPerDonor,
+          avgPerDonor: avgPerIndividual,           // 기존 호환성 (인당 평균)
+          avgPerHousehold,                         // 가구당 평균
           totalTransactions: incomeRecords.length,
         },
         amountDistribution: amountRanges.map(r => ({
           label: r.label,
           count: r.count,
           totalAmount: r.totalAmount,
-          percentage: totalDonors > 0 ? Math.round((r.count / totalDonors) * 100) : 0,
+          percentage: totalHouseholds > 0 ? Math.round((r.count / totalHouseholds) * 100) : 0,
         })),
         monthlyDonors,
         frequencyDistribution: frequencyDistribution.map(f => ({
           label: f.label,
           count: f.count,
-          percentage: totalDonors > 0 ? Math.round((f.count / totalDonors) * 100) : 0,
+          percentage: totalHouseholds > 0 ? Math.round((f.count / totalHouseholds) * 100) : 0,
         })),
         retention: {
           newDonors: newDonors.length,

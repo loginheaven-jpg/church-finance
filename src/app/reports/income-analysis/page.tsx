@@ -48,8 +48,10 @@ interface DonorAnalysisData {
   year: number;
   summary: {
     totalDonors: number;
+    totalHouseholds: number;
     totalAmount: number;
     avgPerDonor: number;
+    avgPerHousehold: number;
     totalTransactions: number;
   };
   amountDistribution: Array<{
@@ -357,9 +359,10 @@ export default function IncomeAnalysisPage() {
                     <Users className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <div className="text-sm text-slate-500">총 헌금자</div>
+                    <div className="text-sm text-slate-500">총 헌금자(가구)</div>
                     <div className="text-2xl font-bold text-slate-900">
                       {donorData.summary.totalDonors.toLocaleString()}명
+                      <span className="text-lg text-slate-600">({donorData.summary.totalHouseholds.toLocaleString()}가구)</span>
                     </div>
                   </div>
                 </div>
@@ -372,9 +375,10 @@ export default function IncomeAnalysisPage() {
                     <TrendingUp className="h-6 w-6 text-green-600" />
                   </div>
                   <div>
-                    <div className="text-sm text-slate-500">인당 평균</div>
-                    <div className="text-2xl font-bold text-slate-900" title={formatFullAmount(donorData.summary.avgPerDonor)}>
+                    <div className="text-sm text-slate-500">인당평균(가구당 평균)</div>
+                    <div className="text-2xl font-bold text-slate-900" title={`${formatFullAmount(donorData.summary.avgPerDonor)} (가구당: ${formatFullAmount(donorData.summary.avgPerHousehold)})`}>
                       {formatAmount(donorData.summary.avgPerDonor)}원
+                      <span className="text-lg text-slate-600">({formatAmount(donorData.summary.avgPerHousehold)}원)</span>
                     </div>
                   </div>
                 </div>

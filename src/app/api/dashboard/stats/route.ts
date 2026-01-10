@@ -7,6 +7,8 @@ import {
   getBankTransactions,
   getBudget,
   getCarryoverBalance,
+  getIncomeCodes,
+  getExpenseCodes,
 } from '@/lib/google-sheets';
 
 export async function GET(request: NextRequest) {
@@ -50,6 +52,8 @@ export async function GET(request: NextRequest) {
       bankTransactions,
       budgetData,
       carryoverData,
+      incomeCodes,
+      expenseCodes,
     ] = await Promise.all([
       getIncomeRecords(startDate, endDate),
       getExpenseRecords(startDate, endDate),
@@ -60,7 +64,19 @@ export async function GET(request: NextRequest) {
       getBankTransactions(),
       getBudget(currentYear),
       getCarryoverBalance(currentYear - 1), // 전년도 말 이월잔액
+      getIncomeCodes(),
+      getExpenseCodes(),
     ]);
+
+    // 코드 → 항목명 매핑 생성
+    const incomeCodeMap = new Map<number, string>();
+    for (const c of incomeCodes) {
+      incomeCodeMap.set(c.code, c.item);
+    }
+    const expenseCodeMap = new Map<number, string>();
+    for (const c of expenseCodes) {
+      expenseCodeMap.set(c.code, c.item);
+    }
 
     // 디버그 모드 응답
     if (debug) {
@@ -100,44 +116,139 @@ export async function GET(request: NextRequest) {
     const weeklyIncome = weeklyIncomeRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
     const weeklyExpense = weeklyExpenseRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
 
-    // 카테고리별 수입 집계
-    const incomeByCategoryMap = new Map<string, number>();
-    for (const r of weeklyIncomeRecords) {
-      // offering_code로 카테고리 구분
-      let categoryName = '기타헌금';
-      if (r.offering_code >= 10 && r.offering_code < 20) categoryName = '일반헌금';
-      else if (r.offering_code >= 20 && r.offering_code < 30) categoryName = '목적헌금';
-      else if (r.offering_code >= 30 && r.offering_code < 40) categoryName = '잡수입';
-      else if (r.offering_code >= 40 && r.offering_code < 500) categoryName = '자본수입';
-      else if (r.offering_code >= 500) categoryName = '건축헌금';
-
-      incomeByCategoryMap.set(categoryName, (incomeByCategoryMap.get(categoryName) || 0) + (r.amount || 0));
+    // 카테고리별 수입 집계 (세부항목 포함)
+    interface CategoryDetail {
+      code: number;
+      item: string;
+      amount: number;
     }
-    const incomeSummary = Array.from(incomeByCategoryMap.entries())
-      .map(([category, amount]) => ({ category, amount }))
+    interface IncomeCategoryData {
+      categoryCode: number;
+      category: string;
+      amount: number;
+      detailsMap: Map<number, { code: number; item: string; amount: number }>;
+    }
+    const incomeByCategoryMap = new Map<number, IncomeCategoryData>();
+
+    // 수입 카테고리 코드 결정 함수
+    const getIncomeCategoryCode = (offeringCode: number): number => {
+      if (offeringCode >= 10 && offeringCode < 20) return 10;
+      if (offeringCode >= 20 && offeringCode < 30) return 20;
+      if (offeringCode >= 30 && offeringCode < 40) return 30;
+      if (offeringCode >= 40 && offeringCode < 500) return 40;
+      if (offeringCode >= 500) return 500;
+      return 0;
+    };
+    const getIncomeCategoryName = (categoryCode: number): string => {
+      switch (categoryCode) {
+        case 10: return '일반헌금';
+        case 20: return '목적헌금';
+        case 30: return '잡수입';
+        case 40: return '자본수입';
+        case 500: return '건축헌금';
+        default: return '기타헌금';
+      }
+    };
+
+    for (const r of weeklyIncomeRecords) {
+      const categoryCode = getIncomeCategoryCode(r.offering_code);
+      const categoryName = getIncomeCategoryName(categoryCode);
+
+      if (!incomeByCategoryMap.has(categoryCode)) {
+        incomeByCategoryMap.set(categoryCode, {
+          categoryCode,
+          category: categoryName,
+          amount: 0,
+          detailsMap: new Map(),
+        });
+      }
+
+      const catData = incomeByCategoryMap.get(categoryCode)!;
+      catData.amount += (r.amount || 0);
+
+      // 세부항목 집계
+      const detailCode = r.offering_code;
+      if (!catData.detailsMap.has(detailCode)) {
+        catData.detailsMap.set(detailCode, {
+          code: detailCode,
+          item: incomeCodeMap.get(detailCode) || `헌금${detailCode}`,
+          amount: 0,
+        });
+      }
+      catData.detailsMap.get(detailCode)!.amount += (r.amount || 0);
+    }
+
+    const incomeSummary = Array.from(incomeByCategoryMap.values())
+      .map(cat => ({
+        categoryCode: cat.categoryCode,
+        category: cat.category,
+        amount: cat.amount,
+        details: Array.from(cat.detailsMap.values()).sort((a, b) => b.amount - a.amount),
+      }))
       .sort((a, b) => b.amount - a.amount);
 
-    // 카테고리별 지출 집계
-    const expenseByCategoryMap = new Map<string, number>();
-    for (const r of weeklyExpenseRecords) {
-      // category_code로 카테고리 구분
-      let categoryName = '기타';
-      if (r.category_code === 10) categoryName = '사례비';
-      else if (r.category_code === 20) categoryName = '예배비';
-      else if (r.category_code === 30) categoryName = '선교비';
-      else if (r.category_code === 40) categoryName = '교육비';
-      else if (r.category_code === 50) categoryName = '봉사비';
-      else if (r.category_code === 60) categoryName = '관리비';
-      else if (r.category_code === 70) categoryName = '운영비';
-      else if (r.category_code === 80) categoryName = '상회비';
-      else if (r.category_code === 90) categoryName = '기타비용';
-      else if (r.category_code === 100) categoryName = '예비비';
-      else if (r.category_code >= 500) categoryName = '건축비';
-
-      expenseByCategoryMap.set(categoryName, (expenseByCategoryMap.get(categoryName) || 0) + (r.amount || 0));
+    // 카테고리별 지출 집계 (세부항목 포함)
+    interface ExpenseCategoryData {
+      categoryCode: number;
+      category: string;
+      amount: number;
+      detailsMap: Map<number, { code: number; item: string; amount: number }>;
     }
-    const expenseSummary = Array.from(expenseByCategoryMap.entries())
-      .map(([category, amount]) => ({ category, amount }))
+    const expenseByCategoryMap = new Map<number, ExpenseCategoryData>();
+
+    const getExpenseCategoryName = (categoryCode: number): string => {
+      switch (categoryCode) {
+        case 10: return '사례비';
+        case 20: return '예배비';
+        case 30: return '선교비';
+        case 40: return '교육비';
+        case 50: return '봉사비';
+        case 60: return '관리비';
+        case 70: return '운영비';
+        case 80: return '상회비';
+        case 90: return '기타비용';
+        case 100: return '예비비';
+        default:
+          if (categoryCode >= 500) return '건축비';
+          return '기타';
+      }
+    };
+
+    for (const r of weeklyExpenseRecords) {
+      const categoryCode = r.category_code || 0;
+      const categoryName = getExpenseCategoryName(categoryCode);
+
+      if (!expenseByCategoryMap.has(categoryCode)) {
+        expenseByCategoryMap.set(categoryCode, {
+          categoryCode,
+          category: categoryName,
+          amount: 0,
+          detailsMap: new Map(),
+        });
+      }
+
+      const catData = expenseByCategoryMap.get(categoryCode)!;
+      catData.amount += (r.amount || 0);
+
+      // 세부항목 집계
+      const detailCode = r.account_code || 0;
+      if (!catData.detailsMap.has(detailCode)) {
+        catData.detailsMap.set(detailCode, {
+          code: detailCode,
+          item: expenseCodeMap.get(detailCode) || `지출${detailCode}`,
+          amount: 0,
+        });
+      }
+      catData.detailsMap.get(detailCode)!.amount += (r.amount || 0);
+    }
+
+    const expenseSummary = Array.from(expenseByCategoryMap.values())
+      .map(cat => ({
+        categoryCode: cat.categoryCode,
+        category: cat.category,
+        amount: cat.amount,
+        details: Array.from(cat.detailsMap.values()).sort((a, b) => b.amount - a.amount),
+      }))
       .sort((a, b) => b.amount - a.amount);
 
     // 연간 수입/지출 합계 (자본수입/건축 제외한 일반회계만)

@@ -16,17 +16,25 @@ import { queryKeys } from '@/lib/queries';
 import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails, BudgetExecutionCard } from '@/components/dashboard';
 import { endOfWeek, addWeeks, format } from 'date-fns';
 
-interface CategorySummary {
+interface CategoryDetail {
+  code: number;
+  item: string;
+  amount: number;
+}
+
+interface CategorySummaryWithDetails {
+  categoryCode: number;
   category: string;
   amount: number;
+  details: CategoryDetail[];
 }
 
 interface DashboardStats {
   weeklyIncome: number;
   weeklyExpense: number;
   balance: number;
-  incomeSummary?: CategorySummary[];
-  expenseSummary?: CategorySummary[];
+  incomeSummary?: CategorySummaryWithDetails[];
+  expenseSummary?: CategorySummaryWithDetails[];
   weeklyData?: Array<{
     date: string;
     income: number;

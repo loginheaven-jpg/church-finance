@@ -328,7 +328,7 @@ export default function BuildingPage() {
       <div className="grid gap-4 md:grid-cols-3">
         {/* 카드 1: 건축비 총액 ↔ 건축비 출처 */}
         <Card
-          className="border-l-4 border-l-slate-500 cursor-pointer hover:shadow-lg transition-shadow"
+          className="border-l-4 border-l-slate-500 cursor-pointer hover:shadow-lg transition-shadow h-[200px]"
           onClick={() => setFlippedCards(prev => ({...prev, card1: !prev.card1}))}
         >
           <CardHeader className="pb-2">
@@ -339,18 +339,16 @@ export default function BuildingPage() {
           </CardHeader>
           <CardContent>
             {flippedCards.card1 ? (
-              <>
-                <div className="space-y-2">
-                  <div>
-                    <div className="text-5xl font-bold text-green-600">32억</div>
-                    <div className="text-base text-muted-foreground">건축헌금 (~2011)</div>
-                  </div>
-                  <div>
-                    <div className="text-5xl font-bold text-red-600">21억</div>
-                    <div className="text-base text-muted-foreground">대출</div>
-                  </div>
+              <div className="space-y-1">
+                <div>
+                  <div className="text-4xl font-bold text-green-600">32억</div>
+                  <div className="text-sm text-muted-foreground">건축헌금 (~2011)</div>
                 </div>
-              </>
+                <div>
+                  <div className="text-4xl font-bold text-red-600">21억</div>
+                  <div className="text-sm text-muted-foreground">대출</div>
+                </div>
+              </div>
             ) : (
               <>
                 <div className="text-6xl font-bold text-slate-900">
@@ -366,7 +364,7 @@ export default function BuildingPage() {
 
         {/* 카드 2: 건축지출 ↔ 원금/이자 상세 */}
         <Card
-          className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-lg transition-shadow"
+          className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-lg transition-shadow h-[200px]"
           onClick={() => setFlippedCards(prev => ({...prev, card2: !prev.card2}))}
         >
           <CardHeader className="pb-2">
@@ -377,18 +375,16 @@ export default function BuildingPage() {
           </CardHeader>
           <CardContent>
             {flippedCards.card2 ? (
-              <>
-                <div className="space-y-2">
-                  <div>
-                    <div className="text-5xl font-bold text-blue-600">{formatCurrency(data.summary.principalPaid)}</div>
-                    <div className="text-base text-muted-foreground">원금상환</div>
-                  </div>
-                  <div>
-                    <div className="text-5xl font-bold text-red-600">{formatCurrency(data.summary.interestPaid)}</div>
-                    <div className="text-base text-muted-foreground">이자지출</div>
-                  </div>
+              <div className="space-y-1">
+                <div>
+                  <div className="text-4xl font-bold text-blue-600">{formatCurrency(data.summary.principalPaid)}</div>
+                  <div className="text-sm text-muted-foreground">원금상환</div>
                 </div>
-              </>
+                <div>
+                  <div className="text-4xl font-bold text-red-600">{formatCurrency(data.summary.interestPaid)}</div>
+                  <div className="text-sm text-muted-foreground">이자지출</div>
+                </div>
+              </div>
             ) : (
               <>
                 <div className="text-6xl font-bold text-blue-600">
@@ -403,7 +399,7 @@ export default function BuildingPage() {
         </Card>
 
         {/* 카드 3: 대출 잔액 */}
-        <Card className="border-l-4 border-l-red-500">
+        <Card className="border-l-4 border-l-red-500 h-[200px]">
           <CardHeader className="pb-2">
             <CardTitle className="text-base text-muted-foreground flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-red-500" />

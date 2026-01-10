@@ -8,20 +8,18 @@ import {
   TrendingUp,
   TrendingDown,
   Wallet,
-  AlertCircle,
   Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries';
 import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails, BudgetExecutionCard } from '@/components/dashboard';
-import { startOfWeek, addWeeks, format } from 'date-fns';
+import { endOfWeek, addWeeks, format } from 'date-fns';
 
 interface DashboardStats {
   weeklyIncome: number;
   weeklyExpense: number;
   balance: number;
-  unmatchedCount: number;
   incomeTransactions?: Array<{
     date: string;
     description: string;
@@ -56,9 +54,9 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const weekOffset = parseInt(searchParams.get('week') || '0');
 
-  // 현재 주의 일요일 계산
+  // 현재 주의 일요일 계산 (월~일 기준, API와 일치)
   const today = new Date();
-  const currentSunday = startOfWeek(today, { weekStartsOn: 0 });
+  const currentSunday = endOfWeek(today, { weekStartsOn: 1 });
   const targetSunday = addWeeks(currentSunday, weekOffset);
 
   const [selectedCard, setSelectedCard] = useState<'income' | 'expense' | null>(null);
@@ -76,7 +74,6 @@ function DashboardContent() {
         weeklyIncome: 0,
         weeklyExpense: 0,
         balance: 0,
-        unmatchedCount: 0,
         incomeTransactions: [],
         expenseTransactions: [],
         weeklyData: []
@@ -116,13 +113,12 @@ function DashboardContent() {
       <DashboardHeader
         currentDate={targetSunday}
         weekOffset={weekOffset}
-        unmatchedCount={stats?.unmatchedCount || 0}
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}
       />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <div className="grid grid-cols-3 gap-3 md:gap-4">
         <StatsCard
           icon={TrendingUp}
           label="이번 주 수입"
@@ -145,22 +141,6 @@ function DashboardContent() {
           value={isLoading ? '...' : formatAmount(stats?.balance || 0)}
           color="balance"
         />
-        <div className="relative">
-          <StatsCard
-            icon={AlertCircle}
-            label="미분류 거래"
-            value={isLoading ? '...' : `${stats?.unmatchedCount || 0}건`}
-            color="warning"
-          />
-          {(stats?.unmatchedCount || 0) > 0 && (
-            <Link
-              href="/match"
-              className="absolute bottom-2 right-3 text-[11px] text-[#C9A962] hover:text-[#D4B87A] hover:underline"
-            >
-              처리하기 →
-            </Link>
-          )}
-        </div>
       </div>
 
       {/* Transaction Details (shows when card is clicked) */}

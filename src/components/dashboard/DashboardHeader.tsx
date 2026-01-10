@@ -6,13 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ChevronLeft, ChevronRight, RefreshCw, Loader2 } from 'lucide-react';
-import { format, startOfWeek, differenceInWeeks } from 'date-fns';
+import { format, endOfWeek, differenceInWeeks } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 interface DashboardHeaderProps {
   currentDate: Date;
   weekOffset?: number;
-  unmatchedCount?: number;
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }
@@ -20,7 +19,6 @@ interface DashboardHeaderProps {
 export function DashboardHeader({
   currentDate,
   weekOffset = 0,
-  unmatchedCount = 0,
   onRefresh,
   isRefreshing = false,
 }: DashboardHeaderProps) {
@@ -57,10 +55,10 @@ export function DashboardHeader({
     if (!date) return;
     setCalendarOpen(false);
 
-    // 선택한 날짜의 주의 일요일 계산
-    const selectedSunday = startOfWeek(date, { weekStartsOn: 0 });
+    // 선택한 날짜의 주의 일요일 계산 (월~일 기준, API와 일치)
+    const selectedSunday = endOfWeek(date, { weekStartsOn: 1 });
     const today = new Date();
-    const currentSunday = startOfWeek(today, { weekStartsOn: 0 });
+    const currentSunday = endOfWeek(today, { weekStartsOn: 1 });
 
     // 주차 차이 계산
     const weekDiff = differenceInWeeks(selectedSunday, currentSunday);
@@ -153,15 +151,6 @@ export function DashboardHeader({
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
-
-        {/* Alert Badge - 미분류 거래 */}
-        {unmatchedCount > 0 && (
-          <div className="flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-white border border-[#E8E4DE]">
-            <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#E67E22]" />
-            <span className="hidden md:inline text-[12px] text-[#6B7B8C]">미분류</span>
-            <span className="text-[11px] md:text-[13px] font-bold text-[#E67E22]">{unmatchedCount}</span>
-          </div>
-        )}
       </div>
     </div>
   );

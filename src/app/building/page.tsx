@@ -98,8 +98,8 @@ function formatCurrency(amount: number): string {
   if (amount >= 100000000) {
     return `${(amount / 100000000).toFixed(1)}억`;
   }
-  if (amount >= 10000000) {
-    return `${(amount / 10000000).toFixed(1)}천만`;
+  if (amount >= 1000000) {
+    return `${Math.round(amount / 1000000)}백만`;
   }
   if (amount >= 10000) {
     return `${Math.round(amount / 10000).toLocaleString()}만`;
@@ -663,7 +663,7 @@ export default function BuildingPage() {
                     size="sm"
                     onClick={() => setAnnualRepayment(v)}
                   >
-                    {v >= 10000 ? `${v/10000}억` : `${v/1000}천만`}
+                    {v >= 10000 ? `${v/10000}억` : `${v/100}백만`}
                   </Button>
                 ))}
               </div>

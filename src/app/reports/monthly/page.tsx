@@ -82,6 +82,8 @@ export default function MonthlyReportPage() {
   const formatAmount = (amount: number) => {
     if (Math.abs(amount) >= 100000000) {
       return `${(amount / 100000000).toFixed(1)}억`;
+    } else if (Math.abs(amount) >= 1000000) {
+      return `${Math.round(amount / 1000000)}백만`;
     } else if (Math.abs(amount) >= 10000) {
       return `${Math.round(amount / 10000).toLocaleString()}만`;
     }

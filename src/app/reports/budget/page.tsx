@@ -98,11 +98,8 @@ function formatCurrency(amount: number | null | undefined): string {
   if (val >= 100000000) {
     return `${(val / 100000000).toFixed(1)}억`;
   }
-  if (val >= 10000000) {
-    return `${(val / 10000000).toFixed(1)}천만`;
-  }
   if (val >= 1000000) {
-    return `${(val / 1000000).toFixed(1)}백만`;
+    return `${Math.round(val / 1000000)}백만`;
   }
   return `${(val / 10000).toFixed(0)}만`;
 }

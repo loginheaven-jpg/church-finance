@@ -35,8 +35,11 @@ const LABELS = {
 
 export function WeeklyChart({ data }: WeeklyChartProps) {
   const formatAmount = (value: number) => {
+    if (value >= 100000000) {
+      return `${(value / 100000000).toFixed(1)}억`;
+    }
     if (value >= 1000000) {
-      return `${(value / 1000000).toFixed(1)}M`;
+      return `${Math.round(value / 1000000)}백만`;
     }
     if (value >= 10000) {
       return `${(value / 10000).toFixed(0)}만`;

@@ -31,8 +31,8 @@ export function BudgetExecutionCard({
     if (amount >= 100000000) {
       return `${(amount / 100000000).toFixed(1)}억원`;
     }
-    if (amount >= 10000000) {
-      return `${(amount / 10000).toFixed(0)}만원`;
+    if (amount >= 1000000) {
+      return `${Math.round(amount / 1000000)}백만원`;
     }
     return `${amount.toLocaleString()}원`;
   };

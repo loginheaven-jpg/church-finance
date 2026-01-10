@@ -250,11 +250,11 @@ export default function IncomeAnalysisPage() {
       {/* Category Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle>카테고리별 비율</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+          <CardContent className="pt-0">
+            <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie
                   data={categoryPieData}
@@ -262,8 +262,12 @@ export default function IncomeAnalysisPage() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={100}
-                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                  outerRadius={110}
+                  innerRadius={0}
+                  label={({ name, value, percent }) =>
+                    `${name} ${formatAmount(value)} (${((percent ?? 0) * 100).toFixed(0)}%)`
+                  }
+                  labelLine={{ strokeWidth: 1 }}
                 >
                   {categoryPieData.map((_, idx) => (
                     <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
@@ -276,32 +280,36 @@ export default function IncomeAnalysisPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>카테고리별 상세</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle>세부내역</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>카테고리</TableHead>
-                  <TableHead className="text-right">금액</TableHead>
-                  <TableHead className="text-right">건수</TableHead>
-                  <TableHead className="text-right">비율</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.byCategory.map(cat => (
-                  <TableRow key={cat.name}>
-                    <TableCell className="font-medium">{cat.name}</TableCell>
-                    <TableCell className="text-right">{formatFullAmount(cat.amount)}</TableCell>
-                    <TableCell className="text-right">{cat.count}건</TableCell>
-                    <TableCell className="text-right">
-                      {((cat.amount / data.summary.totalIncome) * 100).toFixed(1)}%
-                    </TableCell>
+          <CardContent className="pt-0">
+            <div className="max-h-[280px] overflow-y-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-white">
+                  <TableRow>
+                    <TableHead className="w-[80px]">카테고리</TableHead>
+                    <TableHead>항목명</TableHead>
+                    <TableHead className="text-right">금액</TableHead>
+                    <TableHead className="text-right w-[60px]">비율</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {data.byCode
+                    .sort((a, b) => b.amount - a.amount)
+                    .map(item => (
+                    <TableRow key={item.code}>
+                      <TableCell className="text-slate-500 text-xs">{item.category}</TableCell>
+                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell className="text-right">{formatFullAmount(item.amount)}</TableCell>
+                      <TableCell className="text-right text-slate-600">
+                        {((item.amount / data.summary.totalIncome) * 100).toFixed(1)}%
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>

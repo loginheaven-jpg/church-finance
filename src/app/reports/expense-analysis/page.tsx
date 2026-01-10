@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, ChevronLeft, ChevronRight, TrendingDown, Receipt, Building2 } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, TrendingDown, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   BarChart,
@@ -257,11 +257,11 @@ export default function ExpenseAnalysisPage() {
       {/* Category Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle>카테고리별 비율</CardTitle>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+          <CardContent className="pt-0">
+            <ResponsiveContainer width="100%" height={280}>
               <PieChart>
                 <Pie
                   data={categoryPieData}
@@ -269,8 +269,12 @@ export default function ExpenseAnalysisPage() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={100}
-                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                  outerRadius={110}
+                  innerRadius={0}
+                  label={({ name, value, percent }) =>
+                    `${name} ${formatAmount(value)} (${((percent ?? 0) * 100).toFixed(0)}%)`
+                  }
+                  labelLine={{ strokeWidth: 1 }}
                 >
                   {categoryPieData.map((_, idx) => (
                     <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
@@ -283,38 +287,36 @@ export default function ExpenseAnalysisPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>카테고리별 상세</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle>세부내역</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>카테고리</TableHead>
-                  <TableHead className="text-right">지출</TableHead>
-                  <TableHead className="text-right">예산</TableHead>
-                  <TableHead className="text-right">집행률</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.byCategory.map(cat => (
-                  <TableRow key={cat.code}>
-                    <TableCell className="font-medium">{cat.name}</TableCell>
-                    <TableCell className="text-right text-red-600">
-                      {formatFullAmount(cat.amount)}
-                    </TableCell>
-                    <TableCell className="text-right text-slate-500">
-                      {formatFullAmount(cat.budget)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span className={cat.executionRate > 100 ? 'text-red-600 font-medium' : ''}>
-                        {cat.executionRate}%
-                      </span>
-                    </TableCell>
+          <CardContent className="pt-0">
+            <div className="max-h-[280px] overflow-y-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-white">
+                  <TableRow>
+                    <TableHead className="w-[80px]">카테고리</TableHead>
+                    <TableHead>항목명</TableHead>
+                    <TableHead className="text-right">금액</TableHead>
+                    <TableHead className="text-right w-[60px]">비율</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {data.byCode
+                    .sort((a, b) => b.amount - a.amount)
+                    .map(item => (
+                    <TableRow key={item.code}>
+                      <TableCell className="text-slate-500 text-xs">{item.category}</TableCell>
+                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell className="text-right text-red-600">{formatFullAmount(item.amount)}</TableCell>
+                      <TableCell className="text-right text-slate-600">
+                        {((item.amount / data.summary.totalExpense) * 100).toFixed(1)}%
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -350,43 +352,6 @@ export default function ExpenseAnalysisPage() {
         </CardContent>
       </Card>
 
-      {/* Top Vendors */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            상위 거래처 (Top 20)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">순위</TableHead>
-                <TableHead>거래처</TableHead>
-                <TableHead className="text-right">총 지출액</TableHead>
-                <TableHead className="text-right">거래 횟수</TableHead>
-                <TableHead className="text-right">평균</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.topVendors.map((vendor, idx) => (
-                <TableRow key={vendor.vendor}>
-                  <TableCell className="font-medium">{idx + 1}</TableCell>
-                  <TableCell>{vendor.vendor}</TableCell>
-                  <TableCell className="text-right text-red-600 font-medium">
-                    {formatFullAmount(vendor.amount)}
-                  </TableCell>
-                  <TableCell className="text-right">{vendor.count}회</TableCell>
-                  <TableCell className="text-right">
-                    {formatFullAmount(Math.round(vendor.amount / vendor.count))}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
   );
 }

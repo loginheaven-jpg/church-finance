@@ -21,6 +21,14 @@ export async function GET(request: NextRequest) {
       codeMap.set(c.code, { category: c.category_item, item: c.item });
     });
 
+    // 카테고리 코드 → 카테고리 이름 맵 생성
+    const categoryNameMap = new Map<number, string>();
+    expenseCodes.forEach(c => {
+      if (!categoryNameMap.has(c.category_code)) {
+        categoryNameMap.set(c.category_code, c.category_item);
+      }
+    });
+
     // 예산 맵 생성
     const budgetMap = new Map<number, number>();
     budgetData.forEach(b => {
@@ -46,9 +54,8 @@ export async function GET(request: NextRequest) {
 
       // 카테고리별
       if (!byCategory.has(categoryCode)) {
-        const catInfo = codeMap.get(categoryCode);
         byCategory.set(categoryCode, {
-          name: catInfo?.item || `카테고리${categoryCode}`,
+          name: categoryNameMap.get(categoryCode) || `카테고리${categoryCode}`,
           amount: 0,
           count: 0,
           budget: 0,

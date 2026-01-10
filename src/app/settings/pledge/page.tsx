@@ -32,6 +32,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useYear } from '@/contexts/YearContext';
 
 type PledgeType = '건축헌금' | '선교헌금';
 
@@ -50,7 +51,7 @@ interface PledgeWithFulfillment {
 }
 
 export default function PledgeManagementPage() {
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const { year, setYear } = useYear();
   const [selectedType, setSelectedType] = useState<PledgeType>('건축헌금');
   const [pledges, setPledges] = useState<PledgeWithFulfillment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -242,7 +243,7 @@ export default function PledgeManagementPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setYear(y => y - 1)}
+              onClick={() => setYear(year - 1)}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -250,7 +251,7 @@ export default function PledgeManagementPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setYear(y => y + 1)}
+              onClick={() => setYear(year + 1)}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

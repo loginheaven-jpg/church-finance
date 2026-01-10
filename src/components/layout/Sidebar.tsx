@@ -65,7 +65,7 @@ const menuSections: MenuSection[] = [
   {
     label: 'BUILDING',
     items: [
-      { href: '/building', label: '건축 현황', icon: Building2 },
+      { href: '/building', label: '성전 봉헌', icon: Building2 },
     ],
   },
   {

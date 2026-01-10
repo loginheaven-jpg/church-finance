@@ -29,6 +29,7 @@ import {
   Line,
   LabelList,
 } from 'recharts';
+import { useYear } from '@/contexts/YearContext';
 
 interface IncomeAnalysisData {
   year: number;
@@ -37,7 +38,7 @@ interface IncomeAnalysisData {
     totalCount: number;
     averagePerTransaction: number;
   };
-  byCategory: Array<{ code: number; name: string; amount: number; count: number }>;
+  byCategory: Array<{ name: string; amount: number; count: number }>;
   byCode: Array<{ code: number; name: string; category: string; amount: number; count: number }>;
   byMonth: Array<{ month: number; income: number; count: number }>;
   bySource: Array<{ source: string; amount: number; count: number }>;
@@ -47,7 +48,7 @@ interface IncomeAnalysisData {
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
 export default function IncomeAnalysisPage() {
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const { year, setYear } = useYear();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<IncomeAnalysisData | null>(null);
 
@@ -126,11 +127,11 @@ export default function IncomeAnalysisPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setYear(y => y - 1)}>
+          <Button variant="outline" size="icon" onClick={() => setYear(year - 1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-lg font-medium w-20 text-center">{year}년</span>
-          <Button variant="outline" size="icon" onClick={() => setYear(y => y + 1)}>
+          <Button variant="outline" size="icon" onClick={() => setYear(year + 1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -248,7 +249,7 @@ export default function IncomeAnalysisPage() {
               </TableHeader>
               <TableBody>
                 {data.byCategory.map(cat => (
-                  <TableRow key={cat.code}>
+                  <TableRow key={cat.name}>
                     <TableCell className="font-medium">{cat.name}</TableCell>
                     <TableCell className="text-right">{formatFullAmount(cat.amount)}</TableCell>
                     <TableCell className="text-right">{cat.count}건</TableCell>

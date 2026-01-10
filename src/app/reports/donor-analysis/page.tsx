@@ -21,6 +21,7 @@ import {
   Line,
   LabelList,
 } from 'recharts';
+import { useYear } from '@/contexts/YearContext';
 
 interface DonorAnalysisData {
   year: number;
@@ -57,7 +58,7 @@ interface DonorAnalysisData {
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 export default function DonorAnalysisPage() {
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const { year, setYear } = useYear();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DonorAnalysisData | null>(null);
 
@@ -139,11 +140,11 @@ export default function DonorAnalysisPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setYear(y => y - 1)}>
+          <Button variant="outline" size="icon" onClick={() => setYear(year - 1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-lg font-medium w-20 text-center">{year}년</span>
-          <Button variant="outline" size="icon" onClick={() => setYear(y => y + 1)}>
+          <Button variant="outline" size="icon" onClick={() => setYear(year + 1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

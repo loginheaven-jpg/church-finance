@@ -25,6 +25,7 @@ import {
   LineChart,
   Line,
 } from 'recharts';
+import { useYear } from '@/contexts/YearContext';
 
 interface ComparisonData {
   years: number[];
@@ -44,7 +45,7 @@ interface ComparisonData {
 }
 
 export default function ComparisonReportPage() {
-  const [endYear, setEndYear] = useState(() => new Date().getFullYear());
+  const { year: endYear, setYear: setEndYear } = useYear();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ComparisonData | null>(null);
 
@@ -134,7 +135,7 @@ export default function ComparisonReportPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => setEndYear(y => y - 1)}
+            onClick={() => setEndYear(endYear - 1)}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -144,7 +145,7 @@ export default function ComparisonReportPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => setEndYear(y => y + 1)}
+            onClick={() => setEndYear(endYear + 1)}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>

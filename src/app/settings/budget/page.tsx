@@ -23,9 +23,10 @@ import {
 import { Loader2, Plus, Save, Trash2, Calculator, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Budget, ExpenseCode } from '@/types';
+import { useYear } from '@/contexts/YearContext';
 
 export default function BudgetSettingsPage() {
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const { year, setYear } = useYear();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [expenseCodes, setExpenseCodes] = useState<ExpenseCode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,7 +208,7 @@ export default function BudgetSettingsPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setYear(y => y - 1)}
+              onClick={() => setYear(year - 1)}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -215,7 +216,7 @@ export default function BudgetSettingsPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setYear(y => y + 1)}
+              onClick={() => setYear(year + 1)}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

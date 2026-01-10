@@ -77,16 +77,29 @@ export async function GET(request: NextRequest) {
     const totalIncome = months.reduce((sum, m) => sum + m.income, 0);
     const totalExpense = months.reduce((sum, m) => sum + m.expense, 0);
 
-    // 현재 잔고 (은행원장의 마지막 잔액)
-    const sortedBank = bankTransactions
-      .filter(t => t.balance > 0)
-      .sort((a, b) => {
-        if (a.transaction_date === b.transaction_date) {
-          return (b.time || '').localeCompare(a.time || '');
-        }
-        return b.transaction_date.localeCompare(a.transaction_date);
-      });
-    const currentBalance = sortedBank[0]?.balance || 0;
+    // 현재 KST 시간 기준 현재 연도
+    const now = new Date();
+    const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const currentYear = kst.getFullYear();
+    const isCurrentYear = year === currentYear;
+
+    // 현재 잔고 (현재연도) 또는 연말잔고 (과거연도)
+    let endBalance: number;
+    if (isCurrentYear) {
+      // 은행원장의 마지막 잔액
+      const sortedBank = bankTransactions
+        .filter(t => t.balance > 0)
+        .sort((a, b) => {
+          if (a.transaction_date === b.transaction_date) {
+            return (b.time || '').localeCompare(a.time || '');
+          }
+          return b.transaction_date.localeCompare(a.transaction_date);
+        });
+      endBalance = sortedBank[0]?.balance || 0;
+    } else {
+      // 과거 연도: 이월금 + 연간수입 - 연간지출
+      endBalance = carryoverBalance + totalIncome - totalExpense;
+    }
 
     const report: MonthlyReport = {
       year,
@@ -100,7 +113,8 @@ export async function GET(request: NextRequest) {
         carryoverBalance,
         totalIncome,
         totalExpense,
-        currentBalance,
+        currentBalance: endBalance,
+        isCurrentYear,
       },
     });
   } catch (error) {

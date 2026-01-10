@@ -33,6 +33,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ExpenseDetailModal } from '@/components/expense-detail-modal';
+import { useYear } from '@/contexts/YearContext';
 
 // ============================================================================
 // Types
@@ -306,10 +307,10 @@ function CategoryItem({
 // ============================================================================
 
 export default function BudgetExecutionPage() {
+  const { year: selectedYear, setYear: setSelectedYear } = useYear();
   const currentYear = new Date().getFullYear();
   const availableYears = [currentYear - 4, currentYear - 3, currentYear - 2, currentYear - 1, currentYear];
 
-  const [selectedYear, setSelectedYear] = useState(currentYear);
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState<BudgetReportData | null>(null);
   const [yearlyData, setYearlyData] = useState<YearlyChartData[]>([]);
@@ -472,7 +473,7 @@ export default function BudgetExecutionPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setSelectedYear(y => y - 1)}
+              onClick={() => setSelectedYear(selectedYear - 1)}
               disabled={selectedYear <= currentYear - 4}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -481,7 +482,7 @@ export default function BudgetExecutionPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setSelectedYear(y => y + 1)}
+              onClick={() => setSelectedYear(selectedYear + 1)}
               disabled={selectedYear >= currentYear}
             >
               <ChevronRight className="h-4 w-4" />

@@ -24,6 +24,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
+import { useYear } from '@/contexts/YearContext';
 
 interface MonthData {
   month: number;
@@ -39,12 +40,13 @@ interface ExtendedMonthlyReport {
   totalIncome: number;
   totalExpense: number;
   currentBalance: number;
+  isCurrentYear?: boolean;
 }
 
 export default function MonthlyReportPage() {
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<ExtendedMonthlyReport | null>(null);
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const { year, setYear } = useYear();
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
 
   const fetchReport = async (y: number) => {
@@ -104,11 +106,11 @@ export default function MonthlyReportPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-900">연간 보고서</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setYear(y => y - 1)}>
+          <Button variant="outline" size="icon" onClick={() => setYear(year - 1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-lg font-medium w-20 text-center">{year}년</span>
-          <Button variant="outline" size="icon" onClick={() => setYear(y => y + 1)}>
+          <Button variant="outline" size="icon" onClick={() => setYear(year + 1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -178,12 +180,12 @@ export default function MonthlyReportPage() {
               </CardContent>
             </Card>
 
-            {/* 현재잔고 */}
+            {/* 현재잔고 / 연말잔고 */}
             <Card className="border-l-4 border-l-amber-500 col-span-2 md:col-span-1">
               <CardHeader className="pb-1 pt-3 px-3">
                 <CardTitle className="text-xs font-medium text-slate-500 flex items-center gap-1">
                   <Wallet className="h-3 w-3" />
-                  현재잔고
+                  {report.isCurrentYear ? '현재잔고' : '연말잔고'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">

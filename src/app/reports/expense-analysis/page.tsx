@@ -27,6 +27,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import { useYear } from '@/contexts/YearContext';
 
 interface ExpenseAnalysisData {
   year: number;
@@ -62,7 +63,7 @@ interface ExpenseAnalysisData {
 const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899'];
 
 export default function ExpenseAnalysisPage() {
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const { year, setYear } = useYear();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ExpenseAnalysisData | null>(null);
 
@@ -151,11 +152,11 @@ export default function ExpenseAnalysisPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setYear(y => y - 1)}>
+          <Button variant="outline" size="icon" onClick={() => setYear(year - 1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-lg font-medium w-20 text-center">{year}년</span>
-          <Button variant="outline" size="icon" onClick={() => setYear(y => y + 1)}>
+          <Button variant="outline" size="icon" onClick={() => setYear(year + 1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

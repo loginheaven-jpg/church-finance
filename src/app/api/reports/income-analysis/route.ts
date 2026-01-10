@@ -14,22 +14,27 @@ export async function GET(request: NextRequest) {
       getIncomeCodes(),
     ]);
 
-    // 코드 맵 생성
+    // 코드 맵 생성: code -> { category_item, item }
     const codeMap = new Map<number, { category: string; item: string }>();
     incomeCodes.forEach(c => {
       codeMap.set(c.code, { category: c.category_item, item: c.item });
     });
 
-    // 특수 카테고리 코드 fallback
-    const specialCategories: Record<number, string> = {
-      500: '건축헌금',
-      501: '건축헌금',
-      40: '자본수입',
-      41: '자본수입',
+    // 특수 카테고리 코드 fallback (코드 범위별)
+    const getCategoryName = (code: number): string => {
+      const codeInfo = codeMap.get(code);
+      if (codeInfo?.category) return codeInfo.category;
+      // 코드 범위별 기본값
+      if (code >= 500) return '건축헌금';
+      if (code >= 40 && code < 50) return '자본수입';
+      if (code >= 30 && code < 40) return '목적헌금';
+      if (code >= 20 && code < 30) return '잡수입';
+      if (code >= 10 && code < 20) return '일반헌금';
+      return '기타수입';
     };
 
-    // 카테고리별 집계
-    const byCategory = new Map<number, { name: string; amount: number; count: number }>();
+    // 카테고리별 집계 (category_item 기준: 일반헌금, 목적헌금, 잡수입, 자본수입, 건축헌금)
+    const byCategory = new Map<string, { name: string; amount: number; count: number }>();
     // 항목별 집계
     const byCode = new Map<number, { name: string; category: string; amount: number; count: number }>();
     // 월별 집계
@@ -39,28 +44,27 @@ export async function GET(request: NextRequest) {
 
     incomeRecords.forEach(r => {
       const code = r.offering_code;
-      const categoryCode = Math.floor(code / 10) * 10;
       const codeInfo = codeMap.get(code);
+      const categoryName = getCategoryName(code);
       const month = new Date(r.date).getMonth();
 
-      // 카테고리별
-      if (!byCategory.has(categoryCode)) {
-        const catInfo = codeMap.get(categoryCode);
-        byCategory.set(categoryCode, {
-          name: catInfo?.item || specialCategories[categoryCode] || `기타수입`,
+      // 카테고리별 (category_item 기준)
+      if (!byCategory.has(categoryName)) {
+        byCategory.set(categoryName, {
+          name: categoryName,
           amount: 0,
           count: 0,
         });
       }
-      const cat = byCategory.get(categoryCode)!;
+      const cat = byCategory.get(categoryName)!;
       cat.amount += r.amount;
       cat.count += 1;
 
       // 항목별
       if (!byCode.has(code)) {
         byCode.set(code, {
-          name: codeInfo?.item || specialCategories[code] || `기타`,
-          category: codeInfo?.category || specialCategories[categoryCode] || '',
+          name: codeInfo?.item || `기타`,
+          category: categoryName,
           amount: 0,
           count: 0,
         });
@@ -112,8 +116,7 @@ export async function GET(request: NextRequest) {
           totalCount,
           averagePerTransaction: totalCount > 0 ? Math.round(totalIncome / totalCount) : 0,
         },
-        byCategory: Array.from(byCategory.entries())
-          .map(([code, data]) => ({ code, ...data }))
+        byCategory: Array.from(byCategory.values())
           .sort((a, b) => b.amount - a.amount),
         byCode: Array.from(byCode.entries())
           .map(([code, data]) => ({ code, ...data }))

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   getIncomeRecords,
   getExpenseRecords,
@@ -9,8 +9,12 @@ import {
   getCarryoverBalance,
 } from '@/lib/google-sheets';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // week offset 파라미터 처리
+    const { searchParams } = new URL(request.url);
+    const weekOffset = parseInt(searchParams.get('week') || '0');
+
     // 현재 KST 시간
     const now = new Date();
     const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -20,6 +24,10 @@ export async function GET() {
     const dayOfWeek = kst.getDay();
     const monday = new Date(kst);
     monday.setDate(kst.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+
+    // week offset 적용
+    monday.setDate(monday.getDate() + weekOffset * 7);
+
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
 

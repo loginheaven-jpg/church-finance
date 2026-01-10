@@ -785,24 +785,10 @@ async function getBudgetFromYearlySheet(year: number): Promise<Budget[]> {
 }
 
 /**
- * 예산 조회
- * - 당년: '연도별예산' 시트에서 읽기 (동적 업데이트됨)
- * - 과거년도: 기존 '예산' 시트에서 읽기
+ * 예산 조회 - 모든 연도를 '연도별예산' 시트에서 읽기
  */
 export async function getBudget(year: number): Promise<Budget[]> {
-  // 현재 한국시간 기준 연도
-  const now = new Date();
-  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const currentYear = kst.getFullYear();
-
-  if (year === currentYear) {
-    // 당년: '연도별예산' 시트에서 읽기
-    return getBudgetFromYearlySheet(year);
-  } else {
-    // 과거년도: 기존 '예산' 시트에서 읽기
-    const data = await getSheetData<Budget>(FINANCE_CONFIG.sheets.budget);
-    return data.filter(b => b.year === year);
-  }
+  return getBudgetFromYearlySheet(year);
 }
 
 // ============================================

@@ -453,30 +453,30 @@ export default function BuildingPage() {
           <div className="space-y-6 mx-auto" style={{ width: '90%' }}>
             {/* 지출 막대 (위) */}
             <div>
-              <div className="flex justify-between text-lg mb-2">
+              <div className="flex justify-between text-xl mb-2">
                 <span className="font-semibold">지출</span>
                 <span className="text-muted-foreground font-medium">18.3억</span>
               </div>
-              <div className="flex h-20 rounded-lg overflow-hidden">
-                <div className="flex items-center justify-center text-white text-xl font-bold" style={{ width: '56.3%', backgroundColor: '#ea580c' }}>
+              <div className="flex h-[120px] rounded-lg overflow-hidden">
+                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: '56.3%', backgroundColor: '#ea580c' }}>
                   이자 10.3억
                 </div>
-                <div className="flex items-center justify-center text-white text-xl font-bold" style={{ width: '43.7%', backgroundColor: '#f97316' }}>
+                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: '43.7%', backgroundColor: '#f97316' }}>
                   원금 8억
                 </div>
               </div>
             </div>
             {/* 수입 막대 (아래) */}
             <div>
-              <div className="flex justify-between text-lg mb-2">
+              <div className="flex justify-between text-xl mb-2">
                 <span className="font-semibold">수입</span>
                 <span className="text-muted-foreground font-medium">18.3억</span>
               </div>
-              <div className="flex h-20 rounded-lg overflow-hidden">
-                <div className="bg-green-500 flex items-center justify-center text-white text-xl font-bold" style={{ width: '66.7%' }}>
+              <div className="flex h-[120px] rounded-lg overflow-hidden">
+                <div className="bg-green-500 flex items-center justify-center text-white text-3xl font-bold" style={{ width: '66.7%' }}>
                   건축헌금 12.2억
                 </div>
-                <div className="flex items-center justify-center text-white text-xl font-bold" style={{ width: '33.3%', backgroundColor: '#166534' }}>
+                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: '33.3%', backgroundColor: '#166534' }}>
                   일반예산 6.1억
                 </div>
               </div>
@@ -499,29 +499,29 @@ export default function BuildingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={330}>
+            <ResponsiveContainer width="100%" height={450}>
               <BarChart data={recentChartData} barGap={8}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="year" />
-                <YAxis tickFormatter={(value) => `${value}억`} />
+                <XAxis dataKey="year" tick={{ fontSize: 14 }} />
+                <YAxis tickFormatter={(value) => `${value}억`} tick={{ fontSize: 14 }} />
                 <Tooltip
                   formatter={(value) => [formatFullCurrency((Number(value) || 0) * 100000000), '']}
                   labelFormatter={(label) => `${label}년`}
                 />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: 14 }} />
                 {/* 건축헌금 스택 */}
                 <Bar dataKey="건축헌금" stackId="income" fill="#22c55e" name="건축헌금">
-                  <LabelList dataKey="건축헌금" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                  <LabelList dataKey="건축헌금" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 18, fontWeight: 'bold' }} />
                 </Bar>
                 <Bar dataKey="일반예산" stackId="income" fill="#166534" name="일반예산">
-                  <LabelList dataKey="일반예산" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                  <LabelList dataKey="일반예산" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 18, fontWeight: 'bold' }} />
                 </Bar>
                 {/* 건축지출 스택 */}
                 <Bar dataKey="원금상환" stackId="expense" fill="#f97316" name="원금상환">
-                  <LabelList dataKey="원금상환" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                  <LabelList dataKey="원금상환" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 18, fontWeight: 'bold' }} />
                 </Bar>
                 <Bar dataKey="이자지출" stackId="expense" fill="#ea580c" name="이자지출">
-                  <LabelList dataKey="이자지출" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                  <LabelList dataKey="이자지출" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 18, fontWeight: 'bold' }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

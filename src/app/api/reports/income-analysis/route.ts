@@ -77,8 +77,18 @@ export async function GET(request: NextRequest) {
       byMonth[month].income += r.amount;
       byMonth[month].count += 1;
 
-      // 경로별
-      const source = r.source || '기타';
+      // 경로별 (source 값 정규화)
+      const rawSource = r.source || '';
+      let source: string;
+      if (rawSource.includes('통장') || rawSource.includes('입금')) {
+        source = '계좌이체';
+      } else if (rawSource.length > 6) {
+        source = '헌금함';
+      } else if (rawSource === '헌금함') {
+        source = '헌금함';
+      } else {
+        source = '계좌이체';
+      }
       if (!bySource.has(source)) {
         bySource.set(source, { amount: 0, count: 0 });
       }

@@ -16,22 +16,17 @@ import { queryKeys } from '@/lib/queries';
 import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails, BudgetExecutionCard } from '@/components/dashboard';
 import { endOfWeek, addWeeks, format } from 'date-fns';
 
+interface CategorySummary {
+  category: string;
+  amount: number;
+}
+
 interface DashboardStats {
   weeklyIncome: number;
   weeklyExpense: number;
   balance: number;
-  incomeTransactions?: Array<{
-    date: string;
-    description: string;
-    category: string;
-    amount: number;
-  }>;
-  expenseTransactions?: Array<{
-    date: string;
-    description: string;
-    category: string;
-    amount: number;
-  }>;
+  incomeSummary?: CategorySummary[];
+  expenseSummary?: CategorySummary[];
   weeklyData?: Array<{
     date: string;
     income: number;
@@ -74,8 +69,8 @@ function DashboardContent() {
         weeklyIncome: 0,
         weeklyExpense: 0,
         balance: 0,
-        incomeTransactions: [],
-        expenseTransactions: [],
+        incomeSummary: [],
+        expenseSummary: [],
         weeklyData: []
       };
       return res.json();
@@ -147,10 +142,15 @@ function DashboardContent() {
       {selectedCard && (
         <TransactionDetails
           type={selectedCard}
-          transactions={
+          summary={
             selectedCard === 'income'
-              ? stats?.incomeTransactions || []
-              : stats?.expenseTransactions || []
+              ? stats?.incomeSummary || []
+              : stats?.expenseSummary || []
+          }
+          total={
+            selectedCard === 'income'
+              ? stats?.weeklyIncome || 0
+              : stats?.weeklyExpense || 0
           }
         />
       )}

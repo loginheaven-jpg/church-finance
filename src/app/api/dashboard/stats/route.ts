@@ -100,6 +100,46 @@ export async function GET(request: NextRequest) {
     const weeklyIncome = weeklyIncomeRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
     const weeklyExpense = weeklyExpenseRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
 
+    // 카테고리별 수입 집계
+    const incomeByCategoryMap = new Map<string, number>();
+    for (const r of weeklyIncomeRecords) {
+      // offering_code로 카테고리 구분
+      let categoryName = '기타헌금';
+      if (r.offering_code >= 10 && r.offering_code < 20) categoryName = '일반헌금';
+      else if (r.offering_code >= 20 && r.offering_code < 30) categoryName = '목적헌금';
+      else if (r.offering_code >= 30 && r.offering_code < 40) categoryName = '잡수입';
+      else if (r.offering_code >= 40 && r.offering_code < 500) categoryName = '자본수입';
+      else if (r.offering_code >= 500) categoryName = '건축헌금';
+
+      incomeByCategoryMap.set(categoryName, (incomeByCategoryMap.get(categoryName) || 0) + (r.amount || 0));
+    }
+    const incomeSummary = Array.from(incomeByCategoryMap.entries())
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount);
+
+    // 카테고리별 지출 집계
+    const expenseByCategoryMap = new Map<string, number>();
+    for (const r of weeklyExpenseRecords) {
+      // category_code로 카테고리 구분
+      let categoryName = '기타';
+      if (r.category_code === 10) categoryName = '사례비';
+      else if (r.category_code === 20) categoryName = '예배비';
+      else if (r.category_code === 30) categoryName = '선교비';
+      else if (r.category_code === 40) categoryName = '교육비';
+      else if (r.category_code === 50) categoryName = '봉사비';
+      else if (r.category_code === 60) categoryName = '관리비';
+      else if (r.category_code === 70) categoryName = '운영비';
+      else if (r.category_code === 80) categoryName = '상회비';
+      else if (r.category_code === 90) categoryName = '기타비용';
+      else if (r.category_code === 100) categoryName = '예비비';
+      else if (r.category_code >= 500) categoryName = '건축비';
+
+      expenseByCategoryMap.set(categoryName, (expenseByCategoryMap.get(categoryName) || 0) + (r.amount || 0));
+    }
+    const expenseSummary = Array.from(expenseByCategoryMap.entries())
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount);
+
     // 연간 수입/지출 합계 (자본수입/건축 제외한 일반회계만)
     const yearlyIncome = yearlyIncomeRecords
       .filter(r => r.offering_code < 40 || r.offering_code >= 500)
@@ -192,6 +232,9 @@ export async function GET(request: NextRequest) {
       weeklyExpense,
       balance,
       unmatchedCount,
+      // 카테고리별 수입/지출 요약
+      incomeSummary,
+      expenseSummary,
       // 새로운 동기집행률 관련 데이터
       yearlyIncome,
       yearlyExpense,
@@ -212,6 +255,8 @@ export async function GET(request: NextRequest) {
       weeklyExpense: 0,
       balance: 0,
       unmatchedCount: 0,
+      incomeSummary: [],
+      expenseSummary: [],
       yearlyIncome: 0,
       yearlyExpense: 0,
       carryoverBalance: 0,

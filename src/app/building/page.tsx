@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   ComposedChart,
   Bar,
@@ -29,8 +31,7 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
-  ArrowDown,
-  Users
+  Calculator
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -82,28 +83,10 @@ interface BuildingData {
     shortage: number;
     years: RecentYear[];
   };
-  target: {
-    remainingLoan: number;
-    targetYear: number;
-    yearsRemaining: number;
-    annualRequired: number;
-    monthlyRequired: number;
-    scenarios: Array<{
-      households: number;
-      amountPerMonth: number;
-      total: number;
-    }>;
-  };
-  projection: {
-    avgPrincipalPerYear: number;
-    avgInterestPerYear: number;
-    projectedPayoffYear: number;
-    targetYear: number;
-    yearsToPayoff: number;
-    requiredAnnualPrincipal: number;
-    additionalRequired: number;
-    projectedTotalInterest: number;
-    insights: string[];
+  simulation: {
+    currentLoanBalance: number;
+    interestRate: number;
+    cumulativeInterestPaid: number;
   };
 }
 
@@ -239,32 +222,6 @@ function StatCard({
   );
 }
 
-// 참여 시나리오 옵션
-function ParticipationOption({
-  households,
-  amount,
-  total
-}: {
-  households: number;
-  amount: number;
-  total: number;
-}) {
-  return (
-    <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
-      <div className="flex items-center gap-2">
-        <Users className="h-4 w-4 text-blue-500" />
-        <span className="font-semibold">{households}가정</span>
-      </div>
-      <div className="text-sm">
-        월 <span className="font-semibold text-blue-600">{formatCurrency(amount)}</span>
-      </div>
-      <div className="text-sm text-slate-500">
-        = {formatCurrency(total)}/월
-      </div>
-    </div>
-  );
-}
-
 // 타임라인
 function Timeline({ events }: { events: BuildingHistory[] }) {
   const milestones = events.filter(e => e.milestone);
@@ -277,6 +234,7 @@ function Timeline({ events }: { events: BuildingHistory[] }) {
           className={cn(
             "flex flex-col items-center text-center",
             event.milestone?.icon === '📍' && "text-orange-600 font-bold",
+            event.milestone?.icon === '📌' && "text-blue-600 font-bold",
             event.milestone?.icon === '🎯' && "text-green-600"
           )}
         >
@@ -312,6 +270,15 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   );
 }
 
+// 상환 시뮬레이션 결과 타입
+interface SimulationResult {
+  year: number;
+  yearlyPrincipal: number;
+  yearlyInterest: number;
+  balance: number;
+  cumulativeInterest: number;
+}
+
 // ============================================================================
 // Main Page
 // ============================================================================
@@ -320,6 +287,9 @@ export default function BuildingPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<BuildingData | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // 시뮬레이션 입력값 (만원 단위)
+  const [annualRepayment, setAnnualRepayment] = useState<number>(5000); // 기본값 5천만원
 
   // 데이터 로드
   useEffect(() => {
@@ -338,6 +308,49 @@ export default function BuildingPage() {
     };
     loadData();
   }, []);
+
+  // 시뮬레이션 계산
+  const simulationResult = useMemo(() => {
+    if (!data) return null;
+
+    const annualAmount = annualRepayment * 10000; // 만원 -> 원
+    const rate = data.simulation.interestRate / 100; // % -> 소수
+    let balance = data.simulation.currentLoanBalance;
+    let cumulativeInterest = data.simulation.cumulativeInterestPaid;
+    const currentYear = new Date().getFullYear();
+
+    const results: SimulationResult[] = [];
+    let year = currentYear;
+
+    // 최대 30년까지 시뮬레이션
+    while (balance > 0 && year < currentYear + 30) {
+      const yearlyInterest = Math.round(balance * rate);
+      const yearlyPrincipal = Math.min(annualAmount, balance);
+      balance = Math.max(0, balance - yearlyPrincipal);
+      cumulativeInterest += yearlyInterest;
+
+      results.push({
+        year,
+        yearlyPrincipal,
+        yearlyInterest,
+        balance,
+        cumulativeInterest
+      });
+
+      year++;
+
+      if (balance === 0) break;
+    }
+
+    return {
+      results,
+      payoffYear: results.length > 0 && results[results.length - 1].balance === 0
+        ? results[results.length - 1].year
+        : null,
+      totalInterestPaid: cumulativeInterest,
+      additionalInterest: cumulativeInterest - data.simulation.cumulativeInterestPaid
+    };
+  }, [data, annualRepayment]);
 
   // 풀스크린 토글
   const toggleFullscreen = useCallback(() => {
@@ -394,6 +407,14 @@ export default function BuildingPage() {
     이자지출: y.interest / 100000000,
   }));
 
+  // 시뮬레이션 차트 데이터
+  const simChartData = simulationResult?.results.map(r => ({
+    year: r.year,
+    원금상환: r.yearlyPrincipal / 100000000,
+    이자: r.yearlyInterest / 100000000,
+    잔액: r.balance / 100000000,
+  })) || [];
+
   return (
     <div className={cn(
       "space-y-6",
@@ -407,7 +428,7 @@ export default function BuildingPage() {
             예봄교회 성전 건축 재정 현황
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            2003년 토지 매입부터 2030년 완전 봉헌까지의 여정
+            2003년 토지 매입부터 현재까지의 여정
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={toggleFullscreen}>
@@ -456,7 +477,7 @@ export default function BuildingPage() {
           icon={<AlertCircle className="h-8 w-8 md:h-10 md:w-10" />}
           label="남은 대출"
           value={data.summary.loanBalance}
-          detail="목표까지"
+          detail="상환 필요"
           color="orange"
         />
       </div>
@@ -465,7 +486,7 @@ export default function BuildingPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-xl md:text-2xl flex items-center gap-2">
-            우리의 여정: 건축 히스토리 (2003~2030)
+            우리의 여정: 건축 히스토리 (2003~현재)
           </CardTitle>
           <CardDescription>
             건축헌금 누적, 대출 상환, 대출 잔액의 변화 추이
@@ -533,7 +554,6 @@ export default function BuildingPage() {
               {/* 주요 마일스톤 */}
               <ReferenceLine x={2011} stroke="#6b7280" strokeDasharray="3 3" />
               <ReferenceLine x={2025} stroke="#f59e0b" strokeWidth={2} />
-              <ReferenceLine x={2030} stroke="#10b981" strokeWidth={2} />
             </ComposedChart>
           </ResponsiveContainer>
 
@@ -548,7 +568,7 @@ export default function BuildingPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              최근 5년 실적 분석 (2020-2024)
+              최근 5년 실적 분석 ({data.recent.years[0]?.year}-{data.recent.years[data.recent.years.length - 1]?.year})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -593,27 +613,9 @@ export default function BuildingPage() {
               </div>
             </div>
 
-            {/* 인사이트 */}
-            <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <div className="text-xs font-semibold text-slate-700 mb-2">분석</div>
-              <ul className="space-y-1 text-xs text-slate-600">
-                {data.projection.insights.map((insight, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <span className={cn(
-                      "mt-0.5",
-                      idx === 0 ? "text-blue-500" : idx === 1 ? "text-orange-500" : "text-red-500"
-                    )}>
-                      {idx === 0 ? '📍' : idx === 1 ? '🎯' : '💰'}
-                    </span>
-                    <span>{insight}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
             <Alert variant="destructive" className="mt-4">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>긴급 상황</AlertTitle>
+              <AlertTitle>참고</AlertTitle>
               <AlertDescription className="text-sm">
                 최근 5년간 건축헌금만으로는 대출 상환이 불가능했습니다.
                 부족분 {formatCurrency(data.recent.shortage)}은 교회 일반 재정으로 충당되었습니다.
@@ -622,90 +624,126 @@ export default function BuildingPage() {
           </CardContent>
         </Card>
 
-        {/* 5개년 목표 */}
-        <Card className="bg-gradient-to-br from-blue-50 to-green-50">
+        {/* 상환 시뮬레이션 도구 */}
+        <Card className="bg-gradient-to-br from-blue-50 to-slate-50">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              5개년 목표 (2026-2030)
+              <Calculator className="h-5 w-5 text-blue-600" />
+              상환 시뮬레이션
             </CardTitle>
             <CardDescription>
-              성전 봉헌 완성을 위한 5년 집중 헌신
+              연간 상환 금액에 따른 완납 시점 및 이자 부담 계산 (이자율: {data.simulation.interestRate}%)
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* 목표 요약 */}
-            <div className="mb-4 p-4 bg-white rounded-lg shadow-sm border border-blue-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-600">현재 대출 잔액</span>
-                <span className="text-2xl font-bold text-red-600">
-                  {formatCurrency(data.target.remainingLoan)}
+            {/* 입력 */}
+            <div className="mb-4">
+              <Label htmlFor="annualRepayment" className="text-sm font-medium">
+                연간 원금 상환액 (만원)
+              </Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Input
+                  id="annualRepayment"
+                  type="number"
+                  value={annualRepayment}
+                  onChange={(e) => setAnnualRepayment(Math.max(100, Number(e.target.value) || 0))}
+                  className="w-32"
+                  min={100}
+                  step={100}
+                />
+                <span className="text-sm text-slate-500">
+                  = 월 {formatCurrency(annualRepayment * 10000 / 12)}
                 </span>
               </div>
-              <div className="flex items-center justify-center my-2">
-                <ArrowDown className="w-6 h-6 text-slate-400 animate-bounce" />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600">2030년 목표</span>
-                <span className="text-2xl font-bold text-green-600">0억</span>
-              </div>
-            </div>
-
-            {/* 필요 금액 */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="p-3 bg-blue-100 rounded-lg text-center">
-                <div className="text-xs text-blue-700">연간 필요액</div>
-                <div className="text-xl font-bold text-blue-900">
-                  {formatCurrency(data.target.annualRequired)}
-                </div>
-              </div>
-              <div className="p-3 bg-green-100 rounded-lg text-center">
-                <div className="text-xs text-green-700">월간 필요액</div>
-                <div className="text-xl font-bold text-green-900">
-                  {formatCurrency(data.target.monthlyRequired)}
-                </div>
-              </div>
-            </div>
-
-            {/* 진행률 바 */}
-            <div className="space-y-2 mb-4">
-              {[2026, 2027, 2028, 2029, 2030].map((year, index) => {
-                const currentYear = new Date().getFullYear();
-                const isCurrentYear = year === currentYear;
-                const isPast = year < currentYear;
-                return (
-                  <div key={year} className="flex items-center gap-2">
-                    <span className={cn(
-                      "w-12 text-sm font-semibold",
-                      isCurrentYear && "text-blue-600"
-                    )}>{year}</span>
-                    <div className="flex-1">
-                      <Progress
-                        value={isPast ? 100 : isCurrentYear ? 5 : 0}
-                        className="h-4"
-                      />
-                    </div>
-                    <span className="w-16 text-xs text-right">
-                      {((index + 1) * 20)}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 참여 방법 */}
-            <div className="p-4 bg-gradient-to-r from-green-100 to-blue-100 rounded-lg">
-              <h4 className="text-sm font-bold mb-3 text-center">우리의 참여 방법</h4>
-              <div className="space-y-2">
-                {data.target.scenarios.map((scenario, index) => (
-                  <ParticipationOption
-                    key={index}
-                    households={scenario.households}
-                    amount={scenario.amountPerMonth}
-                    total={scenario.total}
-                  />
+              <div className="flex gap-2 mt-2">
+                {[3000, 5000, 7000, 10000].map(v => (
+                  <Button
+                    key={v}
+                    variant={annualRepayment === v ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setAnnualRepayment(v)}
+                  >
+                    {v >= 10000 ? `${v/10000}억` : `${v/1000}천만`}
+                  </Button>
                 ))}
               </div>
             </div>
+
+            {/* 시뮬레이션 결과 */}
+            {simulationResult && (
+              <>
+                {/* 결과 요약 */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="p-3 bg-white rounded-lg border border-blue-200 text-center">
+                    <div className="text-xs text-blue-700">예상 완납 시점</div>
+                    <div className="text-xl font-bold text-blue-900">
+                      {simulationResult.payoffYear
+                        ? `${simulationResult.payoffYear}년`
+                        : '30년 이상'}
+                    </div>
+                    {simulationResult.payoffYear && (
+                      <div className="text-xs text-slate-500">
+                        {simulationResult.payoffYear - new Date().getFullYear()}년 후
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 bg-white rounded-lg border border-red-200 text-center">
+                    <div className="text-xs text-red-700">추가 이자 부담</div>
+                    <div className="text-xl font-bold text-red-900">
+                      {formatCurrency(simulationResult.additionalInterest)}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      누적 이자: {formatCurrency(simulationResult.totalInterestPaid)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 시뮬레이션 차트 */}
+                {simChartData.length > 0 && (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <ComposedChart data={simChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="year"
+                        tick={{ fontSize: 10 }}
+                        tickFormatter={(v) => `${v}`}
+                      />
+                      <YAxis tickFormatter={(value) => `${value}억`} tick={{ fontSize: 10 }} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="원금상환" fill="#3b82f6" name="원금상환" stackId="a" />
+                      <Bar dataKey="이자" fill="#ef4444" name="이자" stackId="a" />
+                      <Line
+                        type="monotone"
+                        dataKey="잔액"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        name="잔액"
+                        dot={false}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                )}
+
+                {/* 안내 메시지 */}
+                <div className="mt-3 p-3 bg-slate-100 rounded-lg">
+                  <p className="text-xs text-slate-600">
+                    {simulationResult.payoffYear ? (
+                      <>
+                        매년 <strong>{formatCurrency(annualRepayment * 10000)}</strong>씩 원금을 상환하면{' '}
+                        <strong className="text-blue-600">{simulationResult.payoffYear}년</strong>에 대출을 완납할 수 있습니다.
+                        이 경우 완납까지 추가로 발생하는 이자는{' '}
+                        <strong className="text-red-600">{formatCurrency(simulationResult.additionalInterest)}</strong>입니다.
+                      </>
+                    ) : (
+                      <>
+                        연간 상환액이 너무 적어 30년 내 완납이 어렵습니다. 상환액을 늘려보세요.
+                      </>
+                    )}
+                  </p>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

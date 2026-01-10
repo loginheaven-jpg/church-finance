@@ -1372,3 +1372,19 @@ export async function getBuildingYearlyDonations(): Promise<BuildingYearlyDonati
 
   return donations.sort((a, b) => a.year - b.year);
 }
+
+/**
+ * 대출 이자율 읽기
+ * 시트: 2025건축헌금현황 J2 셀
+ */
+export async function getBuildingInterestRate(): Promise<number> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.buildingStatus, 'J:J');
+
+  // J2 셀 값 읽기 (인덱스 1)
+  const rateStr = rows[1]?.[0];
+  if (!rateStr) return 4.65; // 기본값
+
+  // 퍼센트 문자열 파싱 (예: "4.65%" 또는 "4.65")
+  const rate = parseFloat(rateStr.replace(/%/g, '').replace(/,/g, ''));
+  return isNaN(rate) ? 4.65 : rate;
+}

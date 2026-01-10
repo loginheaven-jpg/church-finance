@@ -213,9 +213,26 @@ export default function BuildingPage() {
     }> = [];
     let year = currentYear;
 
-    while (balance > 0 && year < currentYear + 30) {
+    while (balance > 0 && year < currentYear + 50) {
       const yearlyInterest = Math.round(balance * rate);
-      const yearlyPrincipal = Math.min(annualAmount, balance);
+
+      // 봉헌헌금에서 이자를 먼저 지불하고, 남은 금액으로 원금 상환
+      const availableForPrincipal = annualAmount - yearlyInterest;
+
+      // 이자도 못 내는 경우 완납 불가
+      if (availableForPrincipal <= 0) {
+        // 최소한 이자만 계속 내는 상황 기록 후 종료
+        results.push({
+          year,
+          yearlyPrincipal: 0,
+          yearlyInterest,
+          balance,
+          cumulativeInterest: cumulativeInterest + yearlyInterest
+        });
+        break;
+      }
+
+      const yearlyPrincipal = Math.min(availableForPrincipal, balance);
       balance = Math.max(0, balance - yearlyPrincipal);
       cumulativeInterest += yearlyInterest;
 
@@ -436,30 +453,30 @@ export default function BuildingPage() {
           <div className="space-y-6 mx-auto" style={{ width: '90%' }}>
             {/* 지출 막대 (위) */}
             <div>
-              <div className="flex justify-between text-base mb-2">
+              <div className="flex justify-between text-lg mb-2">
                 <span className="font-semibold">지출</span>
                 <span className="text-muted-foreground font-medium">18.3억</span>
               </div>
-              <div className="flex h-14 rounded-lg overflow-hidden">
-                <div className="flex items-center justify-center text-white text-base font-bold" style={{ width: '56.3%', backgroundColor: '#ea580c' }}>
+              <div className="flex h-20 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-center text-white text-xl font-bold" style={{ width: '56.3%', backgroundColor: '#ea580c' }}>
                   이자 10.3억
                 </div>
-                <div className="flex items-center justify-center text-white text-base font-bold" style={{ width: '43.7%', backgroundColor: '#f97316' }}>
+                <div className="flex items-center justify-center text-white text-xl font-bold" style={{ width: '43.7%', backgroundColor: '#f97316' }}>
                   원금 8억
                 </div>
               </div>
             </div>
             {/* 수입 막대 (아래) */}
             <div>
-              <div className="flex justify-between text-base mb-2">
+              <div className="flex justify-between text-lg mb-2">
                 <span className="font-semibold">수입</span>
                 <span className="text-muted-foreground font-medium">18.3억</span>
               </div>
-              <div className="flex h-14 rounded-lg overflow-hidden">
-                <div className="bg-green-500 flex items-center justify-center text-white text-base font-bold" style={{ width: '66.7%' }}>
+              <div className="flex h-20 rounded-lg overflow-hidden">
+                <div className="bg-green-500 flex items-center justify-center text-white text-xl font-bold" style={{ width: '66.7%' }}>
                   건축헌금 12.2억
                 </div>
-                <div className="flex items-center justify-center text-white text-base font-bold" style={{ width: '33.3%', backgroundColor: '#166534' }}>
+                <div className="flex items-center justify-center text-white text-xl font-bold" style={{ width: '33.3%', backgroundColor: '#166534' }}>
                   일반예산 6.1억
                 </div>
               </div>
@@ -494,17 +511,17 @@ export default function BuildingPage() {
                 <Legend />
                 {/* 건축헌금 스택 */}
                 <Bar dataKey="건축헌금" stackId="income" fill="#22c55e" name="건축헌금">
-                  <LabelList dataKey="건축헌금" position="center" formatter={(v: number) => v > 0.3 ? `${Math.round(v * 100)}` : ''} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                  <LabelList dataKey="건축헌금" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
                 </Bar>
                 <Bar dataKey="일반예산" stackId="income" fill="#166534" name="일반예산">
-                  <LabelList dataKey="일반예산" position="center" formatter={(v: number) => v > 0.3 ? `${Math.round(v * 100)}` : ''} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                  <LabelList dataKey="일반예산" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
                 </Bar>
                 {/* 건축지출 스택 */}
                 <Bar dataKey="원금상환" stackId="expense" fill="#f97316" name="원금상환">
-                  <LabelList dataKey="원금상환" position="center" formatter={(v: number) => v > 0.3 ? `${Math.round(v * 100)}` : ''} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                  <LabelList dataKey="원금상환" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
                 </Bar>
                 <Bar dataKey="이자지출" stackId="expense" fill="#ea580c" name="이자지출">
-                  <LabelList dataKey="이자지출" position="center" formatter={(v: number) => v > 0.3 ? `${Math.round(v * 100)}` : ''} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
+                  <LabelList dataKey="이자지출" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 10, fontWeight: 'bold' }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -526,7 +543,7 @@ export default function BuildingPage() {
             {/* 슬라이더 */}
             <div>
               <div className="flex justify-between items-center mb-2">
-                <Label className="text-sm font-medium">연간 상환액</Label>
+                <Label className="text-sm font-medium">연간 봉헌헌금</Label>
                 <span className="text-2xl font-bold text-blue-600">
                   {formatCurrency(annualRepayment * 10000)}
                 </span>
@@ -539,10 +556,10 @@ export default function BuildingPage() {
                 step={500}
                 className="my-4"
               />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>1천만원</span>
-                <span>월 {formatCurrency(annualRepayment * 10000 / 12)}</span>
-                <span>2억원</span>
+              <div className="flex justify-between text-muted-foreground">
+                <span className="text-xs">1천만원</span>
+                <span className="text-base font-bold">월 {formatCurrency(annualRepayment * 10000 / 12)}</span>
+                <span className="text-xs">2억원</span>
               </div>
             </div>
 
@@ -550,25 +567,25 @@ export default function BuildingPage() {
             {simulationResult && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-white rounded-lg border-2 border-blue-300 text-center">
-                    <p className="text-xs text-muted-foreground mb-1">예상 완납 시점</p>
-                    <p className="text-3xl font-bold text-blue-600">
+                  <div className="p-6 bg-white rounded-lg border-2 border-blue-300 text-center">
+                    <p className="text-sm text-muted-foreground mb-2">예상 완납 시점</p>
+                    <p className={`text-5xl font-bold ${simulationResult.payoffYear ? 'text-blue-600' : 'text-red-600'}`}>
                       {simulationResult.payoffYear
                         ? `${simulationResult.payoffYear}년`
-                        : '30년+'}
+                        : '완납 불가'}
                     </p>
                     {simulationResult.payoffYear && (
-                      <p className="text-sm text-blue-500 mt-1">
+                      <p className="text-base text-blue-500 mt-2">
                         {simulationResult.payoffYear - new Date().getFullYear()}년 후
                       </p>
                     )}
                   </div>
-                  <div className="p-4 bg-white rounded-lg border-2 border-red-300 text-center">
-                    <p className="text-xs text-muted-foreground mb-1">총 이자 (누적)</p>
-                    <p className="text-3xl font-bold text-red-600">
+                  <div className="p-6 bg-white rounded-lg border-2 border-red-300 text-center">
+                    <p className="text-sm text-muted-foreground mb-2">총 이자 (누적)</p>
+                    <p className="text-5xl font-bold text-red-600">
                       {formatCurrency(simulationResult.totalInterestPaid)}
                     </p>
-                    <p className="text-sm text-red-500 mt-1">
+                    <p className="text-base text-red-500 mt-2">
                       +{formatCurrency(simulationResult.additionalInterest)} 추가
                     </p>
                   </div>
@@ -578,14 +595,14 @@ export default function BuildingPage() {
                 <div className="p-4 bg-slate-100 rounded-lg">
                   {simulationResult.payoffYear ? (
                     <p className="text-sm">
-                      매년 <strong className="text-blue-600">{formatCurrency(annualRepayment * 10000)}</strong>을 상환하면{' '}
+                      매년 <strong className="text-blue-600">{formatCurrency(annualRepayment * 10000)}</strong>을 봉헌하면{' '}
                       <strong className="text-blue-600">{simulationResult.payoffYear}년</strong>에 대출을 완납합니다.
                       완납까지 발생하는 추가 이자는{' '}
                       <strong className="text-red-600">{formatCurrency(simulationResult.additionalInterest)}</strong>입니다.
                     </p>
                   ) : (
                     <p className="text-sm text-red-600">
-                      상환액이 너무 적어 30년 내 완납이 어렵습니다. 상환액을 늘려보세요.
+                      봉헌헌금이 연간 이자보다 적어 원금 상환이 불가능합니다. 봉헌헌금을 늘려주세요.
                     </p>
                   )}
                 </div>

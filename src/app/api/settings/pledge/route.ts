@@ -8,32 +8,49 @@ import {
   getKSTDateTime,
 } from '@/lib/google-sheets';
 
+// 헌금 종류별 수입 코드 범위
+const PLEDGE_TYPE_CODE_RANGE = {
+  '건축헌금': { min: 500, max: 600 },  // 500번대
+  '선교헌금': { min: 30, max: 40 },    // 30번대
+} as const;
+
 // GET: 작정헌금 조회
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const year = searchParams.get('year');
+    const type = searchParams.get('type') as '건축헌금' | '선교헌금' | null;
     const withFulfillment = searchParams.get('withFulfillment') === 'true';
 
-    const pledges = year
+    let pledges = year
       ? await getPledgeDonations(Number(year))
       : await getPledgeDonations();
+
+    // type 필터 적용 (기존 데이터 호환: type이 없으면 '건축헌금'으로 간주)
+    if (type) {
+      pledges = pledges.filter(p => (p.type || '건축헌금') === type);
+    }
 
     if (withFulfillment && year) {
       // 실행금액 계산
       const incomeRecords = await getIncomeRecords(`${year}-01-01`, `${year}-12-31`);
 
       const pledgesWithFulfillment = pledges.map(pledge => {
-        // 해당 헌금자의 헌금 합계 (십일조 제외, 작정헌금 대상 코드만)
+        const pledgeType = pledge.type || '건축헌금';
+        const codeRange = PLEDGE_TYPE_CODE_RANGE[pledgeType];
+
+        // 해당 헌금자의 해당 종류 헌금 합계
         const fulfilled = incomeRecords
           .filter(r =>
             (r.representative === pledge.representative || r.donor_name === pledge.donor_name) &&
-            r.offering_code !== 12 // 십일조 제외
+            r.offering_code >= codeRange.min &&
+            r.offering_code < codeRange.max
           )
           .reduce((sum, r) => sum + (r.amount || 0), 0);
 
         return {
           ...pledge,
+          type: pledgeType,
           fulfilled_amount: fulfilled,
           fulfillment_rate: pledge.pledged_amount > 0
             ? Math.round((fulfilled / pledge.pledged_amount) * 100)
@@ -47,9 +64,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // type이 없는 기존 데이터에 기본값 추가
+    const pledgesWithType = pledges.map(p => ({
+      ...p,
+      type: p.type || '건축헌금',
+    }));
+
     return NextResponse.json({
       success: true,
-      data: pledges,
+      data: pledgesWithType,
     });
   } catch (error) {
     console.error('Pledge fetch error:', error);
@@ -64,7 +87,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { year, donor_name, representative, pledged_amount, note } = body;
+    const { year, type, donor_name, representative, pledged_amount, note } = body;
 
     if (!year || !donor_name || !pledged_amount) {
       return NextResponse.json(
@@ -73,9 +96,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // type 유효성 검사
+    const validTypes = ['건축헌금', '선교헌금'];
+    const pledgeType = validTypes.includes(type) ? type : '건축헌금';
+
     const now = getKSTDateTime();
     const id = await addPledgeDonation({
       year: Number(year),
+      type: pledgeType,
       donor_name,
       representative: representative || donor_name,
       pledged_amount: Number(pledged_amount),

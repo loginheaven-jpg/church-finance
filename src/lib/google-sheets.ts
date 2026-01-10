@@ -1095,6 +1095,7 @@ export async function addPledgeDonation(pledge: Omit<PledgeDonation, 'id' | 'ful
   const row = [
     id,
     pledge.year,
+    pledge.type || '건축헌금', // 기본값: 건축헌금
     pledge.donor_name,
     pledge.representative,
     pledge.pledged_amount,
@@ -1128,7 +1129,7 @@ export async function updatePledgeDonation(
 
   await updateSheet(
     FINANCE_CONFIG.sheets.pledgeDonations,
-    `A${rowIndex + 1}:I${rowIndex + 1}`,
+    `A${rowIndex + 1}:J${rowIndex + 1}`,
     [updatedRow as (string | number | boolean)[]]
   );
 }
@@ -1152,7 +1153,7 @@ export async function deletePledgeDonation(id: string): Promise<void> {
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: FINANCE_CONFIG.spreadsheetId,
-    range: `${sheetName}!A:I`,
+    range: `${sheetName}!A:J`,
   });
 
   const rows = response.data.values || [];

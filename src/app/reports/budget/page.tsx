@@ -222,12 +222,28 @@ function CategoryItem({
       >
         <div className="flex items-center gap-2">
           {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-          <span className="font-semibold">{category.category_item} ({category.category_code})</span>
+          <span className="font-bold text-base">{category.category_item} ({category.category_code})</span>
         </div>
-        <div className="flex items-center gap-2">
-          {status === 'danger' && <Badge variant="destructive">초과 경고</Badge>}
-          {status === 'warning' && <Badge variant="outline" className="border-yellow-500 text-yellow-700">주의</Badge>}
-          {status === 'normal' && <Badge variant="secondary">정상</Badge>}
+        <div className="flex items-center gap-4">
+          {/* 대항목 합계 숫자 */}
+          <div className="text-right">
+            <div className="text-xs text-slate-400">{prevYear}집행</div>
+            <div className="font-semibold text-slate-600">{formatCurrency(category.prev_executed)}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-slate-400">{currentYear}예산</div>
+            <div className="font-semibold">{formatCurrency(category.budget)}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-slate-400">{currentYear}집행</div>
+            <div className="font-semibold text-blue-600">{formatCurrency(category.executed)}</div>
+          </div>
+          <Badge
+            variant={(category.syncRate ?? 0) > 100 ? "destructive" : "secondary"}
+            className="w-20 justify-center font-semibold"
+          >
+            {(category.syncRate ?? 0).toFixed(1)}%
+          </Badge>
         </div>
       </button>
 

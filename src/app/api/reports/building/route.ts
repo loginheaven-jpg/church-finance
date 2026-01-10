@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getIncomeRecords, getExpenseRecords } from '@/lib/google-sheets';
 
 // 건축 히스토리 데이터 타입
 interface BuildingHistory {
@@ -104,9 +105,64 @@ const recentData: RecentYear[] = [
 
 export async function GET(request: NextRequest) {
   try {
-    // 합계 계산
-    const totalDonation5Years = recentData.reduce((sum, d) => sum + d.donation, 0);
-    const totalRepayment5Years = recentData.reduce((sum, d) => sum + d.repayment, 0);
+    const currentYear = new Date().getFullYear();
+
+    // 금년 실제 데이터 조회 (Google Sheets)
+    const [incomeRecords, expenseRecords] = await Promise.all([
+      getIncomeRecords(`${currentYear}-01-01`, `${currentYear}-12-31`),
+      getExpenseRecords(`${currentYear}-01-01`, `${currentYear}-12-31`),
+    ]);
+
+    // 건축헌금 (offering_code 500번대)
+    const currentYearDonation = incomeRecords
+      .filter(r => r.offering_code >= 500 && r.offering_code < 600)
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    // 원금상환 (account_code 502)
+    const currentYearPrincipal = expenseRecords
+      .filter(r => r.account_code === 502)
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    // 이자지출 (account_code 501)
+    const currentYearInterest = expenseRecords
+      .filter(r => r.account_code === 501)
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    const currentYearRepayment = currentYearPrincipal + currentYearInterest;
+
+    // recentData 동적 업데이트 (금년 데이터가 있으면 교체)
+    const dynamicRecentData = recentData.map(d => {
+      if (d.year === currentYear) {
+        return {
+          year: currentYear,
+          donation: currentYearDonation,
+          repayment: currentYearRepayment,
+          principal: currentYearPrincipal,
+          interest: currentYearInterest
+        };
+      }
+      return d;
+    });
+
+    // 금년이 recentData에 없으면 추가
+    if (!dynamicRecentData.find(d => d.year === currentYear)) {
+      dynamicRecentData.push({
+        year: currentYear,
+        donation: currentYearDonation,
+        repayment: currentYearRepayment,
+        principal: currentYearPrincipal,
+        interest: currentYearInterest
+      });
+      // 가장 오래된 연도 제거 (5년 유지)
+      dynamicRecentData.sort((a, b) => a.year - b.year);
+      if (dynamicRecentData.length > 5) {
+        dynamicRecentData.shift();
+      }
+    }
+
+    // 합계 계산 (동적 데이터 사용)
+    const totalDonation5Years = dynamicRecentData.reduce((sum, d) => sum + d.donation, 0);
+    const totalRepayment5Years = dynamicRecentData.reduce((sum, d) => sum + d.repayment, 0);
     const shortage5Years = totalRepayment5Years - totalDonation5Years;
 
     // 건축 개요 (엑셀 데이터 기준)
@@ -138,8 +194,8 @@ export async function GET(request: NextRequest) {
     };
 
     // 최근 5년 통계 (원금/이자 분리)
-    const totalPrincipal5Years = recentData.reduce((sum, d) => sum + d.principal, 0);
-    const totalInterest5Years = recentData.reduce((sum, d) => sum + d.interest, 0);
+    const totalPrincipal5Years = dynamicRecentData.reduce((sum, d) => sum + d.principal, 0);
+    const totalInterest5Years = dynamicRecentData.reduce((sum, d) => sum + d.interest, 0);
 
     const recentStats = {
       totalDonation: totalDonation5Years,
@@ -147,14 +203,13 @@ export async function GET(request: NextRequest) {
       totalPrincipal: totalPrincipal5Years,
       totalInterest: totalInterest5Years,
       shortage: shortage5Years,
-      years: recentData
+      years: dynamicRecentData
     };
 
     // 완납 예상 계산
-    const avgPrincipalPerYear = totalPrincipal5Years / 5;
-    const avgInterestPerYear = totalInterest5Years / 5;
+    const avgPrincipalPerYear = totalPrincipal5Years / dynamicRecentData.length;
+    const avgInterestPerYear = totalInterest5Years / dynamicRecentData.length;
     const remainingLoan = summary.loanBalance;
-    const currentYear = new Date().getFullYear();
 
     // 현재 추세로 예상 완납 년도
     const yearsToPayoff = avgPrincipalPerYear > 0

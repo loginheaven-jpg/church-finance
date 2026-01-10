@@ -33,9 +33,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+type PledgeType = '건축헌금' | '선교헌금';
+
 interface PledgeWithFulfillment {
   id: string;
   year: number;
+  type: PledgeType;
   donor_name: string;
   representative: string;
   pledged_amount: number;
@@ -48,6 +51,7 @@ interface PledgeWithFulfillment {
 
 export default function PledgeManagementPage() {
   const [year, setYear] = useState(() => new Date().getFullYear());
+  const [selectedType, setSelectedType] = useState<PledgeType>('건축헌금');
   const [pledges, setPledges] = useState<PledgeWithFulfillment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,12 +69,12 @@ export default function PledgeManagementPage() {
   // 데이터 로드
   useEffect(() => {
     loadData();
-  }, [year]);
+  }, [year, selectedType]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/settings/pledge?year=${year}&withFulfillment=true`);
+      const res = await fetch(`/api/settings/pledge?year=${year}&type=${selectedType}&withFulfillment=true`);
       const data = await res.json();
 
       if (data.success) {
@@ -140,6 +144,7 @@ export default function PledgeManagementPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             year,
+            type: selectedType,
             donor_name: formData.donor_name,
             representative: formData.representative || formData.donor_name,
             pledged_amount: Number(formData.pledged_amount.replace(/,/g, '')),
@@ -213,6 +218,23 @@ export default function PledgeManagementPage() {
           <p className="text-sm text-slate-500 mt-1">
             연간 헌금 작정 현황을 관리합니다
           </p>
+          {/* Type Tabs */}
+          <div className="flex gap-2 mt-3">
+            <Button
+              variant={selectedType === '건축헌금' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedType('건축헌금')}
+            >
+              건축헌금
+            </Button>
+            <Button
+              variant={selectedType === '선교헌금' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedType('선교헌금')}
+            >
+              선교헌금
+            </Button>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           {/* Year Selector */}

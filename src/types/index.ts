@@ -117,9 +117,12 @@ export interface CarryoverBalance {
 }
 
 // 작정헌금 (Pledge Donation)
+export type PledgeType = '건축헌금' | '선교헌금';
+
 export interface PledgeDonation {
   id: string;
   year: number;           // 작정 연도
+  type: PledgeType;       // 헌금 종류
   donor_name: string;     // 작정자명
   representative: string; // 대표자명
   pledged_amount: number; // 작정 금액

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getIncomeRecords, getExpenseRecords } from '@/lib/google-sheets';
+import { getIncomeRecords, getExpenseRecords, getCarryoverBalance, getBankTransactions } from '@/lib/google-sheets';
 import type { MonthlyReport } from '@/types';
 
 export async function GET(request: NextRequest) {
@@ -14,9 +14,11 @@ export async function GET(request: NextRequest) {
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
 
-    const [incomeRecords, expenseRecords] = await Promise.all([
+    const [incomeRecords, expenseRecords, carryoverData, bankTransactions] = await Promise.all([
       getIncomeRecords(startDate, endDate),
       getExpenseRecords(startDate, endDate),
+      getCarryoverBalance(year - 1), // 전년도 말 이월잔액
+      getBankTransactions(),
     ]);
 
     if (debug) {
@@ -59,21 +61,47 @@ export async function GET(request: NextRequest) {
       data.expense += record.amount;
     }
 
+    const months = Array.from(monthlyData.entries())
+      .map(([month, data]) => ({
+        month,
+        income: data.income,
+        expense: data.expense,
+        balance: data.income - data.expense,
+      }))
+      .sort((a, b) => a.month - b.month);
+
+    // 이월잔액
+    const carryoverBalance = carryoverData?.balance || 0;
+
+    // 연간 합계
+    const totalIncome = months.reduce((sum, m) => sum + m.income, 0);
+    const totalExpense = months.reduce((sum, m) => sum + m.expense, 0);
+
+    // 현재 잔고 (은행원장의 마지막 잔액)
+    const sortedBank = bankTransactions
+      .filter(t => t.balance > 0)
+      .sort((a, b) => {
+        if (a.transaction_date === b.transaction_date) {
+          return (b.time || '').localeCompare(a.time || '');
+        }
+        return b.transaction_date.localeCompare(a.transaction_date);
+      });
+    const currentBalance = sortedBank[0]?.balance || 0;
+
     const report: MonthlyReport = {
       year,
-      months: Array.from(monthlyData.entries())
-        .map(([month, data]) => ({
-          month,
-          income: data.income,
-          expense: data.expense,
-          balance: data.income - data.expense,
-        }))
-        .sort((a, b) => a.month - b.month),
+      months,
     };
 
     return NextResponse.json({
       success: true,
-      data: report,
+      data: {
+        ...report,
+        carryoverBalance,
+        totalIncome,
+        totalExpense,
+        currentBalance,
+      },
     });
   } catch (error) {
     console.error('Monthly report error:', error);

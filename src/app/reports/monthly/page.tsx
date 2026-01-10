@@ -11,14 +11,41 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, BarChart3, TableIcon, RefreshCw, TrendingUp, TrendingDown, Wallet, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import type { MonthlyReport } from '@/types';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts';
+
+interface MonthData {
+  month: number;
+  income: number;
+  expense: number;
+  balance: number;
+}
+
+interface ExtendedMonthlyReport {
+  year: number;
+  months: MonthData[];
+  carryoverBalance: number;
+  totalIncome: number;
+  totalExpense: number;
+  currentBalance: number;
+}
 
 export default function MonthlyReportPage() {
   const [loading, setLoading] = useState(true);
-  const [report, setReport] = useState<MonthlyReport | null>(null);
+  const [report, setReport] = useState<ExtendedMonthlyReport | null>(null);
   const [year, setYear] = useState(() => new Date().getFullYear());
+  const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
 
   const fetchReport = async (y: number) => {
     setLoading(true);
@@ -43,9 +70,26 @@ export default function MonthlyReportPage() {
     fetchReport(year);
   }, [year]);
 
-  const totalIncome = report?.months.reduce((sum, m) => sum + m.income, 0) || 0;
-  const totalExpense = report?.months.reduce((sum, m) => sum + m.expense, 0) || 0;
+  const totalIncome = report?.totalIncome || report?.months.reduce((sum, m) => sum + m.income, 0) || 0;
+  const totalExpense = report?.totalExpense || report?.months.reduce((sum, m) => sum + m.expense, 0) || 0;
   const totalBalance = totalIncome - totalExpense;
+  const carryoverBalance = report?.carryoverBalance || 0;
+  const currentBalance = report?.currentBalance || 0;
+
+  const formatAmount = (amount: number) => {
+    if (Math.abs(amount) >= 100000000) {
+      return `${(amount / 100000000).toFixed(1)}억`;
+    } else if (Math.abs(amount) >= 10000) {
+      return `${Math.round(amount / 10000).toLocaleString()}만`;
+    }
+    return amount.toLocaleString();
+  };
+
+  const chartData = report?.months.map(m => ({
+    name: `${m.month}월`,
+    수입: m.income,
+    지출: m.expense,
+  })) || [];
 
   if (loading) {
     return (
@@ -58,7 +102,7 @@ export default function MonthlyReportPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-900">월간 보고서</h1>
+        <h1 className="text-3xl font-bold text-slate-900">연간 보고서</h1>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => setYear(y => y - 1)}>
             <ChevronLeft className="h-4 w-4" />
@@ -72,35 +116,79 @@ export default function MonthlyReportPage() {
 
       {report && (
         <div className="space-y-6">
-          {/* 연간 요약 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-slate-500">연간 총 수입</CardTitle>
+          {/* 5개 요약 카드 */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {/* 이월금 */}
+            <Card className="border-l-4 border-l-slate-400">
+              <CardHeader className="pb-1 pt-3 px-3">
+                <CardTitle className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3" />
+                  이월금
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {totalIncome.toLocaleString()}원
+              <CardContent className="pt-0 pb-3 px-3">
+                <div className="text-lg font-bold text-slate-700">
+                  {formatAmount(carryoverBalance)}원
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-slate-500">연간 총 지출</CardTitle>
+
+            {/* 연간 총 수입 */}
+            <Card className="border-l-4 border-l-green-500">
+              <CardHeader className="pb-1 pt-3 px-3">
+                <CardTitle className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" />
+                  연간 수입
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">
-                  {totalExpense.toLocaleString()}원
+              <CardContent className="pt-0 pb-3 px-3">
+                <div className="text-lg font-bold text-green-600">
+                  {formatAmount(totalIncome)}원
                 </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-slate-500">연간 수지차액</CardTitle>
+
+            {/* 연간 총 지출 */}
+            <Card className="border-l-4 border-l-red-500">
+              <CardHeader className="pb-1 pt-3 px-3">
+                <CardTitle className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                  <TrendingDown className="h-3 w-3" />
+                  연간 지출
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${totalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                  {totalBalance >= 0 ? '+' : ''}{totalBalance.toLocaleString()}원
+              <CardContent className="pt-0 pb-3 px-3">
+                <div className="text-lg font-bold text-red-600">
+                  {formatAmount(totalExpense)}원
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 수지차액 */}
+            <Card className="border-l-4 border-l-blue-500">
+              <CardHeader className="pb-1 pt-3 px-3">
+                <CardTitle className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                  <ArrowRight className="h-3 w-3" />
+                  수지차액
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 pb-3 px-3">
+                <div className={`text-lg font-bold ${totalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  {totalBalance >= 0 ? '+' : ''}{formatAmount(totalBalance)}원
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 현재잔고 */}
+            <Card className="border-l-4 border-l-amber-500 col-span-2 md:col-span-1">
+              <CardHeader className="pb-1 pt-3 px-3">
+                <CardTitle className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                  <Wallet className="h-3 w-3" />
+                  현재잔고
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 pb-3 px-3">
+                <div className="text-lg font-bold text-amber-600">
+                  {formatAmount(currentBalance)}원
                 </div>
               </CardContent>
             </Card>
@@ -108,51 +196,93 @@ export default function MonthlyReportPage() {
 
           {/* 월별 상세 */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
                 월별 현황
               </CardTitle>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant={viewMode === 'chart' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('chart')}
+                  className="h-8"
+                >
+                  <BarChart3 className="h-4 w-4 mr-1" />
+                  차트
+                </Button>
+                <Button
+                  variant={viewMode === 'table' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('table')}
+                  className="h-8"
+                >
+                  <TableIcon className="h-4 w-4 mr-1" />
+                  테이블
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>월</TableHead>
-                    <TableHead className="text-right">수입</TableHead>
-                    <TableHead className="text-right">지출</TableHead>
-                    <TableHead className="text-right">수지차액</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.months.map((month) => (
-                    <TableRow key={month.month}>
-                      <TableCell className="font-medium">{month.month}월</TableCell>
+              {viewMode === 'chart' ? (
+                <div className="h-[400px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis
+                        tickFormatter={(value) => formatAmount(value)}
+                        tick={{ fontSize: 11 }}
+                      />
+                      <Tooltip
+                        formatter={(value) => [(Number(value) || 0).toLocaleString() + '원', '']}
+                        labelStyle={{ fontWeight: 'bold' }}
+                      />
+                      <Legend />
+                      <Bar dataKey="수입" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="지출" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>월</TableHead>
+                      <TableHead className="text-right">수입</TableHead>
+                      <TableHead className="text-right">지출</TableHead>
+                      <TableHead className="text-right">수지차액</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {report.months.map((month) => (
+                      <TableRow key={month.month}>
+                        <TableCell className="font-medium">{month.month}월</TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {month.income.toLocaleString()}원
+                        </TableCell>
+                        <TableCell className="text-right text-red-600">
+                          {month.expense.toLocaleString()}원
+                        </TableCell>
+                        <TableCell className={`text-right font-medium ${month.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                          {month.balance >= 0 ? '+' : ''}{month.balance.toLocaleString()}원
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="bg-slate-50 font-bold">
+                      <TableCell>합계</TableCell>
                       <TableCell className="text-right text-green-600">
-                        {month.income.toLocaleString()}원
+                        {totalIncome.toLocaleString()}원
                       </TableCell>
                       <TableCell className="text-right text-red-600">
-                        {month.expense.toLocaleString()}원
+                        {totalExpense.toLocaleString()}원
                       </TableCell>
-                      <TableCell className={`text-right font-medium ${month.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                        {month.balance >= 0 ? '+' : ''}{month.balance.toLocaleString()}원
+                      <TableCell className={`text-right ${totalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                        {totalBalance >= 0 ? '+' : ''}{totalBalance.toLocaleString()}원
                       </TableCell>
                     </TableRow>
-                  ))}
-                  <TableRow className="bg-slate-50 font-bold">
-                    <TableCell>합계</TableCell>
-                    <TableCell className="text-right text-green-600">
-                      {totalIncome.toLocaleString()}원
-                    </TableCell>
-                    <TableCell className="text-right text-red-600">
-                      {totalExpense.toLocaleString()}원
-                    </TableCell>
-                    <TableCell className={`text-right ${totalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                      {totalBalance >= 0 ? '+' : ''}{totalBalance.toLocaleString()}원
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </div>

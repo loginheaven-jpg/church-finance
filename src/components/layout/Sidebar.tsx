@@ -22,6 +22,8 @@ import {
   Target,
   RefreshCw,
   Building2,
+  PieChart,
+  FileBarChart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
@@ -51,11 +53,13 @@ const menuSections: MenuSection[] = [
     label: 'REPORTS',
     items: [
       { href: '/reports/weekly', label: '주간 요약', icon: FileText },
-      { href: '/reports/monthly', label: '월간 추이', icon: BarChart3 },
+      { href: '/reports/monthly', label: '연간 요약', icon: BarChart3 },
       { href: '/reports/budget', label: '예산 집행', icon: Receipt },
-      { href: '/reports/comparison', label: '3개년 비교', icon: Scale },
       { href: '/reports/income-analysis', label: '수입 분석', icon: TrendingUp },
       { href: '/reports/expense-analysis', label: '지출 분석', icon: TrendingDown },
+      { href: '/reports/donor-analysis', label: '헌금자 분석', icon: PieChart },
+      { href: '/reports/comparison', label: '3개년 비교', icon: Scale },
+      { href: '/reports/custom', label: '커스텀 보고서', icon: FileBarChart },
     ],
   },
   {

@@ -27,6 +27,7 @@ import {
   Cell,
   LineChart,
   Line,
+  LabelList,
 } from 'recharts';
 
 interface IncomeAnalysisData {
@@ -183,14 +184,21 @@ export default function IncomeAnalysisPage() {
           <CardTitle>월별 수입 추이</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={monthlyData}>
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={monthlyData} margin={{ top: 30, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis tickFormatter={formatAmount} />
               <Tooltip formatter={(value) => formatFullAmount(Number(value) || 0)} />
               <Legend />
-              <Bar dataKey="수입" fill="#22c55e" />
+              <Bar dataKey="수입" fill="#22c55e" radius={[4, 4, 0, 0]}>
+                <LabelList
+                  dataKey="수입"
+                  position="top"
+                  formatter={(value) => formatAmount(Number(value) || 0)}
+                  style={{ fontSize: 11, fill: '#374151' }}
+                />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </CardContent>

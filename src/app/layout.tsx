@@ -3,6 +3,7 @@ import { Playfair_Display, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { YearProvider } from "@/contexts/YearContext";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -32,9 +33,11 @@ export default function RootLayout({
         className={`${playfair.variable} ${notoSansKR.variable} antialiased`}
       >
         <QueryProvider>
-          <MainLayout>
-            {children}
-          </MainLayout>
+          <YearProvider>
+            <MainLayout>
+              {children}
+            </MainLayout>
+          </YearProvider>
         </QueryProvider>
       </body>
     </html>

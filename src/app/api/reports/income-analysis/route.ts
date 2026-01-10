@@ -20,6 +20,14 @@ export async function GET(request: NextRequest) {
       codeMap.set(c.code, { category: c.category_item, item: c.item });
     });
 
+    // 특수 카테고리 코드 fallback
+    const specialCategories: Record<number, string> = {
+      500: '건축헌금',
+      501: '건축헌금',
+      40: '자본수입',
+      41: '자본수입',
+    };
+
     // 카테고리별 집계
     const byCategory = new Map<number, { name: string; amount: number; count: number }>();
     // 항목별 집계
@@ -39,7 +47,7 @@ export async function GET(request: NextRequest) {
       if (!byCategory.has(categoryCode)) {
         const catInfo = codeMap.get(categoryCode);
         byCategory.set(categoryCode, {
-          name: catInfo?.item || `카테고리${categoryCode}`,
+          name: catInfo?.item || specialCategories[categoryCode] || `기타수입`,
           amount: 0,
           count: 0,
         });
@@ -51,8 +59,8 @@ export async function GET(request: NextRequest) {
       // 항목별
       if (!byCode.has(code)) {
         byCode.set(code, {
-          name: codeInfo?.item || `항목${code}`,
-          category: codeInfo?.category || '',
+          name: codeInfo?.item || specialCategories[code] || `기타`,
+          category: codeInfo?.category || specialCategories[categoryCode] || '',
           amount: 0,
           count: 0,
         });

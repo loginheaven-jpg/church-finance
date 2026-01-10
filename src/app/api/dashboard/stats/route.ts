@@ -102,6 +102,46 @@ export async function GET() {
     // 연간집행률 = (실제지출 / 연간예산) * 100
     const yearlyExecutionRate = totalBudget > 0 ? Math.round((yearlyExpense / totalBudget) * 100) : 0;
 
+    // 8주 데이터 계산 (7주 전부터 이번 주까지)
+    const eightWeeksAgo = new Date(monday);
+    eightWeeksAgo.setDate(monday.getDate() - 7 * 7); // 7주 전 월요일
+    const eightWeekStart = eightWeeksAgo.toISOString().split('T')[0];
+
+    // 8주간 데이터 조회
+    const [eightWeekIncomeRecords, eightWeekExpenseRecords] = await Promise.all([
+      getIncomeRecords(eightWeekStart, endDate),
+      getExpenseRecords(eightWeekStart, endDate),
+    ]);
+
+    // 주별로 집계
+    const weeklyData: Array<{ date: string; income: number; expense: number }> = [];
+    for (let i = 0; i < 8; i++) {
+      const weekMonday = new Date(eightWeeksAgo);
+      weekMonday.setDate(eightWeeksAgo.getDate() + i * 7);
+      const weekSunday = new Date(weekMonday);
+      weekSunday.setDate(weekMonday.getDate() + 6);
+
+      const weekStart = weekMonday.toISOString().split('T')[0];
+      const weekEnd = weekSunday.toISOString().split('T')[0];
+
+      // 해당 주의 수입/지출 합계
+      const weekIncome = eightWeekIncomeRecords
+        .filter(r => r.date >= weekStart && r.date <= weekEnd)
+        .reduce((sum, r) => sum + (r.amount || 0), 0);
+      const weekExpense = eightWeekExpenseRecords
+        .filter(r => r.date >= weekStart && r.date <= weekEnd)
+        .reduce((sum, r) => sum + (r.amount || 0), 0);
+
+      // 주의 일요일 날짜를 M/d 형식으로
+      const displayDate = `${weekSunday.getMonth() + 1}/${weekSunday.getDate()}`;
+
+      weeklyData.push({
+        date: displayDate,
+        income: weekIncome,
+        expense: weekExpense,
+      });
+    }
+
     return NextResponse.json({
       weeklyIncome,
       weeklyExpense,
@@ -118,6 +158,7 @@ export async function GET() {
       daysPassed,
       daysInYear,
       currentYear,
+      weeklyData,
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
@@ -136,6 +177,7 @@ export async function GET() {
       daysPassed: 0,
       daysInYear: 365,
       currentYear: new Date().getFullYear(),
+      weeklyData: [],
     });
   }
 }

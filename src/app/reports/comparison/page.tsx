@@ -42,6 +42,11 @@ interface ComparisonData {
     income: number[];
     expense: number[];
   }>;
+  longTermTrend: Array<{
+    year: number;
+    income: number;
+    expense: number;
+  }>;
 }
 
 export default function ComparisonReportPage() {
@@ -309,6 +314,48 @@ export default function ComparisonReportPage() {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {/* Long-term Trend Chart (2003~현재) */}
+      {data.longTermTrend && data.longTermTrend.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>연간 수입/지출 추이 (2003년~현재)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart data={data.longTermTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="year"
+                  tickFormatter={(year) => `${year}`}
+                />
+                <YAxis tickFormatter={formatAmount} />
+                <Tooltip
+                  formatter={(value) => formatFullAmount(Number(value) || 0)}
+                  labelFormatter={(year) => `${year}년`}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="income"
+                  name="수입"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  dot={{ fill: '#22c55e', r: 3 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="expense"
+                  name="지출"
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  dot={{ fill: '#ef4444', r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -143,9 +143,41 @@ export async function GET(request: NextRequest) {
       })),
     };
 
+    // 장기 추이 데이터 (2003년부터 현재까지)
+    const currentYear = new Date().getFullYear();
+    const startYear = 2003;
+    const longTermYears = Array.from(
+      { length: currentYear - startYear + 1 },
+      (_, i) => startYear + i
+    );
+
+    const longTermDataPromises = longTermYears.map(async (year) => {
+      const startDate = `${year}-01-01`;
+      const endDate = `${year}-12-31`;
+
+      const [incomeRecords, expenseRecords] = await Promise.all([
+        getIncomeRecords(startDate, endDate),
+        getExpenseRecords(startDate, endDate),
+      ]);
+
+      const totalIncome = incomeRecords.reduce((sum, r) => sum + r.amount, 0);
+      const totalExpense = expenseRecords.reduce((sum, r) => sum + r.amount, 0);
+
+      return {
+        year,
+        income: totalIncome,
+        expense: totalExpense,
+      };
+    });
+
+    const longTermTrend = await Promise.all(longTermDataPromises);
+
     return NextResponse.json({
       success: true,
-      data: comparison,
+      data: {
+        ...comparison,
+        longTermTrend,
+      },
     });
   } catch (error) {
     console.error('Comparison report error:', error);

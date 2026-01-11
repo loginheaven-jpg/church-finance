@@ -145,12 +145,24 @@ export async function GET(request: NextRequest) {
 
     // 전체 합계 계산
     let totalBudget = 0;
-    let totalExecuted = 0;
+    let totalBudgetedExecuted = 0;  // 예산 등록된 항목의 지출 합계
     let totalPrevExecuted = 0;
     for (const category of categoryMap.values()) {
       totalBudget += category.budget;
-      totalExecuted += category.executed;
+      totalBudgetedExecuted += category.executed;
       totalPrevExecuted += category.prev_executed;
+    }
+
+    // 전체 지출 합계 (예산 등록 여부 무관 - 실제 총 지출액)
+    let totalExecuted = 0;
+    for (const amount of expenseByAccount.values()) {
+      totalExecuted += amount;
+    }
+
+    // 전년 전체 지출 합계
+    let totalPrevExecutedAll = 0;
+    for (const amount of prevExpenseByAccount.values()) {
+      totalPrevExecutedAll += amount;
     }
 
     const totalExecutionRate = totalBudget > 0
@@ -186,7 +198,7 @@ export async function GET(request: NextRequest) {
       daysInYear,
       totalBudget,
       totalExecuted,
-      totalPrevExecuted,
+      totalPrevExecuted: totalPrevExecutedAll,  // 전년도 전체 지출 (예산 등록 여부 무관)
       executionRate: totalExecutionRate,
       syncRate: totalSyncRate,
       overBudgetItems: overBudgetItems.slice(0, 10),

@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   Upload,
@@ -13,7 +13,6 @@ import {
   Users,
   BarChart3,
   Receipt,
-  ListChecks,
   Cog,
   TrendingUp,
   TrendingDown,
@@ -25,8 +24,9 @@ import {
   FileBarChart,
   Heart,
   FilePlus,
-  Shield,
   UserCog,
+  LogOut,
+  User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
@@ -108,19 +108,40 @@ const menuSections: MenuSection[] = [
   },
 ];
 
+// 역할 한글명
+const ROLE_LABELS: Record<FinanceRole, string> = {
+  'super_admin': '수퍼어드민',
+  'admin': '관리자',
+  'deacon': '제직',
+  'member': '회원',
+};
+
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
-  userRole?: FinanceRole;  // 사용자 역할 (인증 시스템 완성 전까지는 super_admin 기본값)
+  userRole?: FinanceRole;
+  userName?: string;
 }
 
-export function Sidebar({ isOpen = true, onClose, userRole = 'super_admin' }: SidebarProps) {
+export function Sidebar({ isOpen = true, onClose, userRole = 'member', userName }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
 
   // 사용자 역할에 따라 메뉴 필터링
   const filteredSections = menuSections.filter(section =>
     hasAccess(userRole, section.minRole)
   );
+
+  // 로그아웃 처리
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/verify', { method: 'DELETE' });
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   return (
     <aside
@@ -194,9 +215,37 @@ export function Sidebar({ isOpen = true, onClose, userRole = 'super_admin' }: Si
         ))}
       </nav>
 
-      {/* Footer - Version */}
+      {/* Footer - User Info & Logout */}
       <div className="mt-auto border-t border-white/10 p-4">
-        <div className="mt-2 text-center text-[11px] text-white/40">
+        {userName ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 px-2">
+              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                <User className="h-4 w-4 text-white/70" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-white truncate">{userName}</div>
+                <div className="text-[11px] text-white/50">{ROLE_LABELS[userRole]}</div>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-sm transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              로그아웃
+            </button>
+          </div>
+        ) : (
+          <Link
+            href="/login"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm transition-colors"
+          >
+            <User className="h-4 w-4" />
+            로그인
+          </Link>
+        )}
+        <div className="mt-3 text-center text-[11px] text-white/40">
           v1.0.0
         </div>
       </div>

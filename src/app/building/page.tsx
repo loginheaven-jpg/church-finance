@@ -612,7 +612,7 @@ export default function BuildingPage() {
 
                 {/* 빠른 선택 버튼 */}
                 <div className="flex flex-wrap gap-2">
-                  {[3000, 5000, 8000, 10000, 17000].map(v => (
+                  {[10000, 17000, 20000, 30000].map(v => (
                     <Button
                       key={v}
                       variant={annualRepayment === v ? "default" : "outline"}

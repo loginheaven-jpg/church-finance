@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Lock, Loader2, Church } from 'lucide-react';
+import { Lock, Mail, Loader2, Church } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,7 +24,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -31,7 +33,7 @@ export default function LoginPage() {
         router.push('/dashboard');
         router.refresh();
       } else {
-        setError(data.error || '암호가 일치하지 않습니다');
+        setError(data.error || '로그인에 실패했습니다');
         setPassword('');
       }
     } catch {
@@ -40,17 +42,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-
-  // Enter 키로 제출
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && password && !loading) {
-        handleSubmit(e as unknown as React.FormEvent);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [password, loading]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
@@ -61,20 +52,32 @@ export default function LoginPage() {
           </div>
           <CardTitle className="text-2xl">예봄교회 재정관리</CardTitle>
           <CardDescription>
-            시스템 접근을 위해 암호를 입력하세요
+            이메일과 비밀번호로 로그인하세요
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                type="email"
+                placeholder="이메일 주소"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="pl-10"
+                autoFocus
+                disabled={loading}
+              />
+            </div>
+
+            <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 type="password"
-                placeholder="암호 입력"
+                placeholder="비밀번호"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="pl-10"
-                autoFocus
                 disabled={loading}
               />
             </div>
@@ -88,18 +91,34 @@ export default function LoginPage() {
             <Button
               type="submit"
               className="w-full"
-              disabled={!password || loading}
+              disabled={!email || !password || loading}
             >
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  확인 중...
+                  로그인 중...
                 </>
               ) : (
-                '입장하기'
+                '로그인'
               )}
             </Button>
           </form>
+
+          <div className="mt-6 text-center text-sm text-slate-600">
+            <p>
+              계정이 없으신가요?{' '}
+              <Link
+                href="https://saint-record.vercel.app/register"
+                target="_blank"
+                className="text-blue-600 hover:underline font-medium"
+              >
+                회원가입
+              </Link>
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              예봄교적부 계정으로 로그인합니다
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

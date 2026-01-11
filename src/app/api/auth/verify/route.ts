@@ -1,30 +1,95 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const TEMP_PASSWORD = '860316!';
+import bcrypt from 'bcryptjs';
+import { supabaseAdmin } from '@/lib/supabase';
+import { FinanceSession, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from '@/lib/auth/finance-permissions';
 
 export async function POST(request: NextRequest) {
   try {
-    const { password } = await request.json();
+    const { email, password } = await request.json();
 
-    if (password === TEMP_PASSWORD) {
-      const response = NextResponse.json({ success: true });
-
-      // 인증 쿠키 설정 (7일 유효)
-      response.cookies.set('auth-token', 'authenticated', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7, // 7일
-        path: '/',
-      });
-
-      return response;
+    if (!email || !password) {
+      return NextResponse.json(
+        { success: false, error: '이메일과 비밀번호를 입력해주세요' },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json(
-      { success: false, error: '암호가 일치하지 않습니다' },
-      { status: 401 }
-    );
+    // Supabase가 설정되지 않은 경우
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { success: false, error: '데이터베이스 연결이 설정되지 않았습니다' },
+        { status: 500 }
+      );
+    }
+
+    // 사용자 조회
+    const { data: user, error: queryError } = await supabaseAdmin
+      .from('users')
+      .select('user_id, email, password_hash, name, member_id, finance_role, is_approved')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (queryError || !user) {
+      return NextResponse.json(
+        { success: false, error: '등록되지 않은 이메일입니다' },
+        { status: 401 }
+      );
+    }
+
+    // 승인 확인
+    if (!user.is_approved) {
+      return NextResponse.json(
+        { success: false, error: '계정 승인 대기 중입니다. 관리자에게 문의하세요.' },
+        { status: 403 }
+      );
+    }
+
+    // 비밀번호 검증
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    if (!isValidPassword) {
+      return NextResponse.json(
+        { success: false, error: '비밀번호가 일치하지 않습니다' },
+        { status: 401 }
+      );
+    }
+
+    // 세션 데이터 생성
+    const sessionData: FinanceSession = {
+      user_id: user.user_id,
+      name: user.name,
+      email: user.email,
+      member_id: user.member_id,
+      finance_role: user.finance_role || 'member', // 기본값 member
+    };
+
+    const response = NextResponse.json({
+      success: true,
+      user: {
+        name: user.name,
+        email: user.email,
+        role: sessionData.finance_role,
+      }
+    });
+
+    // 세션 쿠키 설정
+    response.cookies.set(SESSION_COOKIE_NAME, JSON.stringify(sessionData), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: SESSION_MAX_AGE,
+      path: '/',
+    });
+
+    // 기존 auth-token도 설정 (기존 미들웨어 호환)
+    response.cookies.set('auth-token', 'authenticated', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: SESSION_MAX_AGE,
+      path: '/',
+    });
+
+    return response;
   } catch (error) {
     console.error('Auth verify error:', error);
     return NextResponse.json(
@@ -38,5 +103,6 @@ export async function POST(request: NextRequest) {
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
   response.cookies.delete('auth-token');
+  response.cookies.delete(SESSION_COOKIE_NAME);
   return response;
 }

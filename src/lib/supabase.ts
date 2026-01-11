@@ -1,14 +1,28 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// 교적부 Supabase 클라이언트 (읽기 전용)
+// 교적부 Supabase 클라이언트 (읽기 전용 - 클라이언트 사이드)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// 환경변수가 설정된 경우에만 클라이언트 생성
+// 환경변수가 설정된 경우에만 클라이언트 생성 (Anonymous)
 let supabase: SupabaseClient | null = null;
 if (supabaseUrl && supabaseAnonKey) {
   supabase = createClient(supabaseUrl, supabaseAnonKey);
 }
+
+// 서버 사이드용 Supabase 클라이언트 (Service Role - 인증/사용자 관리용)
+let supabaseAdmin: SupabaseClient | null = null;
+if (supabaseUrl && supabaseServiceKey) {
+  supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
+export { supabaseAdmin };
 
 // 교인 정보 타입
 export interface MemberInfo {

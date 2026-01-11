@@ -23,9 +23,16 @@ import {
   RefreshCw,
   Building2,
   FileBarChart,
+  Heart,
+  FilePlus,
+  Shield,
+  UserCog,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
+
+// 역할 타입 정의
+export type FinanceRole = 'super_admin' | 'admin' | 'deacon' | 'member';
 
 interface MenuItem {
   href: string;
@@ -36,20 +43,35 @@ interface MenuItem {
 interface MenuSection {
   label: string;
   items: MenuItem[];
+  minRole: FinanceRole;  // 최소 필요 역할
+}
+
+// 역할 우선순위 (높을수록 권한 높음)
+const ROLE_PRIORITY: Record<FinanceRole, number> = {
+  'super_admin': 4,
+  'admin': 3,
+  'deacon': 2,
+  'member': 1,
+};
+
+// 역할 확인 헬퍼
+function hasAccess(userRole: FinanceRole, requiredRole: FinanceRole): boolean {
+  return ROLE_PRIORITY[userRole] >= ROLE_PRIORITY[requiredRole];
 }
 
 const menuSections: MenuSection[] = [
   {
     label: 'MAIN',
+    minRole: 'member',
     items: [
       { href: '/dashboard', label: '대시보드', icon: LayoutDashboard },
-      { href: '/data-entry', label: '데이터 입력', icon: Upload },
-      { href: '/match', label: '거래 매칭', icon: GitCompare },
-      { href: '/card/my-transactions', label: '카드내역 입력', icon: CreditCard },
+      { href: '/building', label: '성전 봉헌', icon: Building2 },
+      { href: '/my-offering', label: '내 헌금', icon: Heart },
     ],
   },
   {
     label: 'REPORTS',
+    minRole: 'member',
     items: [
       { href: '/reports/weekly', label: '주간 요약', icon: FileText },
       { href: '/reports/monthly', label: '연간 요약', icon: BarChart3 },
@@ -61,26 +83,27 @@ const menuSections: MenuSection[] = [
     ],
   },
   {
-    label: 'BUILDING',
+    label: 'MANAGEMENTS',
+    minRole: 'admin',
     items: [
-      { href: '/building', label: '성전 봉헌', icon: Building2 },
-    ],
-  },
-  {
-    label: 'DONORS',
-    items: [
+      { href: '/expense-claim', label: '지출청구', icon: FilePlus },
+      { href: '/data-entry', label: '데이터 입력', icon: Upload },
+      { href: '/match', label: '거래 매칭', icon: GitCompare },
+      { href: '/card/my-transactions', label: '카드내역 입력', icon: CreditCard },
       { href: '/donors', label: '헌금자 관리', icon: Users },
-      { href: '/donors/receipts', label: '기부금영수증', icon: FileText },
-    ],
-  },
-  {
-    label: 'SETTINGS',
-    items: [
-      { href: '/settings/codes', label: '계정과목 코드', icon: ListChecks },
+      { href: '/donors/receipts', label: '기부금 영수증', icon: FileText },
       { href: '/settings/matching-rules', label: '매칭 규칙', icon: Cog },
       { href: '/settings/budget', label: '예산 관리', icon: Wallet },
-      { href: '/settings/carryover', label: '이월잔액', icon: RefreshCw },
-      { href: '/settings/pledge', label: '작정헌금', icon: Target },
+      { href: '/settings/carryover', label: '이월 잔액', icon: RefreshCw },
+      { href: '/settings/pledge', label: '작정 헌금', icon: Target },
+    ],
+  },
+  {
+    label: 'ADMIN',
+    minRole: 'super_admin',
+    items: [
+      { href: '/admin/settings', label: '시스템 설정', icon: Settings },
+      { href: '/admin/users', label: '사용자 관리', icon: UserCog },
     ],
   },
 ];
@@ -88,10 +111,16 @@ const menuSections: MenuSection[] = [
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+  userRole?: FinanceRole;  // 사용자 역할 (인증 시스템 완성 전까지는 super_admin 기본값)
 }
 
-export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
+export function Sidebar({ isOpen = true, onClose, userRole = 'super_admin' }: SidebarProps) {
   const pathname = usePathname();
+
+  // 사용자 역할에 따라 메뉴 필터링
+  const filteredSections = menuSections.filter(section =>
+    hasAccess(userRole, section.minRole)
+  );
 
   return (
     <aside
@@ -130,7 +159,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 overflow-y-auto scrollbar-hide">
-        {menuSections.map((section) => (
+        {filteredSections.map((section) => (
           <div key={section.label} className="mb-4">
             {/* Section Label */}
             <div className="px-4 mb-3 text-[11px] font-semibold text-white/35 uppercase tracking-[1.5px]">

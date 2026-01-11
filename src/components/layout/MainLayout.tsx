@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Toaster } from 'sonner';
 import { Menu, X } from 'lucide-react';
+import { useFinanceRole } from '@/lib/auth/use-finance-session';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -13,6 +14,7 @@ interface MainLayoutProps {
 export function MainLayout({ children }: MainLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const userRole = useFinanceRole();
 
   // 경로 변경 시 사이드바 닫기
   useEffect(() => {
@@ -58,7 +60,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       )}
 
       {/* Sidebar */}
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userRole={userRole} />
 
       {/* Main Content */}
       <main className="md:ml-[240px] min-h-screen pt-14 md:pt-0">

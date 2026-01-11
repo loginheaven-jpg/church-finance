@@ -366,7 +366,7 @@ export default function BuildingPage() {
               <div className="space-y-1">
                 <div className="flex items-baseline gap-2">
                   <div className="text-3xl font-bold text-green-600">32억</div>
-                  <div className="text-sm text-muted-foreground">건축헌금 (2003~2011)</div>
+                  <div className="text-sm text-muted-foreground">건축헌금 (~2011)</div>
                 </div>
                 <div className="flex items-baseline gap-2">
                   <div className="text-3xl font-bold text-red-600">21억</div>

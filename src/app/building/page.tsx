@@ -321,6 +321,8 @@ export default function BuildingPage() {
     // 건축지출 바 (스택: 원금상환 + 이자지출)
     원금상환: y.원금상환 / 100,
     이자지출: y.이자지출 / 100,
+    // 합계 (수입=지출 동일)
+    합계: (y.원금상환 + y.이자지출) / 100,
   }));
 
   return (
@@ -515,12 +517,13 @@ export default function BuildingPage() {
                 </Bar>
                 <Bar dataKey="일반예산" stackId="income" fill="#166534" name="일반예산">
                   <LabelList dataKey="일반예산" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 18, fontWeight: 'bold' }} />
+                  <LabelList dataKey="합계" position="top" formatter={(v) => `${Number(v).toFixed(1)}억`} style={{ fill: '#334155', fontSize: 14, fontWeight: 'bold' }} />
                 </Bar>
                 {/* 건축지출 스택 */}
                 <Bar dataKey="원금상환" stackId="expense" fill="#f97316" name="원금상환">
                   <LabelList dataKey="원금상환" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 18, fontWeight: 'bold' }} />
                 </Bar>
-                <Bar dataKey="이자지출" stackId="expense" fill="#ea580c" name="이자지출">
+                <Bar dataKey="이자지출" stackId="expense" fill="#b91c1c" name="이자지출">
                   <LabelList dataKey="이자지출" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 18, fontWeight: 'bold' }} />
                 </Bar>
               </BarChart>

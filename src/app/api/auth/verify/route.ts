@@ -22,14 +22,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 사용자 조회
+    // 사용자 조회 (finance_role은 없을 수 있으므로 permission_level도 조회)
     const { data: user, error: queryError } = await supabaseAdmin
       .from('users')
-      .select('user_id, email, password_hash, name, member_id, finance_role, is_approved')
+      .select('user_id, email, password_hash, name, member_id, permission_level, is_approved')
       .eq('email', email.toLowerCase().trim())
       .single();
 
-    if (queryError || !user) {
+    if (queryError) {
+      console.error('User query error:', queryError);
+      return NextResponse.json(
+        { success: false, error: '사용자 조회 중 오류가 발생했습니다' },
+        { status: 500 }
+      );
+    }
+
+    if (!user) {
       return NextResponse.json(
         { success: false, error: '등록되지 않은 이메일입니다' },
         { status: 401 }
@@ -53,13 +61,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // permission_level을 finance_role로 매핑
+    // saint-record-v2의 permission_level: 'super_admin' | 'admin' | 'shepherd' | 'member'
+    // finance_role: 'super_admin' | 'admin' | 'deacon' | 'member'
+    const mapPermissionToRole = (permissionLevel: string): 'super_admin' | 'admin' | 'deacon' | 'member' => {
+      switch (permissionLevel) {
+        case 'super_admin': return 'super_admin';
+        case 'admin': return 'admin';
+        case 'shepherd': return 'deacon'; // 목자 → 제직
+        default: return 'member';
+      }
+    };
+
     // 세션 데이터 생성
     const sessionData: FinanceSession = {
       user_id: user.user_id,
       name: user.name,
       email: user.email,
       member_id: user.member_id,
-      finance_role: user.finance_role || 'member', // 기본값 member
+      finance_role: mapPermissionToRole(user.permission_level || 'member'),
     };
 
     const response = NextResponse.json({

@@ -7,7 +7,7 @@ import {
 } from '@/lib/auth/finance-permissions';
 
 // 인증이 필요 없는 경로
-const publicPaths = ['/login', '/api/auth'];
+const publicPaths = ['/login', '/register', '/api/auth'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

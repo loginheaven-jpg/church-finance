@@ -3,28 +3,41 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Lock, Mail, Loader2, Church } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { LogIn, UserPlus, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+  });
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+
+    if (!formData.email.trim()) {
+      setError('이메일을 입력해주세요.');
+      return;
+    }
+    if (!formData.password) {
+      setError('비밀번호를 입력해주세요.');
+      return;
+    }
+
+    setIsLoading(true);
 
     try {
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(formData),
       });
 
       const data = await res.json();
@@ -34,93 +47,103 @@ export default function LoginPage() {
         router.refresh();
       } else {
         setError(data.error || '로그인에 실패했습니다');
-        setPassword('');
+        setFormData({ ...formData, password: '' });
       }
     } catch {
       setError('서버 오류가 발생했습니다');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-            <Church className="h-8 w-8 text-blue-600" />
-          </div>
-          <CardTitle className="text-2xl">예봄교회 재정관리</CardTitle>
-          <CardDescription>
-            이메일과 비밀번호로 로그인하세요
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                type="email"
-                placeholder="이메일 주소"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="pl-10"
-                autoFocus
-                disabled={loading}
-              />
+    <div
+      className="min-h-screen flex items-center justify-center"
+      style={{
+        background: 'linear-gradient(180deg, #2C3E50 0%, #1a2a3a 100%)',
+      }}
+    >
+      <div className="w-full max-w-md px-4">
+        <Card className="border-0 shadow-xl">
+          <CardContent className="p-8">
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A962 0%, #D4B87A 100%)',
+                  boxShadow: '0 4px 16px rgba(201, 169, 98, 0.3)'
+                }}
+              >
+                ⛪
+              </div>
+              <h1 className="font-semibold text-xl text-[#2C3E50]">
+                예봄교회 재정부
+              </h1>
+              <p className="text-gray-500 text-sm mt-1">로그인</p>
             </div>
 
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                type="password"
-                placeholder="비밀번호"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pl-10"
-                disabled={loading}
-              />
-            </div>
-
+            {/* Error Message */}
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-600 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 {error}
               </div>
             )}
 
-            <Button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-              disabled={!email || !password || loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  로그인 중...
-                </>
-              ) : (
-                '로그인'
-              )}
-            </Button>
-          </form>
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label className="text-[12px] text-gray-500">이메일</Label>
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="example@email.com"
+                  className="mt-1 border-gray-200"
+                  disabled={isLoading}
+                />
+              </div>
 
-          <div className="mt-6 text-center text-sm text-slate-600">
-            <p>
-              계정이 없으신가요?{' '}
-              <Link
-                href="https://saint-record.vercel.app/register"
-                target="_blank"
-                className="text-blue-600 hover:underline font-medium"
+              <div>
+                <Label className="text-[12px] text-gray-500">비밀번호</Label>
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="••••••"
+                  className="mt-1 border-gray-200"
+                  disabled={isLoading}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-[#2C3E50] hover:bg-[#1a2a3a] text-white mt-6"
               >
-                회원가입
+                <LogIn className="w-4 h-4 mr-2" />
+                {isLoading ? '로그인 중...' : '로그인'}
+              </Button>
+            </form>
+
+            {/* Footer Links */}
+            <div className="mt-6 text-center">
+              <Link
+                href="/register"
+                className="text-sm text-gray-500 hover:text-[#2C3E50] flex items-center justify-center gap-1"
+              >
+                <UserPlus className="w-3 h-3" />
+                가입 신청하기
               </Link>
+            </div>
+
+            <p className="text-xs text-gray-400 text-center mt-4">
+              * 가입 후 관리자 승인이 필요합니다
             </p>
-            <p className="mt-2 text-xs text-slate-500">
-              예봄교적부 계정으로 로그인합니다
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

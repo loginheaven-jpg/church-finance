@@ -22,19 +22,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 사용자 조회 (finance_role은 없을 수 있으므로 permission_level도 조회)
+    // 사용자 조회 (finance_role 컬럼이 있으면 포함, 없으면 permission_level로 대체)
     const { data: user, error: queryError } = await supabaseAdmin
       .from('users')
-      .select('user_id, email, password_hash, name, member_id, permission_level, is_approved')
+      .select('user_id, email, password_hash, name, member_id, permission_level, finance_role, is_approved')
       .eq('email', email.toLowerCase().trim())
       .single();
 
     if (queryError) {
-      console.error('User query error:', queryError);
-      return NextResponse.json(
-        { success: false, error: '사용자 조회 중 오류가 발생했습니다' },
-        { status: 500 }
-      );
+      // finance_role 컬럼이 없어서 발생한 에러인지 확인
+      if (queryError.message?.includes('finance_role')) {
+        // finance_role 없이 다시 조회
+        const { data: userWithoutFinanceRole, error: retryError } = await supabaseAdmin
+          .from('users')
+          .select('user_id, email, password_hash, name, member_id, permission_level, is_approved')
+          .eq('email', email.toLowerCase().trim())
+          .single();
+
+        if (retryError || !userWithoutFinanceRole) {
+          console.error('User query error:', retryError);
+          return NextResponse.json(
+            { success: false, error: '등록되지 않은 이메일입니다' },
+            { status: 401 }
+          );
+        }
+        // finance_role이 없는 경우 처리
+        (userWithoutFinanceRole as any).finance_role = null;
+        Object.assign(user || {}, userWithoutFinanceRole);
+      } else {
+        console.error('User query error:', queryError);
+        return NextResponse.json(
+          { success: false, error: '사용자 조회 중 오류가 발생했습니다' },
+          { status: 500 }
+        );
+      }
     }
 
     if (!user) {
@@ -61,16 +82,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // permission_level을 finance_role로 매핑
-    // saint-record-v2의 permission_level: 'super_admin' | 'admin' | 'shepherd' | 'member'
-    // finance_role: 'super_admin' | 'admin' | 'deacon' | 'member'
-    const mapPermissionToRole = (permissionLevel: string): 'super_admin' | 'admin' | 'deacon' | 'member' => {
-      switch (permissionLevel) {
-        case 'super_admin': return 'super_admin';
-        case 'admin': return 'admin';
-        case 'shepherd': return 'deacon'; // 목자 → 제직
-        default: return 'member';
+    // finance_role 결정:
+    // 1. finance_role 컬럼 값이 있으면 사용
+    // 2. 없으면: super_admin만 자동 부여, 나머지는 member
+    const determineFinanceRole = (): 'super_admin' | 'admin' | 'deacon' | 'member' => {
+      // finance_role이 DB에 설정되어 있으면 사용
+      if (user.finance_role) {
+        return user.finance_role as 'super_admin' | 'admin' | 'deacon' | 'member';
       }
+      // super_admin만 자동으로 super_admin 역할 부여
+      if (user.permission_level === 'super_admin') {
+        return 'super_admin';
+      }
+      // 나머지는 재정부 사용자관리에서 별도 설정 필요 (기본 member)
+      return 'member';
     };
 
     // 세션 데이터 생성
@@ -79,7 +104,7 @@ export async function POST(request: NextRequest) {
       name: user.name,
       email: user.email,
       member_id: user.member_id,
-      finance_role: mapPermissionToRole(user.permission_level || 'member'),
+      finance_role: determineFinanceRole(),
     };
 
     const response = NextResponse.json({

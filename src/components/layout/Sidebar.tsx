@@ -113,7 +113,7 @@ const ROLE_LABELS: Record<FinanceRole, string> = {
   'super_admin': '수퍼어드민',
   'admin': '관리자',
   'deacon': '제직',
-  'member': '회원',
+  'member': '성도',
 };
 
 interface SidebarProps {

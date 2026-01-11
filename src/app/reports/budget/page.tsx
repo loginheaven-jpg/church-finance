@@ -135,13 +135,13 @@ function StatCard({
 
   return (
     <div className={cn(
-      "p-4 rounded-lg border",
+      "p-6 rounded-lg border",
       status === 'danger' ? 'bg-red-50 border-red-200' :
       status === 'warning' ? 'bg-yellow-50 border-yellow-200' :
       'bg-blue-50 border-blue-200'
     )}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-gray-600">{title}</span>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xl font-medium text-gray-600">{title}</span>
         <span className={cn(
           status === 'danger' ? 'text-red-600' :
           status === 'warning' ? 'text-yellow-600' :
@@ -151,7 +151,7 @@ function StatCard({
         </span>
       </div>
       <div className={cn(
-        "text-2xl font-bold",
+        "text-4xl font-bold",
         status === 'danger' ? 'text-red-700' :
         status === 'warning' ? 'text-yellow-700' :
         'text-blue-700'
@@ -171,16 +171,16 @@ function SubCategoryItem({
 }) {
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50">
-      <td className="py-4 pl-8 text-left text-xl">
+      <td className="py-5 pl-8 text-left text-2xl">
         {item.account_item}
       </td>
-      <td className="py-4 px-4 text-right text-xl text-slate-500" title={formatFullCurrency(item.prev_executed)}>
+      <td className="py-5 px-4 text-right text-2xl text-slate-500" title={formatFullCurrency(item.prev_executed)}>
         {formatCurrency(item.prev_executed)}
       </td>
-      <td className="py-4 px-4 text-right text-xl" title={formatFullCurrency(item.budgeted)}>
+      <td className="py-5 px-4 text-right text-2xl" title={formatFullCurrency(item.budgeted)}>
         {formatCurrency(item.budgeted)}
       </td>
-      <td className="py-4 px-4 text-right text-xl font-medium">
+      <td className="py-5 px-4 text-right text-2xl font-medium">
         <button
           type="button"
           onClick={() => onExecutedClick?.(item.account_code, item.account_item)}
@@ -190,8 +190,8 @@ function SubCategoryItem({
           {formatCurrency(item.executed)}
         </button>
       </td>
-      <td className="py-4 px-4 text-right">
-        <Badge variant={(item.syncRate ?? 0) > 100 ? "destructive" : "secondary"} className="w-24 justify-center text-base py-1.5">
+      <td className="py-5 px-4 text-right">
+        <Badge variant={(item.syncRate ?? 0) > 100 ? "destructive" : "secondary"} className="w-28 justify-center text-lg py-2">
           {(item.syncRate ?? 0).toFixed(1)}%
         </Badge>
       </td>
@@ -253,12 +253,12 @@ function CategoryItem({
         <div className="px-5 pb-5">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-200 text-lg text-slate-500">
-                <th className="py-4 pl-8 text-left font-medium">항목명</th>
-                <th className="py-4 px-4 text-right font-medium w-32">{prevYear}집행</th>
-                <th className="py-4 px-4 text-right font-medium w-32">{currentYear}예산</th>
-                <th className="py-4 px-4 text-right font-medium w-32">{currentYear}집행</th>
-                <th className="py-4 px-4 text-right font-medium w-32">동기집행율</th>
+              <tr className="border-b border-slate-200 text-xl text-slate-500">
+                <th className="py-5 pl-8 text-left font-medium">항목명</th>
+                <th className="py-5 px-4 text-right font-medium w-36">{prevYear}집행</th>
+                <th className="py-5 px-4 text-right font-medium w-36">{currentYear}예산</th>
+                <th className="py-5 px-4 text-right font-medium w-36">{currentYear}집행</th>
+                <th className="py-5 px-4 text-right font-medium w-36">동기집행율</th>
               </tr>
             </thead>
             <tbody>
@@ -270,21 +270,21 @@ function CategoryItem({
                 />
               ))}
               {/* 소계 행 */}
-              <tr className="border-t border-slate-300 bg-slate-50 font-semibold text-xl">
-                <td className="py-4 pl-8 text-left">소계</td>
-                <td className="py-4 px-4 text-right text-slate-500">
+              <tr className="border-t border-slate-300 bg-slate-50 font-semibold text-2xl">
+                <td className="py-5 pl-8 text-left">소계</td>
+                <td className="py-5 px-4 text-right text-slate-500">
                   {formatCurrency(category.prev_executed)}
                 </td>
-                <td className="py-4 px-4 text-right">
+                <td className="py-5 px-4 text-right">
                   {formatCurrency(category.budget)}
                 </td>
-                <td className="py-4 px-4 text-right">
+                <td className="py-5 px-4 text-right">
                   {formatCurrency(category.executed)}
                 </td>
-                <td className="py-4 px-4 text-right">
+                <td className="py-5 px-4 text-right">
                   <Badge
                     variant={(category.syncRate ?? 0) > 100 ? "destructive" : "secondary"}
-                    className="w-24 justify-center text-base py-1.5"
+                    className="w-28 justify-center text-lg py-2"
                   >
                     {(category.syncRate ?? 0).toFixed(1)}%
                   </Badge>
@@ -293,7 +293,7 @@ function CategoryItem({
             </tbody>
           </table>
           {(category.syncRate ?? 0) > 100 && (
-            <div className="text-base text-red-600 mt-3 pl-8">
+            <div className="text-lg text-red-600 mt-3 pl-8">
               동기예산 초과: +{formatFullCurrency(Math.round(((category.syncRate ?? 0) - 100) * (category.budget ?? 0) / 100))}
             </div>
           )}
@@ -510,29 +510,29 @@ export default function BudgetExecutionPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <StatCard
               title="총 예산"
               value={formatCurrency(reportData.totalBudget)}
               rawValue={reportData.totalBudget}
-              icon={<DollarSign className="h-4 w-4" />}
+              icon={<DollarSign className="h-8 w-8" />}
             />
             <StatCard
               title="총 집행"
               value={formatCurrency(reportData.totalExecuted)}
               rawValue={reportData.totalExecuted}
-              icon={<TrendingUp className="h-4 w-4" />}
+              icon={<TrendingUp className="h-8 w-8" />}
             />
             <StatCard
               title="집행률"
               value={`${reportData.executionRate.toFixed(1)}%`}
-              icon={<Percent className="h-4 w-4" />}
+              icon={<Percent className="h-8 w-8" />}
               status={reportData.executionRate > 100 ? 'warning' : 'normal'}
             />
             <StatCard
               title="동기집행률"
               value={`${reportData.syncRate.toFixed(1)}%`}
-              icon={<AlertTriangle className="h-4 w-4" />}
+              icon={<AlertTriangle className="h-8 w-8" />}
               status={getStatus(reportData.syncRate)}
             />
           </div>
@@ -580,7 +580,7 @@ export default function BudgetExecutionPage() {
         </CardHeader>
         <CardContent>
           {viewMode === 'chart' ? (
-            <ResponsiveContainer width="100%" height={400}>
+            <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={yearlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" />

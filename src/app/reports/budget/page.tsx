@@ -171,16 +171,16 @@ function SubCategoryItem({
 }) {
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50">
-      <td className="py-3 pl-8 text-left text-base">
+      <td className="py-4 pl-8 text-left text-xl">
         {item.account_item}
       </td>
-      <td className="py-3 px-4 text-right text-base text-slate-500" title={formatFullCurrency(item.prev_executed)}>
+      <td className="py-4 px-4 text-right text-xl text-slate-500" title={formatFullCurrency(item.prev_executed)}>
         {formatCurrency(item.prev_executed)}
       </td>
-      <td className="py-3 px-4 text-right text-base" title={formatFullCurrency(item.budgeted)}>
+      <td className="py-4 px-4 text-right text-xl" title={formatFullCurrency(item.budgeted)}>
         {formatCurrency(item.budgeted)}
       </td>
-      <td className="py-3 px-4 text-right text-base font-medium">
+      <td className="py-4 px-4 text-right text-xl font-medium">
         <button
           type="button"
           onClick={() => onExecutedClick?.(item.account_code, item.account_item)}
@@ -190,8 +190,8 @@ function SubCategoryItem({
           {formatCurrency(item.executed)}
         </button>
       </td>
-      <td className="py-3 px-4 text-right">
-        <Badge variant={(item.syncRate ?? 0) > 100 ? "destructive" : "secondary"} className="w-20 justify-center text-sm py-1">
+      <td className="py-4 px-4 text-right">
+        <Badge variant={(item.syncRate ?? 0) > 100 ? "destructive" : "secondary"} className="w-24 justify-center text-base py-1.5">
           {(item.syncRate ?? 0).toFixed(1)}%
         </Badge>
       </td>
@@ -253,12 +253,12 @@ function CategoryItem({
         <div className="px-5 pb-5">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-slate-200 text-sm text-slate-500">
-                <th className="py-3 pl-8 text-left font-medium">항목명</th>
-                <th className="py-3 px-4 text-right font-medium w-28">{prevYear}집행</th>
-                <th className="py-3 px-4 text-right font-medium w-28">{currentYear}예산</th>
-                <th className="py-3 px-4 text-right font-medium w-28">{currentYear}집행</th>
-                <th className="py-3 px-4 text-right font-medium w-28">동기집행율</th>
+              <tr className="border-b border-slate-200 text-lg text-slate-500">
+                <th className="py-4 pl-8 text-left font-medium">항목명</th>
+                <th className="py-4 px-4 text-right font-medium w-32">{prevYear}집행</th>
+                <th className="py-4 px-4 text-right font-medium w-32">{currentYear}예산</th>
+                <th className="py-4 px-4 text-right font-medium w-32">{currentYear}집행</th>
+                <th className="py-4 px-4 text-right font-medium w-32">동기집행율</th>
               </tr>
             </thead>
             <tbody>
@@ -270,21 +270,21 @@ function CategoryItem({
                 />
               ))}
               {/* 소계 행 */}
-              <tr className="border-t border-slate-300 bg-slate-50 font-semibold text-base">
-                <td className="py-3 pl-8 text-left">소계</td>
-                <td className="py-3 px-4 text-right text-slate-500">
+              <tr className="border-t border-slate-300 bg-slate-50 font-semibold text-xl">
+                <td className="py-4 pl-8 text-left">소계</td>
+                <td className="py-4 px-4 text-right text-slate-500">
                   {formatCurrency(category.prev_executed)}
                 </td>
-                <td className="py-3 px-4 text-right">
+                <td className="py-4 px-4 text-right">
                   {formatCurrency(category.budget)}
                 </td>
-                <td className="py-3 px-4 text-right">
+                <td className="py-4 px-4 text-right">
                   {formatCurrency(category.executed)}
                 </td>
-                <td className="py-3 px-4 text-right">
+                <td className="py-4 px-4 text-right">
                   <Badge
                     variant={(category.syncRate ?? 0) > 100 ? "destructive" : "secondary"}
-                    className="w-20 justify-center text-sm py-1"
+                    className="w-24 justify-center text-base py-1.5"
                   >
                     {(category.syncRate ?? 0).toFixed(1)}%
                   </Badge>
@@ -293,7 +293,7 @@ function CategoryItem({
             </tbody>
           </table>
           {(category.syncRate ?? 0) > 100 && (
-            <div className="text-sm text-red-600 mt-3 pl-8">
+            <div className="text-base text-red-600 mt-3 pl-8">
               동기예산 초과: +{formatFullCurrency(Math.round(((category.syncRate ?? 0) - 100) * (category.budget ?? 0) / 100))}
             </div>
           )}

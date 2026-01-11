@@ -173,7 +173,7 @@ export default function BuildingPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<BuildingData | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [annualRepayment, setAnnualRepayment] = useState<number>(5000);
+  const [annualRepayment, setAnnualRepayment] = useState<number>(17000);
   const [flippedCards, setFlippedCards] = useState<{card1: boolean, card2: boolean}>({card1: false, card2: false});
 
   // 데이터 로드
@@ -500,9 +500,9 @@ export default function BuildingPage() {
               건축헌금/일반예산 vs 원금상환/이자지출
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <ResponsiveContainer width="100%" height={450}>
-              <BarChart data={recentChartData} barGap={8}>
+              <BarChart data={recentChartData} barGap={8} margin={{ top: 30, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" tick={{ fontSize: 14 }} />
                 <YAxis tickFormatter={(value) => `${value}억`} tick={{ fontSize: 14 }} />
@@ -555,14 +555,14 @@ export default function BuildingPage() {
                 value={[annualRepayment]}
                 onValueChange={(value) => setAnnualRepayment(value[0])}
                 min={1000}
-                max={20000}
+                max={30000}
                 step={500}
                 className="my-4"
               />
               <div className="flex justify-between text-muted-foreground">
                 <span className="text-xs">1천만원</span>
                 <span className="text-base font-bold">월 {formatCurrency(annualRepayment * 10000 / 12)}</span>
-                <span className="text-xs">2억원</span>
+                <span className="text-xs">3억원</span>
               </div>
             </div>
 
@@ -612,7 +612,7 @@ export default function BuildingPage() {
 
                 {/* 빠른 선택 버튼 */}
                 <div className="flex flex-wrap gap-2">
-                  {[3000, 5000, 8000, 10000, 15000].map(v => (
+                  {[3000, 5000, 8000, 10000, 17000].map(v => (
                     <Button
                       key={v}
                       variant={annualRepayment === v ? "default" : "outline"}

@@ -3,14 +3,12 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import {
   TrendingUp,
   TrendingDown,
   Wallet,
   Loader2,
 } from 'lucide-react';
-import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries';
 import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails, BudgetExecutionCard } from '@/components/dashboard';
@@ -178,44 +176,6 @@ function DashboardContent() {
         currentYear={stats?.currentYear || new Date().getFullYear()}
         isLoading={isLoading}
       />
-
-      {/* Quick Actions */}
-      <Card className="border-0 shadow-soft">
-        <CardContent className="p-4 md:p-6">
-          <h3 className="font-display text-[16px] md:text-[18px] font-semibold text-[#2C3E50] mb-4">
-            빠른 작업
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-            <Link href="/data-entry">
-              <Button
-                variant="outline"
-                className="w-full h-16 md:h-20 flex flex-col gap-1.5 md:gap-2 border-[#E8E4DE] hover:border-[#C9A962] hover:bg-[#F8F6F3]"
-              >
-                <span className="text-lg md:text-xl">📥</span>
-                <span className="text-[13px] md:text-[14px] text-[#2C3E50]">데이터 입력</span>
-              </Button>
-            </Link>
-            <Link href="/match">
-              <Button
-                variant="outline"
-                className="w-full h-16 md:h-20 flex flex-col gap-1.5 md:gap-2 border-[#E8E4DE] hover:border-[#C9A962] hover:bg-[#F8F6F3]"
-              >
-                <span className="text-lg md:text-xl">🔗</span>
-                <span className="text-[13px] md:text-[14px] text-[#2C3E50]">거래 매칭</span>
-              </Button>
-            </Link>
-            <Link href="/reports/weekly">
-              <Button
-                variant="outline"
-                className="w-full h-16 md:h-20 flex flex-col gap-1.5 md:gap-2 border-[#E8E4DE] hover:border-[#C9A962] hover:bg-[#F8F6F3]"
-              >
-                <span className="text-lg md:text-xl">📊</span>
-                <span className="text-[13px] md:text-[14px] text-[#2C3E50]">주간 보고서</span>
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Info Card */}
       <Card className="border-0 shadow-soft bg-[#F5EFE0]">

@@ -10,6 +10,7 @@ import {
   getIncomeCodes,
   getExpenseCodes,
 } from '@/lib/google-sheets';
+import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,11 +18,32 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const weekOffset = parseInt(searchParams.get('week') || '0');
     const debug = searchParams.get('debug') === 'true';
+    const noCache = searchParams.get('nocache') === 'true';
 
     // 현재 KST 시간
     const now = new Date();
     const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     const currentYear = kst.getFullYear();
+
+    // 캐시 조회 시도 (debug나 noCache가 아닐 때만)
+    if (!debug && !noCache && process.env.UPSTASH_REDIS_REST_URL) {
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redisClient = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+        });
+        const cacheKey = cacheKeys.dashboard(currentYear, weekOffset);
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          console.log(`[Cache HIT] ${cacheKey}`);
+          return NextResponse.json(cached);
+        }
+        console.log(`[Cache MISS] ${cacheKey}`);
+      } catch (e) {
+        console.error('[Redis GET Error]', e);
+      }
+    }
 
     // 이번 주 날짜 범위 계산 (월요일 ~ 일요일)
     const dayOfWeek = kst.getDay();
@@ -338,7 +360,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
+    const responseData = {
       weeklyIncome,
       weeklyExpense,
       balance,
@@ -358,7 +380,25 @@ export async function GET(request: NextRequest) {
       daysInYear,
       currentYear,
       weeklyData,
-    });
+    };
+
+    // 캐시에 저장 (noCache가 아닐 때만)
+    if (!noCache && process.env.UPSTASH_REDIS_REST_URL) {
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redisClient = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+        });
+        const cacheKey = cacheKeys.dashboard(currentYear, weekOffset);
+        await redisClient.set(cacheKey, responseData, { ex: CACHE_TTL.DASHBOARD });
+        console.log(`[Cache SET] ${cacheKey}`);
+      } catch (e) {
+        console.error('[Redis SET Error]', e);
+      }
+    }
+
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error('Dashboard stats error:', error);
     return NextResponse.json({

@@ -87,7 +87,7 @@ export function TransactionDetails({ type, summary, total }: TransactionDetailsP
         <div className="flex flex-col md:flex-row gap-4">
           {/* 좌측: 파이차트 */}
           <div className="flex-1 min-w-0">
-            <div className="h-[200px] md:h-[220px]">
+            <div className="h-[260px] md:h-[286px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -96,7 +96,7 @@ export function TransactionDetails({ type, summary, total }: TransactionDetailsP
                     nameKey="category"
                     cx="50%"
                     cy="50%"
-                    outerRadius={activeIndex !== null ? 65 : 70}
+                    outerRadius={activeIndex !== null ? 85 : 91}
                     label={({ name, percent }) =>
                       `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
                     }

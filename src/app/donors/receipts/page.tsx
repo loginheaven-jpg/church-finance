@@ -28,7 +28,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download, Plus, Split, Trash2, History } from 'lucide-react';
+import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download, Plus, Split, Trash2, History, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DonationReceipt, ManualReceiptHistory } from '@/types';
 import { downloadReceiptPdf } from '@/lib/receipt-pdf';
@@ -102,6 +102,11 @@ export default function DonationReceiptsPage() {
   const [historyData, setHistoryData] = useState<ManualReceiptHistory[]>([]);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
+  // 발행완료 상태
+  const [issuedRepresentatives, setIssuedRepresentatives] = useState<Set<string>>(new Set());
+  const [hideIssued, setHideIssued] = useState(false);
+  const [markingIssued, setMarkingIssued] = useState(false);
+
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString());
 
   const fetchReceipts = async () => {
@@ -119,6 +124,9 @@ export default function DonationReceiptsPage() {
         setSelectedReceipts(new Set());
         if (data.issueNumberInfo) {
           setIssueNumberInfo(data.issueNumberInfo);
+        }
+        if (data.issuedRepresentatives) {
+          setIssuedRepresentatives(new Set(data.issuedRepresentatives));
         }
       } else {
         toast.error(data.error);
@@ -187,6 +195,69 @@ export default function DonationReceiptsPage() {
     }
   }, [activeTab, year]);
 
+  // 발행완료 처리 (선택된 항목을 발행이력에 추가)
+  const handleMarkIssued = async () => {
+    if (selectedReceipts.size === 0) {
+      toast.error('발행완료 처리할 항목을 선택해주세요');
+      return;
+    }
+
+    setMarkingIssued(true);
+    let successCount = 0;
+    const failedItems: string[] = [];
+
+    try {
+      for (const rep of selectedReceipts) {
+        // 이미 발행완료된 항목은 건너뛰기
+        if (issuedRepresentatives.has(rep)) {
+          continue;
+        }
+
+        const receipt = receipts.find(r => r.representative === rep);
+        if (!receipt) continue;
+
+        const res = await fetch('/api/donors/receipts/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            year: parseInt(year),
+            representative: receipt.representative,
+            address: receipt.address || '',
+            resident_id: receipt.resident_id || '',
+            amount: receipt.total_amount,
+            issue_number: receipt.issue_number,
+            note: '일괄',
+          }),
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          successCount++;
+        } else {
+          failedItems.push(`${rep}: ${data.error}`);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount}건 발행완료 처리되었습니다`);
+        fetchReceipts(); // 새로고침하여 발행완료 상태 갱신
+      }
+      if (failedItems.length > 0) {
+        toast.error(`실패: ${failedItems.join(', ')}`);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('발행완료 처리 중 오류가 발생했습니다');
+    } finally {
+      setMarkingIssued(false);
+    }
+  };
+
+  // 발행완료 필터링된 영수증 목록
+  const filteredReceipts = hideIssued
+    ? receipts.filter(r => !issuedRepresentatives.has(r.representative))
+    : receipts;
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     fetchReceipts();
@@ -217,7 +288,7 @@ export default function DonationReceiptsPage() {
     window.open(printUrl, '_blank');
   };
 
-  // 일괄 PDF 다운로드
+  // 일괄 PDF 다운로드 (+ 발행이력 자동 추가)
   const handleBatchDownload = async () => {
     const selected = Array.from(selectedReceipts);
     if (selected.length === 0) return;
@@ -227,6 +298,7 @@ export default function DonationReceiptsPage() {
 
     let successCount = 0;
     let failCount = 0;
+    let historyAddedCount = 0;
 
     for (let i = 0; i < selected.length; i++) {
       const rep = selected[i];
@@ -238,6 +310,31 @@ export default function DonationReceiptsPage() {
         const success = await downloadReceiptPdf(receipt, year);
         if (success) {
           successCount++;
+
+          // 이미 발행완료된 항목이 아닌 경우에만 발행이력 추가
+          if (!issuedRepresentatives.has(rep)) {
+            try {
+              const res = await fetch('/api/donors/receipts/manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  year: parseInt(year),
+                  representative: receipt.representative,
+                  address: receipt.address || '',
+                  resident_id: receipt.resident_id || '',
+                  amount: receipt.total_amount,
+                  issue_number: receipt.issue_number,
+                  note: '일괄',
+                }),
+              });
+              const data = await res.json();
+              if (data.success) {
+                historyAddedCount++;
+              }
+            } catch (error) {
+              console.error('발행이력 추가 실패:', rep, error);
+            }
+          }
         } else {
           failCount++;
         }
@@ -255,12 +352,18 @@ export default function DonationReceiptsPage() {
     setDownloadProgress({ current: 0, total: 0 });
 
     if (failCount === 0) {
-      toast.success(`${successCount}개의 영수증 PDF가 다운로드되었습니다`);
+      const historyMsg = historyAddedCount > 0 ? ` (${historyAddedCount}건 이력 추가)` : '';
+      toast.success(`${successCount}개의 영수증 PDF가 다운로드되었습니다${historyMsg}`);
     } else {
       toast.warning(`${successCount}개 성공, ${failCount}개 실패`);
     }
 
     setSelectedReceipts(new Set());
+
+    // 발행이력이 추가되었으면 목록 새로고침
+    if (historyAddedCount > 0) {
+      fetchReceipts();
+    }
   };
 
   const formatAmount = (amount: number) => {
@@ -679,18 +782,40 @@ export default function DonationReceiptsPage() {
               </Select>
             </div>
             {activeTab === 'list' && (
-              <form onSubmit={handleSearch} className="flex gap-2 flex-1">
-                <Input
-                  placeholder="대표자명으로 검색"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="max-w-xs"
-                />
-                <Button type="submit" variant="outline">
-                  <Search className="mr-2 h-4 w-4" />
-                  검색
+              <>
+                <form onSubmit={handleSearch} className="flex gap-2">
+                  <Input
+                    placeholder="대표자명으로 검색"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="max-w-xs"
+                  />
+                  <Button type="submit" variant="outline">
+                    <Search className="mr-2 h-4 w-4" />
+                    검색
+                  </Button>
+                </form>
+                <Button
+                  variant="outline"
+                  onClick={handleMarkIssued}
+                  disabled={markingIssued || selectedReceipts.size === 0}
+                  className="text-green-600 border-green-300 hover:bg-green-50"
+                >
+                  {markingIssued ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                  )}
+                  발행완료
                 </Button>
-              </form>
+                <label className="flex items-center gap-2 ml-auto cursor-pointer text-sm text-slate-600">
+                  <Checkbox
+                    checked={hideIssued}
+                    onCheckedChange={(checked) => setHideIssued(checked === true)}
+                  />
+                  발행완료 제외
+                </label>
+              </>
             )}
             {activeTab === 'history' && (
               <Button variant="outline" onClick={fetchHistory} className="ml-auto">
@@ -704,10 +829,14 @@ export default function DonationReceiptsPage() {
           {activeTab === 'list' && (
             <>
               {/* 요약 */}
-          <div className="grid grid-cols-2 gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
+          <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
             <div>
               <div className="text-sm text-slate-500">총 대표자 수</div>
               <div className="text-2xl font-bold">{summary.totalRepresentatives}명</div>
+            </div>
+            <div>
+              <div className="text-sm text-slate-500">발행완료</div>
+              <div className="text-2xl font-bold text-green-600">{issuedRepresentatives.size}명</div>
             </div>
             <div>
               <div className="text-sm text-slate-500">총 헌금액</div>
@@ -755,7 +884,7 @@ export default function DonationReceiptsPage() {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
             </div>
-          ) : receipts.length === 0 ? (
+          ) : filteredReceipts.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
               {year}년 헌금 내역이 없습니다
             </div>
@@ -766,7 +895,7 @@ export default function DonationReceiptsPage() {
                   <TableRow>
                     <TableHead className="w-12">
                       <Checkbox
-                        checked={selectedReceipts.size === receipts.length}
+                        checked={selectedReceipts.size === filteredReceipts.length && filteredReceipts.length > 0}
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
@@ -774,11 +903,12 @@ export default function DonationReceiptsPage() {
                     <TableHead>대표자명</TableHead>
                     <TableHead className="text-center">헌금 횟수</TableHead>
                     <TableHead className="text-right">총액</TableHead>
+                    <TableHead className="w-16 text-center">발행</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {receipts.map((receipt) => (
+                  {filteredReceipts.map((receipt) => (
                     <TableRow key={receipt.representative}>
                       <TableCell>
                         <Checkbox
@@ -797,6 +927,11 @@ export default function DonationReceiptsPage() {
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatAmount(receipt.total_amount)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {issuedRepresentatives.has(receipt.representative) && (
+                          <CheckCircle className="h-5 w-5 text-green-500 mx-auto" />
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">

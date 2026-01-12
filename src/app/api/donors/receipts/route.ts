@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getIncomeRecords, getDonorInfo, getIncomeCodes, getAllIssueNumbers } from '@/lib/google-sheets';
+import { getIncomeRecords, getDonorInfo, getIncomeCodes, getAllIssueNumbers, getManualReceiptHistory } from '@/lib/google-sheets';
 import { getMembersByNames } from '@/lib/supabase';
 import type { DonationReceipt } from '@/types';
 
@@ -121,6 +121,10 @@ export async function GET(request: NextRequest) {
     // 수작업 발급 이력에서 사용된 발급번호 조회
     const manualIssueNumbers = await getAllIssueNumbers(year);
 
+    // 발행이력에서 발행완료 대표자 목록 조회 (대표자명 기준)
+    const history = await getManualReceiptHistory(year);
+    const issuedRepresentatives = [...new Set(history.map(h => h.representative))];
+
     // 자동 발급번호 + 수작업 발급번호
     const allIssueNumbers = [
       ...receipts.map(r => r.issue_number),
@@ -147,6 +151,7 @@ export async function GET(request: NextRequest) {
         nextIssueNumber,
         lastAutoNumber: receipts[receipts.length - 1]?.issue_number || null,
       },
+      issuedRepresentatives,
     });
   } catch (error) {
     console.error('Get receipts error:', error);

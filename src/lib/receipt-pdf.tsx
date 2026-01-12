@@ -9,6 +9,7 @@ import {
   pdf,
 } from '@react-pdf/renderer';
 import type { DonationReceipt } from '@/types';
+import { getDisplayName } from '@/lib/utils';
 
 // 한글 폰트 등록 (CDN - Noto Sans KR woff 포맷)
 // 모듈 로드 시점에 동기적으로 등록 (TCI 프로젝트 검증된 방식)
@@ -206,7 +207,7 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
                 <Text>성 명</Text>
               </View>
               <View style={[styles.tableCell, { width: '30%' }]}>
-                <Text>{receipt.representative}</Text>
+                <Text>{getDisplayName(receipt.representative)}</Text>
               </View>
               <View style={[styles.tableHeaderCell, { width: '14%' }]}>
                 <Text>주민등록번호</Text>
@@ -317,7 +318,7 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
         {/* 신청인 및 발급일 */}
         <View style={styles.signatureSection}>
           <Text style={styles.applicantRow}>
-            신 청 인 : <Text style={styles.applicantName}>{receipt.representative}</Text>
+            신 청 인 : <Text style={styles.applicantName}>{getDisplayName(receipt.representative)}</Text>
           </Text>
           <Text style={styles.certifyText}>
             위와 같이 기부금을 기부받았음을 증명합니다.
@@ -361,7 +362,7 @@ export async function downloadReceiptPdf(
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${receipt.representative}님${year}기부금영수증_예봄교회.pdf`;
+    link.download = `${getDisplayName(receipt.representative)}님${year}기부금영수증_예봄교회.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

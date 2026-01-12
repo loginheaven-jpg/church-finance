@@ -375,7 +375,7 @@ export default function DonationReceiptsPage() {
         address: manualForm.address,
         resident_id: manualForm.resident_id,
         total_amount: parseAmount(manualForm.amount),
-        issue_number: saveData.issue_number,
+        issue_number: saveData.data?.issue_number || manualForm.issue_number,
         donors: [],
         donations: [],
       };
@@ -492,14 +492,14 @@ export default function DonationReceiptsPage() {
           continue;
         }
 
-        // PDF 다운로드
+        // PDF 다운로드 (API 응답 또는 입력값 사용)
         const receipt: DonationReceipt = {
           year: parseInt(year),
           representative: recipient.name,
           address: recipient.address,
           resident_id: recipient.resident_id,
           total_amount: parseAmount(recipient.amount),
-          issue_number: saveData.issue_number,
+          issue_number: saveData.data?.issue_number || recipient.issue_number,
           donors: [],
           donations: [],
         };
@@ -923,12 +923,34 @@ export default function DonationReceiptsPage() {
 
           {splitSource && (
             <div className="space-y-4">
-              {/* 원본 정보 */}
-              <div className="p-3 bg-slate-100 rounded-lg">
-                <div className="text-sm text-slate-500">원본</div>
-                <div className="font-medium">
-                  {splitSource.representative} ({splitSource.issue_number}) -{' '}
-                  {formatAmount(splitSource.total_amount)}
+              {/* 원본 정보 + 버튼 */}
+              <div className="p-3 bg-slate-100 rounded-lg flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-slate-500">원본</div>
+                  <div className="font-medium">
+                    {splitSource.representative} ({splitSource.issue_number}) -{' '}
+                    {formatAmount(splitSource.total_amount)}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowSplitDialog(false)}>
+                    취소
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSplitIssue}
+                    disabled={
+                      splitLoading ||
+                      splitRecipients.reduce((sum, r) => sum + parseAmount(r.amount), 0) !==
+                        splitSource.total_amount
+                    }
+                  >
+                    {splitLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      '발행'
+                    )}
+                  </Button>
                 </div>
               </div>
 
@@ -1129,26 +1151,6 @@ export default function DonationReceiptsPage() {
                 )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={() => setShowSplitDialog(false)}>
-                  취소
-                </Button>
-                <Button
-                  onClick={handleSplitIssue}
-                  disabled={
-                    splitLoading ||
-                    splitRecipients.reduce((sum, r) => sum + parseAmount(r.amount), 0) !==
-                      splitSource.total_amount
-                  }
-                >
-                  {splitLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Split className="mr-2 h-4 w-4" />
-                  )}
-                  분할 발행 및 PDF 저장
-                </Button>
-              </div>
             </div>
           )}
         </DialogContent>

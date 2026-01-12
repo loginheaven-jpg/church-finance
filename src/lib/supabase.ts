@@ -43,7 +43,7 @@ export async function getMemberByName(name: string): Promise<MemberInfo | null> 
     .from('members')
     .select('name, address, resident_id')
     .eq('name', name)
-    .eq('status', '재적')
+    .in('status', ['재적', '휴적'])
     .single();
 
   if (error || !data) {
@@ -52,7 +52,7 @@ export async function getMemberByName(name: string): Promise<MemberInfo | null> 
       .from('members')
       .select('name, address, resident_id')
       .ilike('name', `%${name}%`)
-      .eq('status', '재적')
+      .in('status', ['재적', '휴적'])
       .limit(1)
       .single();
 
@@ -78,7 +78,7 @@ export async function getMembersByNames(names: string[]): Promise<Map<string, Me
     .from('members')
     .select('name, address, resident_id')
     .in('name', names)
-    .eq('status', '재적');
+    .in('status', ['재적', '휴적']);
 
   if (!error && data) {
     for (const member of data) {

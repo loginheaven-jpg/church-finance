@@ -280,10 +280,10 @@ export default function DonationReceiptsPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedReceipts.size === receipts.length) {
+    if (selectedReceipts.size === filteredReceipts.length && filteredReceipts.length > 0) {
       setSelectedReceipts(new Set());
     } else {
-      setSelectedReceipts(new Set(receipts.map((r) => r.representative)));
+      setSelectedReceipts(new Set(filteredReceipts.map((r) => r.representative)));
     }
   };
 

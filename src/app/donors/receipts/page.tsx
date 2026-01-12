@@ -468,6 +468,9 @@ export default function DonationReceiptsPage() {
     }
 
     setSplitLoading(true);
+    let hasError = false;
+    const failedRecipients: string[] = [];
+
     try {
       for (const recipient of splitRecipients) {
         // 발급 이력 저장
@@ -488,7 +491,8 @@ export default function DonationReceiptsPage() {
 
         const saveData = await saveRes.json();
         if (!saveData.success) {
-          toast.error(`${recipient.name} 저장 실패: ${saveData.error}`);
+          hasError = true;
+          failedRecipients.push(`${recipient.name}: ${saveData.error}`);
           continue;
         }
 
@@ -508,9 +512,15 @@ export default function DonationReceiptsPage() {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      toast.success('분할 발행이 완료되었습니다');
-      setShowSplitDialog(false);
-      fetchReceipts();
+      if (hasError) {
+        // 에러가 있으면 다이얼로그 유지
+        toast.error(`발행 실패: ${failedRecipients.join(', ')}`);
+      } else {
+        // 모두 성공하면 다이얼로그 닫기
+        toast.success('분할 발행이 완료되었습니다');
+        setShowSplitDialog(false);
+        fetchReceipts();
+      }
     } catch (error) {
       console.error(error);
       toast.error('분할 발행 중 오류가 발생했습니다');

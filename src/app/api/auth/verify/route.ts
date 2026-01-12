@@ -22,8 +22,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 사용자 조회 (finance_role 컬럼이 있으면 포함, 없으면 permission_level로 대체)
-    const { data: user, error: queryError } = await supabaseAdmin
+    // 사용자 조회 - finance_role 컬럼 유무에 따라 처리
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let user: any = null;
+
+    // 먼저 finance_role 포함하여 조회 시도
+    const { data: userData, error: queryError } = await supabaseAdmin
       .from('users')
       .select('user_id, email, password_hash, name, member_id, permission_level, finance_role, is_approved')
       .eq('email', email.toLowerCase().trim())
@@ -31,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     if (queryError) {
       // finance_role 컬럼이 없어서 발생한 에러인지 확인
-      if (queryError.message?.includes('finance_role')) {
+      if (queryError.message?.includes('finance_role') || queryError.code === 'PGRST204') {
         // finance_role 없이 다시 조회
         const { data: userWithoutFinanceRole, error: retryError } = await supabaseAdmin
           .from('users')
@@ -46,9 +50,14 @@ export async function POST(request: NextRequest) {
             { status: 401 }
           );
         }
-        // finance_role이 없는 경우 처리
-        (userWithoutFinanceRole as any).finance_role = null;
-        Object.assign(user || {}, userWithoutFinanceRole);
+        // finance_role이 없으므로 null로 설정
+        user = { ...userWithoutFinanceRole, finance_role: null };
+      } else if (queryError.code === 'PGRST116') {
+        // 사용자를 찾지 못함
+        return NextResponse.json(
+          { success: false, error: '등록되지 않은 이메일입니다' },
+          { status: 401 }
+        );
       } else {
         console.error('User query error:', queryError);
         return NextResponse.json(
@@ -56,6 +65,8 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
+    } else {
+      user = userData;
     }
 
     if (!user) {

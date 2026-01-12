@@ -22,7 +22,7 @@ if (supabaseUrl && supabaseServiceKey) {
   });
 }
 
-export { supabaseAdmin };
+export { supabase, supabaseAdmin };
 
 // 교인 정보 타입
 export interface MemberInfo {

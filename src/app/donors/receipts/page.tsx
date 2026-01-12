@@ -28,10 +28,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download, Plus, Split } from 'lucide-react';
+import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download, Plus, Split, Trash2, History } from 'lucide-react';
 import { toast } from 'sonner';
-import type { DonationReceipt } from '@/types';
+import type { DonationReceipt, ManualReceiptHistory } from '@/types';
 import { downloadReceiptPdf } from '@/lib/receipt-pdf';
+
+// 탭 타입
+type TabType = 'list' | 'history';
 
 // 수작업 발행 폼 타입
 interface ManualForm {
@@ -91,6 +94,14 @@ export default function DonationReceiptsPage() {
     nextIssueNumber: string;
   }>({ existingNumbers: [], nextIssueNumber: '' });
 
+  // 탭 상태
+  const [activeTab, setActiveTab] = useState<TabType>('list');
+
+  // 발행이력 상태
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyData, setHistoryData] = useState<ManualReceiptHistory[]>([]);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString());
 
   const fetchReceipts = async () => {
@@ -123,6 +134,58 @@ export default function DonationReceiptsPage() {
   useEffect(() => {
     fetchReceipts();
   }, [year]);
+
+  // 발행이력 조회
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/donors/receipts/manual?year=${year}&mode=history`);
+      const data = await res.json();
+      if (data.success) {
+        setHistoryData(data.data || []);
+      } else {
+        toast.error(data.error || '발행이력 조회 실패');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('발행이력을 불러오는 중 오류가 발생했습니다');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // 발행이력 삭제
+  const handleDeleteHistory = async (issueNumber: string) => {
+    if (!confirm(`발급번호 ${issueNumber}을(를) 삭제하시겠습니까?\n삭제 후 같은 번호로 다시 발행할 수 있습니다.`)) {
+      return;
+    }
+
+    setDeleteLoading(issueNumber);
+    try {
+      const res = await fetch(`/api/donors/receipts/manual?year=${year}&issue_number=${encodeURIComponent(issueNumber)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('삭제되었습니다');
+        fetchHistory();
+      } else {
+        toast.error(data.error || '삭제 실패');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('삭제 중 오류가 발생했습니다');
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
+
+  // 탭 변경 시 데이터 로드
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetchHistory();
+    }
+  }, [activeTab, year]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -561,16 +624,45 @@ export default function DonationReceiptsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            연말정산용 기부금영수증
-          </CardTitle>
-          <CardDescription>
-            대표자별 헌금 내역을 확인하고 PDF 영수증을 발급합니다
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                연말정산용 기부금영수증
+              </CardTitle>
+              <CardDescription>
+                대표자별 헌금 내역을 확인하고 PDF 영수증을 발급합니다
+              </CardDescription>
+            </div>
+          </div>
+          {/* 탭 */}
+          <div className="flex gap-1 mt-4 border-b">
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'list'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <FileText className="h-4 w-4 inline-block mr-1.5 -mt-0.5" />
+              영수증 목록
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'history'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <History className="h-4 w-4 inline-block mr-1.5 -mt-0.5" />
+              발행이력 ({historyData.length})
+            </button>
+          </div>
         </CardHeader>
         <CardContent>
-          {/* 필터 */}
+          {/* 연도 선택 - 공통 */}
           <div className="flex gap-4 mb-6">
             <div className="w-32">
               <Select value={year} onValueChange={setYear}>
@@ -586,21 +678,32 @@ export default function DonationReceiptsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <form onSubmit={handleSearch} className="flex gap-2 flex-1">
-              <Input
-                placeholder="대표자명으로 검색"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="max-w-xs"
-              />
-              <Button type="submit" variant="outline">
-                <Search className="mr-2 h-4 w-4" />
-                검색
+            {activeTab === 'list' && (
+              <form onSubmit={handleSearch} className="flex gap-2 flex-1">
+                <Input
+                  placeholder="대표자명으로 검색"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="max-w-xs"
+                />
+                <Button type="submit" variant="outline">
+                  <Search className="mr-2 h-4 w-4" />
+                  검색
+                </Button>
+              </form>
+            )}
+            {activeTab === 'history' && (
+              <Button variant="outline" onClick={fetchHistory} className="ml-auto">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                새로고침
               </Button>
-            </form>
+            )}
           </div>
 
-          {/* 요약 */}
+          {/* 영수증 목록 탭 */}
+          {activeTab === 'list' && (
+            <>
+              {/* 요약 */}
           <div className="grid grid-cols-2 gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
             <div>
               <div className="text-sm text-slate-500">총 대표자 수</div>
@@ -717,6 +820,72 @@ export default function DonationReceiptsPage() {
                   ))}
                 </TableBody>
               </Table>
+            </>
+          )}
+            </>
+          )}
+
+          {/* 발행이력 탭 */}
+          {activeTab === 'history' && (
+            <>
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                </div>
+              ) : historyData.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  {year}년 발행이력이 없습니다
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-28">발급번호</TableHead>
+                      <TableHead>대표자</TableHead>
+                      <TableHead className="text-right">금액</TableHead>
+                      <TableHead className="w-40">발급일시</TableHead>
+                      <TableHead className="w-20 text-center">구분</TableHead>
+                      <TableHead className="w-28">원본번호</TableHead>
+                      <TableHead className="w-20"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {historyData.map((item) => (
+                      <TableRow key={item.issue_number}>
+                        <TableCell className="font-mono text-sm">{item.issue_number}</TableCell>
+                        <TableCell className="font-medium">{item.representative}</TableCell>
+                        <TableCell className="text-right">{formatAmount(item.amount)}</TableCell>
+                        <TableCell className="text-sm text-slate-500">{item.issued_at}</TableCell>
+                        <TableCell className="text-center">
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${
+                            item.note === '분할' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {item.note || '수작업'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm text-slate-500">
+                          {item.original_issue_number || '-'}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDeleteHistory(item.issue_number)}
+                            disabled={deleteLoading === item.issue_number}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          >
+                            {deleteLoading === item.issue_number ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </>
           )}
         </CardContent>

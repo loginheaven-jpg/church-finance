@@ -3,6 +3,8 @@ import {
   addManualReceiptHistory,
   getAllIssueNumbers,
   getKSTDateTime,
+  getManualReceiptHistory,
+  deleteManualReceiptHistory,
 } from '@/lib/google-sheets';
 import type { ManualReceiptHistory } from '@/types';
 
@@ -94,6 +96,16 @@ export async function GET(request: NextRequest) {
       nextIssueNumber = `${yearPrefix}${String(maxSeq + 1).padStart(3, '0')}`;
     }
 
+    // mode=history인 경우 발행이력 반환
+    const mode = searchParams.get('mode');
+    if (mode === 'history') {
+      const history = await getManualReceiptHistory(year);
+      return NextResponse.json({
+        success: true,
+        data: history,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -106,6 +118,43 @@ export async function GET(request: NextRequest) {
     console.error('Issue number query error:', error);
     return NextResponse.json(
       { success: false, error: '발급번호 조회 중 오류가 발생했습니다' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: 발행이력 삭제
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const yearParam = searchParams.get('year');
+    const issueNumber = searchParams.get('issue_number');
+
+    if (!yearParam || !issueNumber) {
+      return NextResponse.json(
+        { success: false, error: '연도와 발급번호가 필요합니다' },
+        { status: 400 }
+      );
+    }
+
+    const year = parseInt(yearParam);
+    const deleted = await deleteManualReceiptHistory(year, issueNumber);
+
+    if (!deleted) {
+      return NextResponse.json(
+        { success: false, error: '해당 발급번호를 찾을 수 없습니다' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `발급번호 ${issueNumber} 삭제 완료`,
+    });
+  } catch (error) {
+    console.error('Delete receipt history error:', error);
+    return NextResponse.json(
+      { success: false, error: '삭제 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }

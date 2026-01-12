@@ -859,6 +859,72 @@ export async function getAllIssueNumbers(year: number): Promise<string[]> {
   return issueNumbers;
 }
 
+export async function deleteManualReceiptHistory(
+  year: number,
+  issueNumber: string
+): Promise<boolean> {
+  const sheets = getGoogleSheetsClient();
+
+  // 시트 ID 조회
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+
+  const sheet = spreadsheet.data.sheets?.find(
+    (s) => s.properties?.title === FINANCE_CONFIG.sheets.manualReceipts
+  );
+
+  if (!sheet?.properties?.sheetId) {
+    throw new Error('수작업발급이력 시트를 찾을 수 없습니다');
+  }
+
+  // 데이터 읽기
+  const rows = await readSheet(FINANCE_CONFIG.sheets.manualReceipts);
+  if (rows.length < 2) return false;
+
+  // 헤더에서 인덱스 찾기
+  const headers = rows[0];
+  const yearIdx = headers.indexOf('year');
+  const issueNumIdx = headers.indexOf('issue_number');
+
+  // 해당 행 찾기 (1부터 시작, 0은 헤더)
+  let targetRowIndex = -1;
+  for (let i = 1; i < rows.length; i++) {
+    if (
+      String(rows[i][yearIdx]) === String(year) &&
+      rows[i][issueNumIdx] === issueNumber
+    ) {
+      targetRowIndex = i;
+      break;
+    }
+  }
+
+  if (targetRowIndex === -1) {
+    return false;
+  }
+
+  // 행 삭제 (targetRowIndex는 rows 배열의 인덱스이며, 이미 헤더 포함)
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId: sheet.properties.sheetId,
+              dimension: 'ROWS',
+              startIndex: targetRowIndex,
+              endIndex: targetRowIndex + 1,
+            },
+          },
+        },
+      ],
+    },
+  });
+
+  return true;
+}
+
 // ============================================
 // 시트 초기화
 // ============================================

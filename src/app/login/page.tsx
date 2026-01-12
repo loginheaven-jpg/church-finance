@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { LogIn, UserPlus, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -43,8 +41,8 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (data.success) {
-        router.push('/dashboard');
-        router.refresh();
+        // 전체 페이지 새로고침으로 세션 상태 완전 반영
+        window.location.href = '/dashboard';
       } else {
         setError(data.error || '로그인에 실패했습니다');
         setFormData({ ...formData, password: '' });

@@ -43,7 +43,6 @@ export async function getMemberByName(name: string): Promise<MemberInfo | null> 
     .from('members')
     .select('name, address, resident_id')
     .eq('name', name)
-    .in('status', ['재적', '휴적'])
     .single();
 
   if (error || !data) {
@@ -52,7 +51,6 @@ export async function getMemberByName(name: string): Promise<MemberInfo | null> 
       .from('members')
       .select('name, address, resident_id')
       .ilike('name', `%${name}%`)
-      .in('status', ['재적', '휴적'])
       .limit(1)
       .single();
 
@@ -77,8 +75,7 @@ export async function getMembersByNames(names: string[]): Promise<Map<string, Me
   const { data, error } = await supabase
     .from('members')
     .select('name, address, resident_id')
-    .in('name', names)
-    .in('status', ['재적', '휴적']);
+    .in('name', names);
 
   if (!error && data) {
     for (const member of data) {

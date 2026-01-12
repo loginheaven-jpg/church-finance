@@ -101,6 +101,8 @@ export default function DonationReceiptsPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyData, setHistoryData] = useState<ManualReceiptHistory[]>([]);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [selectedHistory, setSelectedHistory] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // 발행완료 상태
   const [issuedRepresentatives, setIssuedRepresentatives] = useState<Set<string>>(new Set());
@@ -187,6 +189,67 @@ export default function DonationReceiptsPage() {
     } finally {
       setDeleteLoading(null);
     }
+  };
+
+  // 발행이력 선택 토글
+  const toggleHistorySelect = (issueNumber: string) => {
+    const newSelected = new Set(selectedHistory);
+    if (newSelected.has(issueNumber)) {
+      newSelected.delete(issueNumber);
+    } else {
+      newSelected.add(issueNumber);
+    }
+    setSelectedHistory(newSelected);
+  };
+
+  // 발행이력 전체선택 토글
+  const toggleHistorySelectAll = () => {
+    if (selectedHistory.size === historyData.length && historyData.length > 0) {
+      setSelectedHistory(new Set());
+    } else {
+      setSelectedHistory(new Set(historyData.map((h) => h.issue_number)));
+    }
+  };
+
+  // 발행이력 일괄삭제
+  const handleBulkDeleteHistory = async () => {
+    if (selectedHistory.size === 0) return;
+
+    if (!confirm(`${selectedHistory.size}건의 발행이력을 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    setBulkDeleting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const issueNumber of selectedHistory) {
+      try {
+        const res = await fetch(`/api/donors/receipts/manual?year=${year}&issue_number=${encodeURIComponent(issueNumber)}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (data.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch {
+        failCount++;
+      }
+    }
+
+    setBulkDeleting(false);
+    setSelectedHistory(new Set());
+
+    if (failCount === 0) {
+      toast.success(`${successCount}건 삭제되었습니다`);
+    } else {
+      toast.warning(`${successCount}건 성공, ${failCount}건 실패`);
+    }
+
+    fetchHistory();
+    fetchReceipts(); // 발행완료 상태도 갱신
   };
 
   // 탭 변경 시 데이터 로드
@@ -831,10 +894,26 @@ export default function DonationReceiptsPage() {
               </>
             )}
             {activeTab === 'history' && (
-              <Button variant="outline" onClick={fetchHistory} className="ml-auto">
-                <RefreshCw className="mr-2 h-4 w-4" />
-                새로고침
-              </Button>
+              <div className="flex gap-2 ml-auto">
+                {selectedHistory.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    onClick={handleBulkDeleteHistory}
+                    disabled={bulkDeleting}
+                  >
+                    {bulkDeleting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-2 h-4 w-4" />
+                    )}
+                    {selectedHistory.size}건 삭제
+                  </Button>
+                )}
+                <Button variant="outline" onClick={fetchHistory}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  새로고침
+                </Button>
+              </div>
             )}
           </div>
 
@@ -994,6 +1073,12 @@ export default function DonationReceiptsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedHistory.size === historyData.length && historyData.length > 0}
+                          onCheckedChange={toggleHistorySelectAll}
+                        />
+                      </TableHead>
                       <TableHead className="w-28">발급번호</TableHead>
                       <TableHead>대표자</TableHead>
                       <TableHead className="text-right">금액</TableHead>
@@ -1006,6 +1091,12 @@ export default function DonationReceiptsPage() {
                   <TableBody>
                     {historyData.map((item) => (
                       <TableRow key={item.issue_number}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedHistory.has(item.issue_number)}
+                            onCheckedChange={() => toggleHistorySelect(item.issue_number)}
+                          />
+                        </TableCell>
                         <TableCell className="font-mono text-sm">{item.issue_number}</TableCell>
                         <TableCell className="font-medium">{item.representative}</TableCell>
                         <TableCell className="text-right">{formatAmount(item.amount)}</TableCell>

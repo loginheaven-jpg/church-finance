@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Printer, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import type { DonationReceipt } from '@/types';
+import { getDisplayName } from '@/lib/utils';
 
 function PrintContent() {
   const searchParams = useSearchParams();
@@ -48,7 +49,7 @@ function PrintContent() {
   // PDF 파일명 설정: 이름님연도기부금영수증_예봄교회.pdf
   useEffect(() => {
     if (receipt) {
-      document.title = `${receipt.representative}님${year}기부금영수증_예봄교회`;
+      document.title = `${getDisplayName(receipt.representative)}님${year}기부금영수증_예봄교회`;
     }
     return () => {
       document.title = '예봄교회 재정부';
@@ -153,7 +154,7 @@ function PrintContent() {
             <tbody>
               <tr>
                 <th style={{ width: '15%' }}>성 명</th>
-                <td style={{ width: '35%' }}>{receipt.representative}</td>
+                <td style={{ width: '35%' }}>{getDisplayName(receipt.representative)}</td>
                 <th style={{ width: '15%' }}>주민등록번호</th>
                 <td style={{ width: '35%' }} className="font-mono">
                   {receipt.resident_id
@@ -236,7 +237,7 @@ function PrintContent() {
         {/* 신청인 및 발급일 */}
         <div className="mb-4">
           <p className="text-center text-lg mb-4">
-            신 청 인 : <span className="font-bold underline px-4">{receipt.representative}</span>
+            신 청 인 : <span className="font-bold underline px-4">{getDisplayName(receipt.representative)}</span>
           </p>
           <p className="text-center mb-4">
             위와 같이 기부금을 기부받았음을 증명합니다.

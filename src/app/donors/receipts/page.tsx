@@ -32,6 +32,7 @@ import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download, Plus, Spl
 import { toast } from 'sonner';
 import type { DonationReceipt, ManualReceiptHistory } from '@/types';
 import { downloadReceiptPdf } from '@/lib/receipt-pdf';
+import { getDisplayName } from '@/lib/utils';
 
 // 탭 타입
 type TabType = 'list' | 'history';
@@ -1142,7 +1143,7 @@ export default function DonationReceiptsPage() {
           <DialogHeader>
             <DialogTitle>기부금영수증 미리보기</DialogTitle>
             <DialogDescription>
-              발급번호: {previewReceipt?.issue_number} | {previewReceipt?.representative} - {year}년
+              발급번호: {previewReceipt?.issue_number} | {previewReceipt?.representative ? getDisplayName(previewReceipt.representative) : ''} - {year}년
             </DialogDescription>
           </DialogHeader>
 
@@ -1155,7 +1156,7 @@ export default function DonationReceiptsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex">
                       <span className="w-24 text-slate-500">성명</span>
-                      <span className="font-medium">{previewReceipt.representative}</span>
+                      <span className="font-medium">{getDisplayName(previewReceipt.representative)}</span>
                     </div>
                     <div className="flex">
                       <span className="w-24 text-slate-500">주민번호</span>

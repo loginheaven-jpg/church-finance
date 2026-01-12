@@ -54,7 +54,8 @@ interface SplitRecipient {
 export default function DonationReceiptsPage() {
   const [loading, setLoading] = useState(false);
   const [receipts, setReceipts] = useState<DonationReceipt[]>([]);
-  const [year, setYear] = useState(new Date().getFullYear().toString());
+  // 기부금 영수증은 항상 전년도 실적으로 발행하므로 작년을 기본값으로 설정
+  const [year, setYear] = useState((new Date().getFullYear() - 1).toString());
   const [search, setSearch] = useState('');
   const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
   const [previewReceipt, setPreviewReceipt] = useState<DonationReceipt | null>(null);
@@ -82,6 +83,7 @@ export default function DonationReceiptsPage() {
     { name: '', address: '', resident_id: '', amount: '', issue_number: '' },
   ]);
   const [splitLoading, setSplitLoading] = useState(false);
+  const [splitPercentage, setSplitPercentage] = useState<string>(''); // 수령인1의 비율 (%)
 
   // 발급번호 정보
   const [issueNumberInfo, setIssueNumberInfo] = useState<{
@@ -211,6 +213,51 @@ export default function DonationReceiptsPage() {
   const formatAmountInput = (value: string): string => {
     const num = parseAmount(value);
     return num > 0 ? num.toLocaleString('ko-KR') : '';
+  };
+
+  // 비율 기반 금액 계산 (수령인1 비율 입력 시)
+  const handlePercentageChange = (percentStr: string) => {
+    const percent = parseInt(percentStr.replace(/[^0-9]/g, '')) || 0;
+    if (percent < 0 || percent > 100) return;
+
+    setSplitPercentage(percentStr);
+
+    if (splitSource && percent > 0) {
+      const total = splitSource.total_amount;
+      const amount1 = Math.round(total * percent / 100);
+      const amount2 = total - amount1; // 잔액은 수령인2에게
+
+      setSplitRecipients((prev) => [
+        { ...prev[0], amount: formatAmountInput(amount1.toString()) },
+        { ...prev[1], amount: formatAmountInput(amount2.toString()) },
+      ]);
+    }
+  };
+
+  // 수령인1 금액 변경 시 수령인2 자동 잔액 계산
+  const handleSplitAmount1Change = (value: string) => {
+    const amount1 = parseAmount(value);
+
+    setSplitRecipients((prev) => {
+      const updated = [...prev];
+      updated[0] = { ...updated[0], amount: formatAmountInput(value) };
+
+      // 수령인2의 금액을 자동으로 잔액으로 설정
+      if (splitSource) {
+        const amount2 = Math.max(0, splitSource.total_amount - amount1);
+        updated[1] = { ...updated[1], amount: formatAmountInput(amount2.toString()) };
+      }
+
+      return updated;
+    });
+
+    // 비율도 역계산하여 업데이트
+    if (splitSource && amount1 > 0) {
+      const percent = Math.round((amount1 / splitSource.total_amount) * 100);
+      setSplitPercentage(percent.toString());
+    } else {
+      setSplitPercentage('');
+    }
   };
 
   // 교인 정보 조회
@@ -352,6 +399,7 @@ export default function DonationReceiptsPage() {
   // 분할 발행 다이얼로그 열기
   const openSplitDialog = async (receipt: DonationReceipt) => {
     setSplitSource(receipt);
+    setSplitPercentage(''); // 비율 초기화
 
     // 분할 발급번호 조회
     try {
@@ -362,9 +410,10 @@ export default function DonationReceiptsPage() {
       if (data.success) {
         setSplitRecipients([
           {
-            name: '',
-            address: '',
-            resident_id: '',
+            // 수령인1: 원본 수령인 정보 자동 입력
+            name: receipt.representative,
+            address: receipt.address || '',
+            resident_id: receipt.resident_id || '',
             amount: '',
             issue_number: data.nextIssueNumber,
           },
@@ -380,7 +429,14 @@ export default function DonationReceiptsPage() {
     } catch (error) {
       console.error(error);
       setSplitRecipients([
-        { name: '', address: '', resident_id: '', amount: '', issue_number: `${receipt.issue_number}-2` },
+        {
+          // 수령인1: 원본 수령인 정보 자동 입력
+          name: receipt.representative,
+          address: receipt.address || '',
+          resident_id: receipt.resident_id || '',
+          amount: '',
+          issue_number: `${receipt.issue_number}-2`
+        },
         { name: '', address: '', resident_id: '', amount: '', issue_number: `${receipt.issue_number}-3` },
       ]);
     }
@@ -681,7 +737,7 @@ export default function DonationReceiptsPage() {
                       <span className="w-24 text-slate-500">주민번호</span>
                       <span className="font-mono">
                         {previewReceipt.resident_id
-                          ? previewReceipt.resident_id + '-*******'
+                          ? `${previewReceipt.resident_id.slice(0, 6)}-${previewReceipt.resident_id.slice(6)}*******`
                           : '(미등록)'}
                       </span>
                     </div>
@@ -945,44 +1001,109 @@ export default function DonationReceiptsPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-2">
-                      <Label>금액</Label>
-                      <div className="relative">
+                  {/* 수령인1: 비율 + 금액 + 발급번호 */}
+                  {index === 0 ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-2">
+                          <Label>비율</Label>
+                          <div className="relative">
+                            <Input
+                              value={splitPercentage}
+                              onChange={(e) => handlePercentageChange(e.target.value)}
+                              placeholder="예: 60"
+                              className="pr-8"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">
+                              %
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>금액</Label>
+                          <div className="relative">
+                            <Input
+                              value={recipient.amount}
+                              onChange={(e) => handleSplitAmount1Change(e.target.value)}
+                              placeholder="0"
+                              className="pr-8"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">
+                              원
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>발급번호</Label>
                         <Input
-                          value={recipient.amount}
+                          value={recipient.issue_number}
                           onChange={(e) => {
                             setSplitRecipients((prev) => {
                               const updated = [...prev];
-                              updated[index] = {
-                                ...updated[index],
-                                amount: formatAmountInput(e.target.value),
-                              };
+                              updated[index] = { ...updated[index], issue_number: e.target.value };
                               return updated;
                             });
                           }}
-                          placeholder="0"
-                          className="pr-8"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">
-                          원
-                        </span>
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label>발급번호</Label>
-                      <Input
-                        value={recipient.issue_number}
-                        onChange={(e) => {
-                          setSplitRecipients((prev) => {
-                            const updated = [...prev];
-                            updated[index] = { ...updated[index], issue_number: e.target.value };
-                            return updated;
-                          });
-                        }}
-                      />
+                  ) : (
+                    /* 수령인2: 비율(자동) + 금액 + 발급번호 */
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-2">
+                          <Label>비율</Label>
+                          <div className="relative">
+                            <Input
+                              value={splitPercentage ? `${100 - parseInt(splitPercentage)}` : ''}
+                              disabled
+                              className="pr-8 bg-slate-50"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                              %
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>금액</Label>
+                          <div className="relative">
+                            <Input
+                              value={recipient.amount}
+                              onChange={(e) => {
+                                setSplitRecipients((prev) => {
+                                  const updated = [...prev];
+                                  updated[index] = {
+                                    ...updated[index],
+                                    amount: formatAmountInput(e.target.value),
+                                  };
+                                  return updated;
+                                });
+                              }}
+                              placeholder="0"
+                              className="pr-8"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">
+                              원
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>발급번호</Label>
+                        <Input
+                          value={recipient.issue_number}
+                          onChange={(e) => {
+                            setSplitRecipients((prev) => {
+                              const updated = [...prev];
+                              updated[index] = { ...updated[index], issue_number: e.target.value };
+                              return updated;
+                            });
+                          }}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ))}
 

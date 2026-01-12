@@ -157,7 +157,7 @@ function PrintContent() {
                 <th style={{ width: '15%' }}>주민등록번호</th>
                 <td style={{ width: '35%' }} className="font-mono">
                   {receipt.resident_id
-                    ? `${receipt.resident_id}-*******`
+                    ? `${receipt.resident_id.slice(0, 6)}-${receipt.resident_id.slice(6)}*******`
                     : '(미등록)'}
                 </td>
               </tr>

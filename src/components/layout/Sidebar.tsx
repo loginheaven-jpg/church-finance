@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Upload,
@@ -125,7 +125,6 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen = true, onClose, userRole = 'member', userName }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
 
   // 사용자 역할에 따라 메뉴 필터링
   const filteredSections = menuSections.filter(section =>
@@ -136,8 +135,8 @@ export function Sidebar({ isOpen = true, onClose, userRole = 'member', userName 
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/verify', { method: 'DELETE' });
-      router.push('/login');
-      router.refresh();
+      // 전체 페이지 새로고침으로 세션 상태 완전 초기화
+      window.location.href = '/login';
     } catch (error) {
       console.error('Logout error:', error);
     }

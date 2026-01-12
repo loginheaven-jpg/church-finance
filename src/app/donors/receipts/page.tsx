@@ -904,6 +904,7 @@ export default function DonationReceiptsPage() {
                     <TableHead className="text-center">헌금 횟수</TableHead>
                     <TableHead className="text-right">총액</TableHead>
                     <TableHead className="w-16 text-center">발행</TableHead>
+                    <TableHead className="w-16 text-center">점검</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -931,6 +932,11 @@ export default function DonationReceiptsPage() {
                       <TableCell className="text-center">
                         {issuedRepresentatives.has(receipt.representative) && (
                           <CheckCircle className="h-5 w-5 text-green-500 mx-auto" />
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {(!receipt.resident_id || !receipt.address || !receipt.total_amount) && (
+                          <CheckCircle className="h-5 w-5 text-orange-500 mx-auto" />
                         )}
                       </TableCell>
                       <TableCell>

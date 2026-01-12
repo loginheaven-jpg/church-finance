@@ -298,6 +298,9 @@ export default function DonationReceiptsPage() {
         const data = await res.json();
         if (data.success) {
           successCount++;
+        } else if (res.status === 409) {
+          // 이미 발행된 경우 - 성공으로 처리
+          successCount++;
         } else {
           failedItems.push(`${rep}: ${data.error}`);
         }

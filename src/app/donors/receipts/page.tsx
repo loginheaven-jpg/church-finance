@@ -105,6 +105,7 @@ export default function DonationReceiptsPage() {
   // 발행완료 상태
   const [issuedRepresentatives, setIssuedRepresentatives] = useState<Set<string>>(new Set());
   const [hideIssued, setHideIssued] = useState(false);
+  const [hideNeedsReview, setHideNeedsReview] = useState(false);
   const [markingIssued, setMarkingIssued] = useState(false);
 
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - i).toString());
@@ -253,10 +254,15 @@ export default function DonationReceiptsPage() {
     }
   };
 
-  // 발행완료 필터링된 영수증 목록
-  const filteredReceipts = hideIssued
-    ? receipts.filter(r => !issuedRepresentatives.has(r.representative))
-    : receipts;
+  // 점검필요 여부 체크 함수
+  const needsReview = (r: DonationReceipt) => !r.resident_id || !r.address || !r.total_amount;
+
+  // 필터링된 영수증 목록
+  const filteredReceipts = receipts.filter(r => {
+    if (hideIssued && issuedRepresentatives.has(r.representative)) return false;
+    if (hideNeedsReview && needsReview(r)) return false;
+    return true;
+  });
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -810,6 +816,13 @@ export default function DonationReceiptsPage() {
                 </Button>
                 <label className="flex items-center gap-2 ml-auto cursor-pointer text-sm text-slate-600">
                   <Checkbox
+                    checked={hideNeedsReview}
+                    onCheckedChange={(checked) => setHideNeedsReview(checked === true)}
+                  />
+                  점검제외
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600">
+                  <Checkbox
                     checked={hideIssued}
                     onCheckedChange={(checked) => setHideIssued(checked === true)}
                   />
@@ -935,7 +948,7 @@ export default function DonationReceiptsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-center">
-                        {(!receipt.resident_id || !receipt.address || !receipt.total_amount) && (
+                        {needsReview(receipt) && (
                           <CheckCircle className="h-5 w-5 text-orange-500 mx-auto" />
                         )}
                       </TableCell>

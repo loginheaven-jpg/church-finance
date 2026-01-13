@@ -267,19 +267,52 @@ export default function DonationReceiptsPage() {
       return;
     }
 
+    // 이미 발행된 항목과 새 항목 분류
+    const alreadyIssued: string[] = [];
+    const newItems: string[] = [];
+    for (const rep of selectedReceipts) {
+      if (issuedRepresentatives.has(rep)) {
+        alreadyIssued.push(rep);
+      } else {
+        newItems.push(rep);
+      }
+    }
+
+    // 이미 발행된 항목이 있으면 재발행 확인
+    let includeReissue = false;
+    if (alreadyIssued.length > 0) {
+      const names = alreadyIssued.map(r => getDisplayName(r)).join(', ');
+      includeReissue = confirm(
+        `${names} 님은 이미 발행된 성도입니다.\n재발행하시겠습니까?\n(새로운 발급번호로 이력이 추가됩니다)`
+      );
+    }
+
+    const itemsToProcess = includeReissue ? [...newItems, ...alreadyIssued] : newItems;
+    if (itemsToProcess.length === 0) {
+      toast.info('처리할 항목이 없습니다');
+      return;
+    }
+
     setMarkingIssued(true);
     let successCount = 0;
     const failedItems: string[] = [];
 
     try {
-      for (const rep of selectedReceipts) {
-        // 이미 발행완료된 항목은 건너뛰기
-        if (issuedRepresentatives.has(rep)) {
-          continue;
-        }
-
+      for (const rep of itemsToProcess) {
         const receipt = receipts.find(r => r.representative === rep);
         if (!receipt) continue;
+
+        const isReissue = alreadyIssued.includes(rep);
+        let issueNumber = receipt.issue_number;
+
+        // 재발행인 경우 새 발급번호 생성 (기존번호-2, -3 ...)
+        if (isReissue) {
+          const nextRes = await fetch(`/api/donors/receipts/manual?year=${year}&base_number=${receipt.issue_number}`);
+          const nextData = await nextRes.json();
+          if (nextData.success) {
+            issueNumber = nextData.data.nextIssueNumber;
+          }
+        }
 
         const res = await fetch('/api/donors/receipts/manual', {
           method: 'POST',
@@ -290,19 +323,20 @@ export default function DonationReceiptsPage() {
             address: receipt.address || '',
             resident_id: receipt.resident_id || '',
             amount: receipt.total_amount,
-            issue_number: receipt.issue_number,
-            note: '일괄',
+            issue_number: issueNumber,
+            original_issue_number: isReissue ? receipt.issue_number : '',
+            note: isReissue ? '재발행' : '일괄',
           }),
         });
 
         const data = await res.json();
         if (data.success) {
           successCount++;
-        } else if (res.status === 409) {
-          // 이미 발행된 경우 - 성공으로 처리
+        } else if (res.status === 409 && !isReissue) {
+          // 새 발행인데 이미 존재 - 성공으로 처리
           successCount++;
         } else {
-          failedItems.push(`${rep}: ${data.error}`);
+          failedItems.push(`${getDisplayName(rep)}: ${data.error}`);
         }
       }
 

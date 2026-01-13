@@ -69,6 +69,7 @@ const FINANCE_CONFIG = {
     pledgeDonations: '작정헌금',
     buildingStatus: '2025건축헌금현황',
     yearlyBudget: '연도별예산',
+    businessInfo: '사업자정보',
   },
 };
 
@@ -1530,4 +1531,57 @@ export async function getBuildingInterestRate(): Promise<number> {
   // 퍼센트 문자열 파싱 (예: "4.65%" 또는 "4.65")
   const rate = parseFloat(rateStr.replace(/%/g, '').replace(/,/g, ''));
   return isNaN(rate) ? 4.65 : rate;
+}
+
+// ============================================
+// 사업자정보 관련
+// ============================================
+
+export interface BusinessInfo {
+  company_name: string;       // 상호
+  business_number: string;    // 사업자등록번호
+  address: string;            // 주소
+  representative: string;     // 대표자명
+  note: string;               // 비고
+  created_at: string;         // 등록일시
+}
+
+/**
+ * 모든 사업자정보 조회
+ */
+export async function getAllBusinessInfo(): Promise<BusinessInfo[]> {
+  return getSheetData<BusinessInfo>(FINANCE_CONFIG.sheets.businessInfo);
+}
+
+/**
+ * 상호로 사업자정보 검색 (정확히 일치)
+ */
+export async function getBusinessInfoByName(companyName: string): Promise<BusinessInfo | null> {
+  const data = await getAllBusinessInfo();
+  return data.find(b => b.company_name === companyName) || null;
+}
+
+/**
+ * 상호로 사업자정보 검색 (부분 일치 - 자동완성용)
+ */
+export async function searchBusinessInfo(keyword: string): Promise<BusinessInfo[]> {
+  const data = await getAllBusinessInfo();
+  if (!keyword) return data;
+  const lowerKeyword = keyword.toLowerCase();
+  return data.filter(b => b.company_name.toLowerCase().includes(lowerKeyword));
+}
+
+/**
+ * 사업자정보 추가
+ */
+export async function addBusinessInfo(info: Omit<BusinessInfo, 'created_at'>): Promise<void> {
+  const row = [
+    info.company_name,
+    info.business_number || '',
+    info.address || '',
+    info.representative || '',
+    info.note || '',
+    getKSTDateTime(),
+  ];
+  await appendToSheet(FINANCE_CONFIG.sheets.businessInfo, [row]);
 }

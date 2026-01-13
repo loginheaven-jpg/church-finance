@@ -109,6 +109,13 @@ export default function DonationReceiptsPage() {
     issue_number: '',
   });
   const [businessLoading, setBusinessLoading] = useState(false);
+  const [businessSuggestions, setBusinessSuggestions] = useState<Array<{
+    company_name: string;
+    business_number: string;
+    address: string;
+  }>>([]);
+  const [showBusinessSuggestions, setShowBusinessSuggestions] = useState(false);
+  const [businessInfoMap, setBusinessInfoMap] = useState<Map<string, { business_number: string; address: string }>>(new Map());
 
   // 발급번호 정보
   const [issueNumberInfo, setIssueNumberInfo] = useState<{
@@ -428,6 +435,24 @@ export default function DonationReceiptsPage() {
     let failCount = 0;
     let historyAddedCount = 0;
 
+    // 사업자정보 맵이 비어있으면 조회
+    let bizMap = businessInfoMap;
+    if (bizMap.size === 0) {
+      try {
+        const res = await fetch('/api/donors/business-info');
+        const data = await res.json();
+        if (data.success && data.data) {
+          bizMap = new Map<string, { business_number: string; address: string }>();
+          data.data.forEach((b: { company_name: string; business_number: string; address: string }) => {
+            bizMap.set(b.company_name, { business_number: b.business_number, address: b.address });
+          });
+          setBusinessInfoMap(bizMap);
+        }
+      } catch (error) {
+        console.error('사업자정보 조회 실패:', error);
+      }
+    }
+
     for (let i = 0; i < selected.length; i++) {
       const rep = selected[i];
       const receipt = receipts.find(r => r.representative === rep);
@@ -435,18 +460,19 @@ export default function DonationReceiptsPage() {
       setDownloadProgress({ current: i + 1, total: selected.length });
 
       if (receipt) {
-        // 이름이 5글자 이상이면 사업자 포맷으로 발행
+        // 사업자정보 시트에 등록된 상호인지 확인
         const displayName = getDisplayName(receipt.representative);
-        const isBusiness = displayName.length >= 5;
+        const businessInfo = bizMap.get(displayName);
+        const isBusiness = !!businessInfo;
 
         let success: boolean;
         if (isBusiness) {
-          // 사업자 포맷으로 발행
+          // 사업자 포맷으로 발행 (시트의 사업자번호/주소 사용)
           const businessReceipt: BusinessDonationReceipt = {
             year: parseInt(year),
             company_name: displayName,
-            business_number: receipt.resident_id || '',
-            address: receipt.address || '',
+            business_number: businessInfo.business_number || receipt.resident_id || '',
+            address: businessInfo.address || receipt.address || '',
             total_amount: receipt.total_amount,
             issue_number: receipt.issue_number || '',
           };
@@ -712,23 +738,73 @@ export default function DonationReceiptsPage() {
 
   // 사업자 발행 다이얼로그 열기
   const openBusinessDialog = async () => {
-    // 다음 발급번호 조회
+    // 다음 발급번호 및 사업자정보 목록 조회
     try {
-      const res = await fetch(`/api/donors/receipts/manual?year=${year}`);
-      const data = await res.json();
-      if (data.success) {
+      const [issueRes, businessRes] = await Promise.all([
+        fetch(`/api/donors/receipts/manual?year=${year}`),
+        fetch('/api/donors/business-info'),
+      ]);
+      const issueData = await issueRes.json();
+      const businessData = await businessRes.json();
+
+      if (issueData.success) {
         setBusinessForm({
           company_name: '',
           business_number: '',
           address: '',
           amount: '',
-          issue_number: data.data?.nextIssueNumber || '',
+          issue_number: issueData.data?.nextIssueNumber || '',
         });
+      }
+
+      // 사업자정보 맵 생성 (일괄발행에서도 사용)
+      if (businessData.success && businessData.data) {
+        const map = new Map<string, { business_number: string; address: string }>();
+        businessData.data.forEach((b: { company_name: string; business_number: string; address: string }) => {
+          map.set(b.company_name, { business_number: b.business_number, address: b.address });
+        });
+        setBusinessInfoMap(map);
+        setBusinessSuggestions(businessData.data);
       }
     } catch (error) {
       console.error(error);
     }
     setShowBusinessDialog(true);
+  };
+
+  // 상호 입력 시 자동완성 및 정보 채우기
+  const handleCompanyNameChange = (value: string) => {
+    setBusinessForm((prev) => ({ ...prev, company_name: value }));
+
+    // 정확히 일치하는 사업자 있으면 정보 자동 채우기
+    const matched = businessInfoMap.get(value);
+    if (matched) {
+      setBusinessForm((prev) => ({
+        ...prev,
+        business_number: matched.business_number,
+        address: matched.address,
+      }));
+      setShowBusinessSuggestions(false);
+    } else if (value.length > 0) {
+      // 부분 일치 추천 표시
+      const filtered = businessSuggestions.filter(b =>
+        b.company_name.toLowerCase().includes(value.toLowerCase())
+      );
+      setShowBusinessSuggestions(filtered.length > 0);
+    } else {
+      setShowBusinessSuggestions(false);
+    }
+  };
+
+  // 사업자 추천 선택
+  const selectBusinessSuggestion = (suggestion: { company_name: string; business_number: string; address: string }) => {
+    setBusinessForm((prev) => ({
+      ...prev,
+      company_name: suggestion.company_name,
+      business_number: suggestion.business_number,
+      address: suggestion.address,
+    }));
+    setShowBusinessSuggestions(false);
   };
 
   // 사업자 발행 실행
@@ -1521,16 +1597,36 @@ export default function DonationReceiptsPage() {
               <div className="text-lg font-medium">{year}년</div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <Label htmlFor="business-name">상호</Label>
               <Input
                 id="business-name"
                 value={businessForm.company_name}
-                onChange={(e) =>
-                  setBusinessForm((prev) => ({ ...prev, company_name: e.target.value }))
-                }
+                onChange={(e) => handleCompanyNameChange(e.target.value)}
+                onFocus={() => businessForm.company_name && setShowBusinessSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowBusinessSuggestions(false), 200)}
                 placeholder="예: ㈜금문상사"
+                autoComplete="off"
               />
+              {/* 사업자 추천 목록 */}
+              {showBusinessSuggestions && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                  {businessSuggestions
+                    .filter(b => b.company_name.toLowerCase().includes(businessForm.company_name.toLowerCase()))
+                    .slice(0, 5)
+                    .map((b) => (
+                      <button
+                        key={b.company_name}
+                        type="button"
+                        className="w-full px-3 py-2 text-left hover:bg-slate-100 text-sm"
+                        onMouseDown={() => selectBusinessSuggestion(b)}
+                      >
+                        <div className="font-medium">{b.company_name}</div>
+                        <div className="text-xs text-slate-500">{b.business_number}</div>
+                      </button>
+                    ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

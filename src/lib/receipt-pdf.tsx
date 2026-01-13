@@ -411,13 +411,13 @@ export const BusinessReceiptDocument = ({ receipt, year, baseUrl = '' }: Busines
               <View style={[styles.tableHeaderCell, { width: '12%' }]}>
                 <Text>상 호</Text>
               </View>
-              <View style={[styles.tableCell, { width: '30%' }]}>
+              <View style={[styles.tableCell, { width: '28%' }]}>
                 <Text>{receipt.company_name}</Text>
               </View>
-              <View style={[styles.tableHeaderCell, { width: '14%' }]}>
+              <View style={[styles.tableHeaderCell, { width: '18%' }]}>
                 <Text>사업자등록번호</Text>
               </View>
-              <View style={[styles.tableCellLast, { width: '44%' }]}>
+              <View style={[styles.tableCellLast, { width: '42%' }]}>
                 <Text>{receipt.business_number || '(미등록)'}</Text>
               </View>
             </View>

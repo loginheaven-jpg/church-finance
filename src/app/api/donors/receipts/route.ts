@@ -121,9 +121,16 @@ export async function GET(request: NextRequest) {
     // 수작업 발급 이력에서 사용된 발급번호 조회
     const manualIssueNumbers = await getAllIssueNumbers(year);
 
-    // 발행이력에서 발행완료 대표자 목록 조회 (대표자명 기준)
+    // 발행이력에서 발행완료 대표자 목록 조회 (발급번호 기준으로 매칭)
     const history = await getManualReceiptHistory(year);
-    const issuedRepresentatives = [...new Set(history.map(h => h.representative))];
+    // 발행이력에 있는 발급번호 Set (분할발급 번호도 기본번호로 변환)
+    const historyIssueNumbers = new Set(
+      history.map(h => h.issue_number.split('-')[0]) // "2026001-2" → "2026001"
+    );
+    // 영수증의 발급번호가 이력에 있으면 해당 대표자는 발행완료로 처리
+    const issuedRepresentatives = receipts
+      .filter(r => historyIssueNumbers.has(r.issue_number))
+      .map(r => r.representative);
 
     // 자동 발급번호 + 수작업 발급번호
     const allIssueNumbers = [

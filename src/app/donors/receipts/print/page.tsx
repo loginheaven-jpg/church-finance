@@ -195,9 +195,9 @@ function PrintContent() {
           <table className="receipt-table">
             <tbody>
               <tr>
-                <th style={{ width: '15%' }}>{isBusiness ? '상 호' : '성 명'}</th>
-                <td style={{ width: '35%' }}>{displayName}</td>
-                <th style={{ width: '18%' }}>{isBusiness ? '사업자등록번호' : '주민등록번호'}</th>
+                <th style={{ width: '14%' }}>{isBusiness ? '상 호' : '성 명'}</th>
+                <td style={{ width: '34%' }}>{displayName}</td>
+                <th style={{ width: '20%' }}>{isBusiness ? '사업자등록번호' : '주민등록번호'}</th>
                 <td style={{ width: '32%' }} className="font-mono">
                   {displayId}
                 </td>

@@ -8,7 +8,7 @@ import {
   Image,
   pdf,
 } from '@react-pdf/renderer';
-import type { DonationReceipt } from '@/types';
+import type { DonationReceipt, BusinessDonationReceipt } from '@/types';
 import { getDisplayName } from '@/lib/utils';
 
 // 한글 폰트 등록 (CDN - Noto Sans KR woff 포맷)
@@ -308,7 +308,7 @@ export const ReceiptDocument = ({ receipt, year, baseUrl = '' }: ReceiptDocument
         {/* 법적 문구 */}
         <View style={styles.legalBox}>
           <Text style={styles.legalText}>
-            "소득세법" 제34조, "조세특례제한법" 제76조, 제88조의4 및 "법인세법" 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.
+            "소득세법" 제34조, "조세특례제한법" 제58조·제76조·제88조의4 및 "법인세법" 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.
           </Text>
           <Text style={styles.legalNote}>
             * 이 영수증은 소득세, 법인세 신고 시 기부금 영수증으로 사용할 수 있습니다.
@@ -370,6 +370,211 @@ export async function downloadReceiptPdf(
     return true;
   } catch (error) {
     console.error('PDF generation error:', error);
+    return false;
+  }
+}
+
+// ============================================
+// 사업자(법인) 기부금영수증 PDF
+// ============================================
+
+// 사업자 영수증 PDF 문서 컴포넌트
+interface BusinessReceiptDocumentProps {
+  receipt: BusinessDonationReceipt;
+  year: string;
+  baseUrl?: string;
+}
+
+export const BusinessReceiptDocument = ({ receipt, year, baseUrl = '' }: BusinessReceiptDocumentProps) => {
+  const today = new Date();
+  const issueDate = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        {/* 헤더 - 예봄교회 재정부 */}
+        <View style={styles.header}>
+          <Text style={styles.headerText}>예봄교회 재정부</Text>
+        </View>
+
+        {/* 제목 */}
+        <View style={styles.title}>
+          <Text style={styles.titleText}>기 부 금 영 수 증</Text>
+          <Text style={styles.issueNumber}>발급번호: {receipt.issue_number || ''}</Text>
+        </View>
+
+        {/* 1. 기부자 - 사업자용 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>1. 기부자</Text>
+          <View style={styles.table}>
+            <View style={styles.tableRow}>
+              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
+                <Text>상 호</Text>
+              </View>
+              <View style={[styles.tableCell, { width: '30%' }]}>
+                <Text>{receipt.company_name}</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, { width: '14%' }]}>
+                <Text>사업자등록번호</Text>
+              </View>
+              <View style={[styles.tableCellLast, { width: '44%' }]}>
+                <Text>{receipt.business_number || '(미등록)'}</Text>
+              </View>
+            </View>
+            <View style={styles.tableRowLast}>
+              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
+                <Text>주 소</Text>
+              </View>
+              <View style={[styles.tableCellLast, { width: '88%' }]}>
+                <Text>{receipt.address || '(미등록)'}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* 2. 기부금 단체 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>2. 기부금 단체</Text>
+          <View style={styles.table}>
+            <View style={styles.tableRow}>
+              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
+                <Text>단 체 명</Text>
+              </View>
+              <View style={[styles.tableCell, { width: '30%' }]}>
+                <Text>대한예수교장로회 예봄교회</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, { width: '14%' }]}>
+                <Text>고유번호</Text>
+              </View>
+              <View style={[styles.tableCellLast, { width: '44%' }]}>
+                <Text>117-82-60597</Text>
+              </View>
+            </View>
+            <View style={styles.tableRow}>
+              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
+                <Text>소 재 지</Text>
+              </View>
+              <View style={[styles.tableCellLast, { width: '88%' }]}>
+                <Text>경기도 성남시 분당구 운중로 285 (판교동)</Text>
+              </View>
+            </View>
+            <View style={styles.tableRowLast}>
+              <View style={[styles.tableHeaderCell, { width: '12%' }]}>
+                <Text>대 표 자</Text>
+              </View>
+              <View style={[styles.tableCellLast, { width: '88%' }]}>
+                <Text>최 병 희</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* 3. 기부내용 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>3. 기부내용</Text>
+          <View style={styles.table}>
+            <View style={styles.tableRow}>
+              <View style={[styles.tableHeaderCell, { width: '10%' }]}>
+                <Text>유형</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, { width: '8%' }]}>
+                <Text>코드</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, { width: '10%' }]}>
+                <Text>구분</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, { width: '40%' }]}>
+                <Text>기부기간</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, { width: '32%', borderRightWidth: 0 }]}>
+                <Text>기부금액</Text>
+              </View>
+            </View>
+            <View style={styles.tableRowLast}>
+              <View style={[styles.tableCell, { width: '10%', textAlign: 'center' }]}>
+                <Text>종교단체</Text>
+              </View>
+              <View style={[styles.tableCell, { width: '8%', textAlign: 'center' }]}>
+                <Text>41</Text>
+              </View>
+              <View style={[styles.tableCell, { width: '10%', textAlign: 'center' }]}>
+                <Text>헌금</Text>
+              </View>
+              <View style={[styles.tableCell, { width: '40%', textAlign: 'center' }]}>
+                <Text>{year}년 1월 1일 ~ 12월 31일</Text>
+              </View>
+              <View style={[styles.tableCellLast, { width: '32%', textAlign: 'right' }]}>
+                <Text style={{ fontWeight: 'bold' }}>{formatAmount(receipt.total_amount)} 원</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* 법적 문구 - 개인과 동일 */}
+        <View style={styles.legalBox}>
+          <Text style={styles.legalText}>
+            "소득세법" 제34조, "조세특례제한법" 제58조·제76조·제88조의4 및 "법인세법" 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.
+          </Text>
+          <Text style={styles.legalNote}>
+            * 이 영수증은 소득세, 법인세 신고 시 기부금 영수증으로 사용할 수 있습니다.
+          </Text>
+        </View>
+
+        {/* 신청인 및 발급일 - 사업자용 */}
+        <View style={styles.signatureSection}>
+          <Text style={styles.applicantRow}>
+            신 청 : <Text style={styles.applicantName}>{receipt.company_name}</Text>
+          </Text>
+          <Text style={styles.certifyText}>
+            위와 같이 기부금을 기부받았음을 증명합니다.
+          </Text>
+          <Text style={styles.dateText}>{issueDate}</Text>
+        </View>
+
+        {/* 기부금 수령인 */}
+        <View style={styles.recipientRow}>
+          <Text style={styles.recipientText}>
+            기부금 수령인 : 대한예수교장로회 예봄교회
+          </Text>
+          <View style={styles.sealWrapper}>
+            <Text style={{ fontSize: 10, color: '#999999' }}>(직인)</Text>
+            <Image style={styles.sealOverlay} src={`${baseUrl}/church-seal.png`} />
+          </View>
+        </View>
+      </Page>
+    </Document>
+  );
+};
+
+// 사업자 PDF Blob 생성 함수
+export async function generateBusinessReceiptPdf(
+  receipt: BusinessDonationReceipt,
+  year: string
+): Promise<Blob> {
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const doc = <BusinessReceiptDocument receipt={receipt} year={year} baseUrl={baseUrl} />;
+  const blob = await pdf(doc).toBlob();
+  return blob;
+}
+
+// 사업자 PDF 다운로드 함수 (파일명에 "님" 없음)
+export async function downloadBusinessReceiptPdf(
+  receipt: BusinessDonationReceipt,
+  year: string
+): Promise<boolean> {
+  try {
+    const blob = await generateBusinessReceiptPdf(receipt, year);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${receipt.company_name}${year}기부금영수증_예봄교회.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    return true;
+  } catch (error) {
+    console.error('Business PDF generation error:', error);
     return false;
   }
 }

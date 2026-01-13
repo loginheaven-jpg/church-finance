@@ -30,9 +30,10 @@ import {
 import { Label } from '@/components/ui/label';
 import { Loader2, FileText, Printer, Eye, Search, RefreshCw, Download, Plus, Split, Trash2, History, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import type { DonationReceipt, ManualReceiptHistory } from '@/types';
-import { downloadReceiptPdf } from '@/lib/receipt-pdf';
+import type { DonationReceipt, ManualReceiptHistory, BusinessDonationReceipt } from '@/types';
+import { downloadReceiptPdf, downloadBusinessReceiptPdf } from '@/lib/receipt-pdf';
 import { getDisplayName } from '@/lib/utils';
+import { Building2 } from 'lucide-react';
 
 // 탭 타입
 type TabType = 'list' | 'history';
@@ -51,6 +52,15 @@ interface SplitRecipient {
   name: string;
   address: string;
   resident_id: string;
+  amount: string;
+  issue_number: string;
+}
+
+// 사업자 발행 폼 타입
+interface BusinessForm {
+  company_name: string;
+  business_number: string;
+  address: string;
   amount: string;
   issue_number: string;
 }
@@ -88,6 +98,17 @@ export default function DonationReceiptsPage() {
   ]);
   const [splitLoading, setSplitLoading] = useState(false);
   const [splitPercentage, setSplitPercentage] = useState<string>(''); // 수령인1의 비율 (%)
+
+  // 사업자 발행 상태
+  const [showBusinessDialog, setShowBusinessDialog] = useState(false);
+  const [businessForm, setBusinessForm] = useState<BusinessForm>({
+    company_name: '',
+    business_number: '',
+    address: '',
+    amount: '',
+    issue_number: '',
+  });
+  const [businessLoading, setBusinessLoading] = useState(false);
 
   // 발급번호 정보
   const [issueNumberInfo, setIssueNumberInfo] = useState<{
@@ -414,7 +435,27 @@ export default function DonationReceiptsPage() {
       setDownloadProgress({ current: i + 1, total: selected.length });
 
       if (receipt) {
-        const success = await downloadReceiptPdf(receipt, year);
+        // 이름이 5글자 이상이면 사업자 포맷으로 발행
+        const displayName = getDisplayName(receipt.representative);
+        const isBusiness = displayName.length >= 5;
+
+        let success: boolean;
+        if (isBusiness) {
+          // 사업자 포맷으로 발행
+          const businessReceipt: BusinessDonationReceipt = {
+            year: parseInt(year),
+            company_name: displayName,
+            business_number: receipt.resident_id || '',
+            address: receipt.address || '',
+            total_amount: receipt.total_amount,
+            issue_number: receipt.issue_number || '',
+          };
+          success = await downloadBusinessReceiptPdf(businessReceipt, year);
+        } else {
+          // 개인 포맷으로 발행
+          success = await downloadReceiptPdf(receipt, year);
+        }
+
         if (success) {
           successCount++;
 
@@ -431,7 +472,7 @@ export default function DonationReceiptsPage() {
                   resident_id: receipt.resident_id || '',
                   amount: receipt.total_amount,
                   issue_number: receipt.issue_number,
-                  note: '일괄',
+                  note: isBusiness ? '사업자' : '일괄',
                 }),
               });
               const data = await res.json();
@@ -669,6 +710,93 @@ export default function DonationReceiptsPage() {
     }
   };
 
+  // 사업자 발행 다이얼로그 열기
+  const openBusinessDialog = async () => {
+    // 다음 발급번호 조회
+    try {
+      const res = await fetch(`/api/donors/receipts/manual?year=${year}`);
+      const data = await res.json();
+      if (data.success) {
+        setBusinessForm({
+          company_name: '',
+          business_number: '',
+          address: '',
+          amount: '',
+          issue_number: data.data?.nextIssueNumber || '',
+        });
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    setShowBusinessDialog(true);
+  };
+
+  // 사업자 발행 실행
+  const handleBusinessIssue = async () => {
+    if (!businessForm.company_name.trim()) {
+      toast.error('상호를 입력해주세요');
+      return;
+    }
+    if (!parseAmount(businessForm.amount)) {
+      toast.error('금액을 입력해주세요');
+      return;
+    }
+    if (!businessForm.issue_number.trim()) {
+      toast.error('발급번호를 입력해주세요');
+      return;
+    }
+
+    setBusinessLoading(true);
+    try {
+      // 발급 이력 저장 (representative에 상호, resident_id에 사업자번호)
+      const saveRes = await fetch('/api/donors/receipts/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          year: parseInt(year),
+          representative: businessForm.company_name,
+          address: businessForm.address,
+          resident_id: businessForm.business_number,
+          amount: parseAmount(businessForm.amount),
+          issue_number: businessForm.issue_number,
+          original_issue_number: '',
+          note: '사업자',
+        }),
+      });
+
+      const saveData = await saveRes.json();
+      if (!saveData.success) {
+        toast.error(saveData.error || '저장 중 오류가 발생했습니다');
+        setBusinessLoading(false);
+        return;
+      }
+
+      // PDF 다운로드 (사업자용)
+      const receipt: BusinessDonationReceipt = {
+        year: parseInt(year),
+        company_name: businessForm.company_name,
+        business_number: businessForm.business_number,
+        address: businessForm.address,
+        total_amount: parseAmount(businessForm.amount),
+        issue_number: saveData.data?.issue_number || businessForm.issue_number,
+      };
+
+      const success = await downloadBusinessReceiptPdf(receipt, year);
+      if (success) {
+        toast.success('사업자 영수증이 발행되었습니다');
+        setShowBusinessDialog(false);
+        fetchReceipts();
+      } else {
+        toast.error('PDF 생성 중 오류가 발생했습니다');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('발행 중 오류가 발생했습니다');
+    } finally {
+      setBusinessLoading(false);
+    }
+  };
+
   // 분할 발행 다이얼로그 열기
   const openSplitDialog = async (receipt: DonationReceipt) => {
     setSplitSource(receipt);
@@ -807,6 +935,10 @@ export default function DonationReceiptsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-900">기부금영수증 발급</h1>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={openBusinessDialog}>
+            <Building2 className="mr-2 h-4 w-4" />
+            사업자발행
+          </Button>
           <Button variant="outline" onClick={openManualDialog}>
             <Plus className="mr-2 h-4 w-4" />
             수작업 발행
@@ -1365,6 +1497,106 @@ export default function DonationReceiptsPage() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <FileText className="mr-2 h-4 w-4" />
+                )}
+                발행 및 PDF 저장
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 사업자 발행 다이얼로그 */}
+      <Dialog open={showBusinessDialog} onOpenChange={setShowBusinessDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>사업자 기부금영수증 발행</DialogTitle>
+            <DialogDescription>
+              사업자(법인) 대상 영수증을 발행합니다
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>연도</Label>
+              <div className="text-lg font-medium">{year}년</div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="business-name">상호</Label>
+              <Input
+                id="business-name"
+                value={businessForm.company_name}
+                onChange={(e) =>
+                  setBusinessForm((prev) => ({ ...prev, company_name: e.target.value }))
+                }
+                placeholder="예: ㈜금문상사"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="business-number">사업자등록번호</Label>
+              <Input
+                id="business-number"
+                value={businessForm.business_number}
+                onChange={(e) =>
+                  setBusinessForm((prev) => ({ ...prev, business_number: e.target.value }))
+                }
+                placeholder="000-00-00000"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="business-address">주소</Label>
+              <Input
+                id="business-address"
+                value={businessForm.address}
+                onChange={(e) =>
+                  setBusinessForm((prev) => ({ ...prev, address: e.target.value }))
+                }
+                placeholder="주소 입력"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="business-amount">금액</Label>
+              <div className="relative">
+                <Input
+                  id="business-amount"
+                  value={businessForm.amount}
+                  onChange={(e) =>
+                    setBusinessForm((prev) => ({
+                      ...prev,
+                      amount: formatAmountInput(e.target.value),
+                    }))
+                  }
+                  placeholder="0"
+                  className="pr-8"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">원</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="business-issue">발급번호</Label>
+              <Input
+                id="business-issue"
+                value={businessForm.issue_number}
+                onChange={(e) =>
+                  setBusinessForm((prev) => ({ ...prev, issue_number: e.target.value }))
+                }
+                placeholder="자동 생성"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowBusinessDialog(false)}>
+                취소
+              </Button>
+              <Button onClick={handleBusinessIssue} disabled={businessLoading}>
+                {businessLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Building2 className="mr-2 h-4 w-4" />
                 )}
                 발행 및 PDF 저장
               </Button>

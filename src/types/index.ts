@@ -185,6 +185,16 @@ export interface DonationReceipt {
   issue_number?: string;  // 발급번호 (2026001~)
 }
 
+// 사업자(법인) 기부금영수증 데이터
+export interface BusinessDonationReceipt {
+  year: number;
+  company_name: string;       // 상호
+  business_number: string;    // 사업자등록번호
+  address: string;            // 주소
+  total_amount: number;       // 금액
+  issue_number: string;       // 발급번호
+}
+
 // 수작업 발급 이력
 export interface ManualReceiptHistory {
   issue_number: string;      // 발급번호 (예: 2026016, 2026001-2)

@@ -5,20 +5,48 @@ import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Loader2, Printer, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import type { DonationReceipt } from '@/types';
+import type { DonationReceipt, BusinessDonationReceipt } from '@/types';
 import { getDisplayName } from '@/lib/utils';
 
 function PrintContent() {
   const searchParams = useSearchParams();
   const year = searchParams.get('year') || new Date().getFullYear().toString();
   const representative = searchParams.get('representative') || '';
+  const receiptType = searchParams.get('type') || 'individual'; // individual or business
   const issueNumberParam = searchParams.get('issue_number') || '';
 
   const [loading, setLoading] = useState(true);
   const [receipt, setReceipt] = useState<DonationReceipt | null>(null);
+  const [businessReceipt, setBusinessReceipt] = useState<BusinessDonationReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 사업자용 파라미터
+  const companyName = searchParams.get('company_name') || '';
+  const businessNumber = searchParams.get('business_number') || '';
+  const address = searchParams.get('address') || '';
+  const amount = searchParams.get('amount') || '';
+
   useEffect(() => {
+    // 사업자용 영수증인 경우 URL 파라미터에서 데이터 구성
+    if (receiptType === 'business') {
+      if (!companyName || !amount) {
+        setError('상호와 금액이 필요합니다');
+        setLoading(false);
+        return;
+      }
+      setBusinessReceipt({
+        year: parseInt(year),
+        company_name: companyName,
+        business_number: businessNumber,
+        address: address,
+        total_amount: parseInt(amount),
+        issue_number: issueNumberParam,
+      });
+      setLoading(false);
+      return;
+    }
+
+    // 개인용 영수증
     const fetchReceipt = async () => {
       if (!representative) {
         setError('대표자명이 필요합니다');
@@ -44,17 +72,21 @@ function PrintContent() {
     };
 
     fetchReceipt();
-  }, [year, representative]);
+  }, [year, representative, receiptType, companyName, businessNumber, address, amount, issueNumberParam]);
 
-  // PDF 파일명 설정: 이름님연도기부금영수증_예봄교회.pdf
+  // PDF 파일명 설정
   useEffect(() => {
-    if (receipt) {
+    if (receiptType === 'business' && businessReceipt) {
+      // 사업자: "님" 제외
+      document.title = `${businessReceipt.company_name}${year}기부금영수증_예봄교회`;
+    } else if (receipt) {
+      // 개인: "님" 포함
       document.title = `${getDisplayName(receipt.representative)}님${year}기부금영수증_예봄교회`;
     }
     return () => {
       document.title = '예봄교회 재정부';
     };
-  }, [receipt, year]);
+  }, [receipt, businessReceipt, receiptType, year]);
 
   const handlePrint = () => {
     window.print();
@@ -69,7 +101,7 @@ function PrintContent() {
   const issueDate = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
 
   // URL 파라미터에서 받은 발급번호 사용 (없으면 API에서 받은 값 사용)
-  const displayIssueNumber = issueNumberParam || receipt?.issue_number || '';
+  const displayIssueNumber = issueNumberParam || receipt?.issue_number || businessReceipt?.issue_number || '';
 
   if (loading) {
     return (
@@ -79,7 +111,10 @@ function PrintContent() {
     );
   }
 
-  if (error || !receipt) {
+  // 사업자용 또는 개인용 데이터 확인
+  const hasData = (receiptType === 'business' && businessReceipt) || (receiptType !== 'business' && receipt);
+
+  if (error || !hasData) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <p className="text-red-600">{error || '데이터를 찾을 수 없습니다'}</p>
@@ -92,6 +127,13 @@ function PrintContent() {
       </div>
     );
   }
+
+  // 사업자용 데이터
+  const isBusiness = receiptType === 'business' && businessReceipt;
+  const displayName = isBusiness ? businessReceipt.company_name : (receipt ? getDisplayName(receipt.representative) : '');
+  const displayId = isBusiness ? (businessReceipt.business_number || '(미등록)') : (receipt?.resident_id ? `${receipt.resident_id.slice(0, 6)}-${receipt.resident_id.slice(6)}*******` : '(미등록)');
+  const displayAddress = isBusiness ? (businessReceipt.address || '(미등록)') : (receipt?.address || '(미등록)');
+  const displayAmount = isBusiness ? businessReceipt.total_amount : (receipt?.total_amount || 0);
 
   return (
     <>
@@ -153,18 +195,16 @@ function PrintContent() {
           <table className="receipt-table">
             <tbody>
               <tr>
-                <th style={{ width: '15%' }}>성 명</th>
-                <td style={{ width: '35%' }}>{getDisplayName(receipt.representative)}</td>
-                <th style={{ width: '15%' }}>주민등록번호</th>
+                <th style={{ width: '15%' }}>{isBusiness ? '상 호' : '성 명'}</th>
+                <td style={{ width: '35%' }}>{displayName}</td>
+                <th style={{ width: '15%' }}>{isBusiness ? '사업자등록번호' : '주민등록번호'}</th>
                 <td style={{ width: '35%' }} className="font-mono">
-                  {receipt.resident_id
-                    ? `${receipt.resident_id.slice(0, 6)}-${receipt.resident_id.slice(6)}*******`
-                    : '(미등록)'}
+                  {displayId}
                 </td>
               </tr>
               <tr>
                 <th>주 소</th>
-                <td colSpan={3}>{receipt.address || '(미등록)'}</td>
+                <td colSpan={3}>{displayAddress}</td>
               </tr>
             </tbody>
           </table>
@@ -217,7 +257,7 @@ function PrintContent() {
                 <td className="text-center">헌금</td>
                 <td className="text-center">{year}년 1월 1일 ~ 12월 31일</td>
                 <td className="text-right font-bold pr-4">
-                  {formatAmount(receipt.total_amount)} 원
+                  {formatAmount(displayAmount)} 원
                 </td>
               </tr>
             </tbody>
@@ -227,7 +267,7 @@ function PrintContent() {
         {/* 법적 문구 */}
         <section className="mb-4 text-sm leading-relaxed text-gray-700 border border-gray-300 p-4 bg-gray-50">
           <p className="mb-2">
-            「소득세법」 제34조, 「조세특례제한법」 제76조·제88조의4 및 「법인세법」 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.
+            「소득세법」 제34조, 「조세특례제한법」 제58조·제76조·제88조의4 및 「법인세법」 제24조에 따른 기부금을 위와 같이 기부받았음을 증명하여 드립니다.
           </p>
           <p className="text-xs text-gray-500">
             ※ 이 영수증은 소득세·법인세 신고 시 기부금 영수증으로 사용할 수 있습니다.
@@ -237,7 +277,7 @@ function PrintContent() {
         {/* 신청인 및 발급일 */}
         <div className="mb-4">
           <p className="text-center text-lg mb-4">
-            신 청 인 : <span className="font-bold underline px-4">{getDisplayName(receipt.representative)}</span>
+            {isBusiness ? '신 청 :' : '신 청 인 :'} <span className="font-bold underline px-4">{displayName}</span>
           </p>
           <p className="text-center mb-4">
             위와 같이 기부금을 기부받았음을 증명합니다.

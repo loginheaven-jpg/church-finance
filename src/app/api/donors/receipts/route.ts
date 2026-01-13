@@ -37,8 +37,8 @@ export async function GET(request: NextRequest) {
     for (const record of incomeRecords) {
       const rep = record.representative || record.donor_name;
 
-      // 필터링
-      if (representative && rep !== representative) {
+      // 필터링 (부분 일치 검색)
+      if (representative && !rep.includes(representative)) {
         continue;
       }
 

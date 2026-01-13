@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
     const historyIssueNumbers = new Set(
       history
         .filter(h => h.issue_number) // null/undefined 제외
-        .map(h => h.issue_number.split('-')[0]) // "2026001-2" → "2026001"
+        .map(h => String(h.issue_number).split('-')[0]) // "2026001-2" → "2026001"
     );
     // 영수증의 발급번호가 이력에 있으면 해당 대표자는 발행완료로 처리
     const issuedRepresentatives = receipts

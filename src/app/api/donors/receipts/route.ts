@@ -125,7 +125,9 @@ export async function GET(request: NextRequest) {
     const history = await getManualReceiptHistory(year);
     // 발행이력에 있는 발급번호 Set (분할발급 번호도 기본번호로 변환)
     const historyIssueNumbers = new Set(
-      history.map(h => h.issue_number.split('-')[0]) // "2026001-2" → "2026001"
+      history
+        .filter(h => h.issue_number) // null/undefined 제외
+        .map(h => h.issue_number.split('-')[0]) // "2026001-2" → "2026001"
     );
     // 영수증의 발급번호가 이력에 있으면 해당 대표자는 발행완료로 처리
     const issuedRepresentatives = receipts

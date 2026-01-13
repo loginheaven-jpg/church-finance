@@ -197,8 +197,8 @@ function PrintContent() {
               <tr>
                 <th style={{ width: '15%' }}>{isBusiness ? '상 호' : '성 명'}</th>
                 <td style={{ width: '35%' }}>{displayName}</td>
-                <th style={{ width: '15%' }}>{isBusiness ? '사업자등록번호' : '주민등록번호'}</th>
-                <td style={{ width: '35%' }} className="font-mono">
+                <th style={{ width: '18%' }}>{isBusiness ? '사업자등록번호' : '주민등록번호'}</th>
+                <td style={{ width: '32%' }} className="font-mono">
                   {displayId}
                 </td>
               </tr>

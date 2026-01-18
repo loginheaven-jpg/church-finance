@@ -112,53 +112,35 @@ export default function ExpenseClaimPage() {
 
     setDownloading(true);
     try {
-      // 엑셀 데이터 구성 (은행 업로드 포맷)
-      // 컬럼: A~J (빈 컬럼 포함)
-      // D: 입금통장, E: 출금통장, F: 금액/이체메모, H: 계좌번호, J: 은행명
-      const excelData = data.map(item => ({
-        'A': '',
-        'B': '',
-        'C': '',
+      // 화면 테이블 컬럼 그대로 엑셀 데이터 구성
+      const excelData = data.map((item, index) => ({
+        'No': index + 1,
+        '은행명': item.bankName,
+        '계좌번호': item.accountNumber,
+        '금액': item.amount,
         '입금통장': item.depositAccount,
         '출금통장': item.withdrawNote,
-        '금액': item.amount,
-        'G': '',
-        '계좌번호': item.accountNumber,
-        'I': '',
-        '은행명': item.bankName,
+        '이체메모': item.claimant,
       }));
 
-      // 워크북 생성
-      const ws = XLSX.utils.json_to_sheet(excelData, {
-        header: ['A', 'B', 'C', '입금통장', '출금통장', '금액', 'G', '계좌번호', 'I', '은행명'],
-      });
+      // 워크시트 생성
+      const ws = XLSX.utils.json_to_sheet(excelData);
 
-      // 헤더 제거 (실제 업로드 파일은 헤더 없음)
-      const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-      range.s.r = 1; // 첫 행 스킵
-      ws['!ref'] = XLSX.utils.encode_range(range);
-
-      // 데이터만 다시 작성 (헤더 없이)
-      // C=금액, D=입금통장, E=출금통장, F=이체메모, H=계좌번호, J=은행명
-      const wsNoHeader = XLSX.utils.aoa_to_sheet(
-        data.map(item => [
-          '',                    // A
-          '',                    // B
-          item.amount,           // C: 금액
-          item.depositAccount,   // D: 입금통장
-          item.withdrawNote,     // E: 출금통장
-          item.claimant,         // F: 이체메모
-          '',                    // G
-          item.accountNumber,    // H: 계좌번호
-          '',                    // I
-          item.bankName,         // J: 은행명
-        ])
-      );
+      // 컬럼 너비 설정
+      ws['!cols'] = [
+        { wch: 5 },   // No
+        { wch: 12 },  // 은행명
+        { wch: 20 },  // 계좌번호
+        { wch: 15 },  // 금액
+        { wch: 12 },  // 입금통장
+        { wch: 20 },  // 출금통장
+        { wch: 15 },  // 이체메모
+      ];
 
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, wsNoHeader, 'Sheet1');
+      XLSX.utils.book_append_sheet(wb, ws, '지출청구');
 
-      // 파일명 생성 (오늘 날짜)
+      // 파일명 생성 (오늘 날짜 KST)
       const today = new Date();
       const kstDate = new Date(today.getTime() + 9 * 60 * 60 * 1000);
       const dateStr = kstDate.toISOString().slice(0, 10).replace(/-/g, '');

@@ -70,6 +70,8 @@ const FINANCE_CONFIG = {
     buildingStatus: '2025건축헌금현황',
     yearlyBudget: '연도별예산',
     businessInfo: '사업자정보',
+    expenseClaim: '지출청구',
+    accounts: '계정',
   },
 };
 
@@ -1584,4 +1586,139 @@ export async function addBusinessInfo(info: Omit<BusinessInfo, 'created_at'>): P
     getKSTDateTime(),
   ];
   await appendToSheet(FINANCE_CONFIG.sheets.businessInfo, [row]);
+}
+
+// ============================================
+// 지출청구 관련
+// ============================================
+
+export interface ExpenseClaimRow {
+  rowIndex: number;       // 시트 행 번호 (1-based, 헤더 포함)
+  bankName: string;       // A: 은행명
+  accountNumber: string;  // B: 입금계좌
+  amount: number;         // C: 이체금액
+  claimant: string;       // D: 청구자
+  accountCode: string;    // E: 계정
+  description: string;    // G: 내역
+  processedDate: string;  // K: 입금처리
+}
+
+export interface AccountInfo {
+  name: string;           // 이름
+  bankName: string;       // 은행명
+  accountNumber: string;  // 계좌번호
+}
+
+/**
+ * 계정 시트에서 이름으로 은행/계좌 정보 조회
+ * 계정 시트 구조: A=이름, B=은행명, C=계좌번호 (추정)
+ */
+async function getAccountInfoByName(name: string): Promise<AccountInfo | null> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.accounts, 'A:C');
+  if (!rows || rows.length <= 1) return null;
+
+  // 헤더 스킵, 이름으로 검색
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+
+    const rowName = (row[0] || '').trim();
+    if (rowName === name.trim()) {
+      return {
+        name: rowName,
+        bankName: row[1] || '',
+        accountNumber: row[2] || '',
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * 지출청구 시트에서 미처리 데이터 조회 (K컬럼이 비어있는 행)
+ * 은행/계좌가 비어있으면 청구자 이름으로 계정 시트에서 조회
+ */
+export async function getUnprocessedExpenseClaims(): Promise<ExpenseClaimRow[]> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.expenseClaim, 'A:K');
+
+  if (!rows || rows.length <= 1) return [];
+
+  // 계정 정보 캐시 (같은 청구자 중복 조회 방지)
+  const accountCache = new Map<string, AccountInfo | null>();
+
+  const claims: ExpenseClaimRow[] = [];
+
+  // 헤더 스킵, 데이터 행부터 처리 (i=1부터)
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+
+    // K컬럼(index 10)이 비어있는 행만 선택
+    const processedDate = row[10] || '';
+    if (processedDate.trim() !== '') continue;
+
+    let bankName = row[0] || '';
+    let accountNumber = row[1] || '';
+    const amountStr = row[2] || '0';
+    const claimant = row[3] || '';
+
+    // 은행/계좌가 비어있고 청구자가 있으면 계정 시트에서 조회
+    if ((!bankName || !accountNumber) && claimant) {
+      if (!accountCache.has(claimant)) {
+        const accountInfo = await getAccountInfoByName(claimant);
+        accountCache.set(claimant, accountInfo);
+      }
+      const cached = accountCache.get(claimant);
+      if (cached) {
+        if (!bankName) bankName = cached.bankName;
+        if (!accountNumber) accountNumber = cached.accountNumber;
+      }
+    }
+
+    // 금액 파싱
+    const amount = parseFloat(String(amountStr).replace(/[,원\s]/g, '')) || 0;
+    if (amount <= 0) continue;
+
+    // 은행/계좌가 여전히 비어있으면 스킵 (필수 정보)
+    if (!bankName || !accountNumber) continue;
+
+    claims.push({
+      rowIndex: i + 1, // 1-based (시트 행 번호)
+      bankName,
+      accountNumber,
+      amount,
+      claimant,
+      accountCode: row[4] || '',
+      description: row[6] || '',
+      processedDate: '',
+    });
+  }
+
+  return claims;
+}
+
+/**
+ * 지출청구 K컬럼에 처리일자 기입
+ * @param rowIndices 처리할 행 번호 배열 (1-based)
+ * @param processedDate 처리일자 (YYYY-MM-DD)
+ */
+export async function markExpenseClaimsAsProcessed(
+  rowIndices: number[],
+  processedDate: string
+): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+
+  // 각 행의 K컬럼 업데이트 (batch update)
+  const requests = rowIndices.map(rowIndex => ({
+    range: `${FINANCE_CONFIG.sheets.expenseClaim}!K${rowIndex}`,
+    values: [[processedDate]],
+  }));
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: requests,
+    },
+  });
 }

@@ -65,9 +65,11 @@ export default function ExpenseClaimPage() {
       }) => {
         // 계정의 앞 2자리 추출
         const accountPrefix = item.accountCode ? item.accountCode.substring(0, 2) : '';
-        const withdrawNote = accountPrefix && item.description
-          ? `${accountPrefix}${item.description}`
-          : item.description || accountPrefix;
+        // 내역에서 기호 제외 (한글, 영문, 숫자, 공백만 유지)
+        const cleanDescription = item.description ? item.description.replace(/[^\w\sㄱ-ㅎㅏ-ㅣ가-힣]/g, '') : '';
+        const withdrawNote = accountPrefix && cleanDescription
+          ? `${accountPrefix}${cleanDescription}`
+          : cleanDescription || accountPrefix;
 
         return {
           ...item,
@@ -112,9 +114,8 @@ export default function ExpenseClaimPage() {
 
     setDownloading(true);
     try {
-      // 화면 테이블 컬럼 그대로 엑셀 데이터 구성
-      const excelData = data.map((item, index) => ({
-        'No': index + 1,
+      // 화면 테이블 컬럼 그대로 엑셀 데이터 구성 (No 제외, 은행명이 A컬럼)
+      const excelData = data.map((item) => ({
         '은행명': item.bankName,
         '계좌번호': item.accountNumber,
         '금액': item.amount,
@@ -128,7 +129,6 @@ export default function ExpenseClaimPage() {
 
       // 컬럼 너비 설정
       ws['!cols'] = [
-        { wch: 5 },   // No
         { wch: 12 },  // 은행명
         { wch: 20 },  // 계좌번호
         { wch: 15 },  // 금액

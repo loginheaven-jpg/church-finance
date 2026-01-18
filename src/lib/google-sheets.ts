@@ -1659,9 +1659,19 @@ export async function getUnprocessedExpenseClaims(): Promise<ExpenseClaimRow[]> 
 
     // 컬럼 매핑: D=청구자, E=계정, F=금액, G=내역, H=계좌번호, J=은행명
     let bankName = row[9] || '';      // J컬럼 (index 9)
-    let accountNumber = row[7] || ''; // H컬럼 (index 7)
+    let accountNumber = '';
+    const rawAccount = row[7] || '';  // H컬럼 (index 7)
     const amountStr = row[5] || '0';  // F컬럼 (index 5)
     const claimant = row[3] || '';    // D컬럼 (index 3)
+
+    // H컬럼에 "계좌 / 은행명 / 이름" 형태인 경우 파싱
+    if (rawAccount.includes('/')) {
+      const parts = rawAccount.split('/').map(s => s.trim());
+      accountNumber = parts[0].replace(/[^0-9]/g, '');
+      if (!bankName && parts[1]) bankName = parts[1];
+    } else {
+      accountNumber = rawAccount.replace(/[^0-9]/g, '');
+    }
 
     // 은행/계좌가 비어있고 청구자가 있으면 계정 시트에서 조회
     if ((!bankName || !accountNumber) && claimant) {

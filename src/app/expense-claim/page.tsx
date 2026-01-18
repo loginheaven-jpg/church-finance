@@ -139,16 +139,19 @@ export default function ExpenseClaimPage() {
       ws['!ref'] = XLSX.utils.encode_range(range);
 
       // 데이터만 다시 작성 (헤더 없이)
+      // C=금액, D=입금통장, E=출금통장, F=이체메모, H=계좌번호, J=은행명
       const wsNoHeader = XLSX.utils.aoa_to_sheet(
         data.map(item => [
-          '', '', '',
-          item.depositAccount,
-          item.withdrawNote,
-          item.amount,
-          '',
-          item.accountNumber,
-          '',
-          item.bankName,
+          '',                    // A
+          '',                    // B
+          item.amount,           // C: 금액
+          item.depositAccount,   // D: 입금통장
+          item.withdrawNote,     // E: 출금통장
+          item.claimant,         // F: 이체메모
+          '',                    // G
+          item.accountNumber,    // H: 계좌번호
+          '',                    // I
+          item.bankName,         // J: 은행명
         ])
       );
 

@@ -33,6 +33,14 @@ interface MatchedExpenseItem {
   match: MatchingRule | null;
 }
 
+// 헌금함 매칭 현황 타입
+interface CashOfferingMatchStatus {
+  date: string;
+  incomeTotal: number;
+  bankAmount: number;
+  matched: boolean;
+}
+
 interface MatchPreviewResult {
   income: MatchedIncomeItem[];
   expense: MatchedExpenseItem[];
@@ -41,6 +49,7 @@ interface MatchPreviewResult {
     transaction: BankTransaction;
     suggestions: MatchingRule[];
   }>;
+  cashOfferingMatchStatus?: CashOfferingMatchStatus[];
 }
 
 // 탭 타입 (2개만: 수입부, 지출부)
@@ -573,6 +582,44 @@ export function BankUpload() {
               {/* 매칭 결과 - 탭 UI */}
               {matchResult && step === 'matched' && (
                 <div className="space-y-4">
+                  {/* 헌금함 매칭 현황 */}
+                  {matchResult.cashOfferingMatchStatus && matchResult.cashOfferingMatchStatus.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <div className="text-sm font-medium text-amber-700 mb-2">헌금함 매칭 현황</div>
+                      <div className="overflow-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-amber-200">
+                              <th className="text-left py-1 px-2">기준일</th>
+                              <th className="text-right py-1 px-2">수입부 합계</th>
+                              <th className="text-right py-1 px-2">은행원장 금액</th>
+                              <th className="text-center py-1 px-2">상태</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {matchResult.cashOfferingMatchStatus.map((status) => (
+                              <tr key={status.date} className={cn(
+                                'border-b border-amber-100',
+                                !status.matched && 'bg-red-50'
+                              )}>
+                                <td className="py-1 px-2 text-amber-800">{status.date}</td>
+                                <td className="py-1 px-2 text-right text-green-600">{status.incomeTotal.toLocaleString()}</td>
+                                <td className="py-1 px-2 text-right text-blue-600">{status.bankAmount.toLocaleString()}</td>
+                                <td className="py-1 px-2 text-center">
+                                  {status.matched ? (
+                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs">일치</span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs">불일치</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
                   {/* 기준일별 합계 (매칭 결과 기반) */}
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                     <div className="text-sm font-medium text-green-700 mb-2">기준일별 합계 (반영 대상)</div>
@@ -646,13 +693,13 @@ export function BankUpload() {
                             <TableHead className="w-[40px]">No</TableHead>
                             <TableHead className="w-[50px]">상태</TableHead>
                             <TableHead className="w-[90px]">기준일</TableHead>
-                            <TableHead className="w-[70px]">입금방법</TableHead>
+                            <TableHead className="w-[80px]">입금일</TableHead>
+                            <TableHead className="w-[80px]">입금방법</TableHead>
                             <TableHead className="w-[50px]">코드</TableHead>
-                            <TableHead className="w-[100px]">헌금자</TableHead>
-                            <TableHead className="w-[100px]">대표자</TableHead>
+                            <TableHead className="w-[80px]">헌금자</TableHead>
+                            <TableHead className="w-[80px]">대표자</TableHead>
                             <TableHead className="w-[90px] text-right">금액</TableHead>
-                            <TableHead className="w-[150px]">비고</TableHead>
-                            <TableHead className="w-[70px]">입력방법</TableHead>
+                            <TableHead className="w-[120px]">비고</TableHead>
                             <TableHead className="w-[40px]"></TableHead>
                           </TableRow>
                         </TableHeader>
@@ -675,6 +722,9 @@ export function BankUpload() {
                               <TableCell className={cn('text-xs', item.type === 'suppressed' ? 'text-red-600' : 'text-blue-600')}>
                                 {item.type === 'suppressed' ? item.transaction.date : item.record?.date}
                               </TableCell>
+                              <TableCell className="text-xs text-slate-500">
+                                {item.type === 'suppressed' ? item.transaction.transaction_date : item.record?.transaction_date}
+                              </TableCell>
                               <TableCell className="text-xs">
                                 {item.type === 'suppressed' ? (
                                   <span className="text-red-500">-</span>
@@ -682,7 +732,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.source || '계좌이체'}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'source', e.target.value)}
-                                    className="h-6 text-xs w-16"
+                                    className="h-6 text-xs w-20"
                                   />
                                 )}
                               </TableCell>
@@ -705,7 +755,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.donor_name || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'donor_name', e.target.value)}
-                                    className="h-6 text-xs w-24"
+                                    className="h-6 text-xs w-20"
                                   />
                                 )}
                               </TableCell>
@@ -716,7 +766,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.representative || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'representative', e.target.value)}
-                                    className="h-6 text-xs w-24"
+                                    className="h-6 text-xs w-20"
                                   />
                                 )}
                               </TableCell>
@@ -739,12 +789,9 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.note || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'note', e.target.value)}
-                                    className="h-6 text-xs w-36"
+                                    className="h-6 text-xs w-28"
                                   />
                                 )}
-                              </TableCell>
-                              <TableCell className="text-xs text-slate-500">
-                                {item.type === 'suppressed' ? '-' : item.record?.input_method || '은행원장'}
                               </TableCell>
                               <TableCell>
                                 {item.type !== 'suppressed' && (

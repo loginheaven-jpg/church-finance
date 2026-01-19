@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   getBankTransactions,
   getMatchingRules,
+  getIncomeRecords,
+  getDonorInfo,
   generateId,
   getKSTDateTime,
 } from '@/lib/google-sheets';
@@ -10,7 +12,16 @@ import type {
   IncomeRecord,
   ExpenseRecord,
   MatchingRule,
+  DonorInfo,
 } from '@/types';
+
+// 헌금함 매칭 현황 타입
+interface CashOfferingMatchStatus {
+  date: string;
+  incomeTotal: number;  // 수입부 헌금함 합계
+  bankAmount: number;   // 은행원장 헌금함 금액
+  matched: boolean;
+}
 
 // 미리보기용 매칭 결과 생성 (저장하지 않음)
 export async function POST(request: NextRequest) {
@@ -20,6 +31,8 @@ export async function POST(request: NextRequest) {
 
     const rules = await getMatchingRules();
     const allTransactions = await getBankTransactions();
+    const existingIncomeRecords = await getIncomeRecords();
+    const donors = await getDonorInfo();
 
     // transactionIds가 주어지면 해당 ID만, 아니면 pending 전체
     let targetTransactions: BankTransaction[];
@@ -32,6 +45,43 @@ export async function POST(request: NextRequest) {
         tx.matched_status === 'pending' && !tx.suppressed
       );
     }
+
+    // 수입부에서 헌금함(source='헌금함') 합계를 기준일별로 계산
+    const cashOfferingByDate = new Map<string, number>();
+    existingIncomeRecords
+      .filter(r => r.source === '헌금함')
+      .forEach(r => {
+        const existing = cashOfferingByDate.get(r.date) || 0;
+        cashOfferingByDate.set(r.date, existing + r.amount);
+      });
+
+    // 은행원장에서 헌금함 입금을 기준일별로 수집
+    const bankCashOfferingByDate = new Map<string, { total: number; transactions: BankTransaction[] }>();
+    targetTransactions
+      .filter(tx => tx.deposit > 0 && isCashOfferingTransaction(tx))
+      .forEach(tx => {
+        const existing = bankCashOfferingByDate.get(tx.date) || { total: 0, transactions: [] };
+        bankCashOfferingByDate.set(tx.date, {
+          total: existing.total + tx.deposit,
+          transactions: [...existing.transactions, tx],
+        });
+      });
+
+    // 헌금함 매칭 현황 생성
+    const cashOfferingMatchStatus: CashOfferingMatchStatus[] = [];
+    const allDates = new Set([...cashOfferingByDate.keys(), ...bankCashOfferingByDate.keys()]);
+    allDates.forEach(date => {
+      const incomeTotal = cashOfferingByDate.get(date) || 0;
+      const bankData = bankCashOfferingByDate.get(date);
+      const bankAmount = bankData?.total || 0;
+      cashOfferingMatchStatus.push({
+        date,
+        incomeTotal,
+        bankAmount,
+        matched: incomeTotal === bankAmount && incomeTotal > 0,
+      });
+    });
+    cashOfferingMatchStatus.sort((a, b) => a.date.localeCompare(b.date));
 
     const incomeRecords: Array<{
       transaction: BankTransaction;
@@ -54,11 +104,36 @@ export async function POST(request: NextRequest) {
     const now = getKSTDateTime();
 
     for (const tx of targetTransactions) {
-      // 말소 대상 체크
-      if (shouldSuppressTransaction(tx)) {
+      // 헌금함 입금 체크 (카드결제와 분리)
+      if (tx.deposit > 0 && isCashOfferingTransaction(tx)) {
+        const incomeTotal = cashOfferingByDate.get(tx.date) || 0;
+        const bankData = bankCashOfferingByDate.get(tx.date);
+        const bankAmount = bankData?.total || 0;
+
+        if (incomeTotal === bankAmount && incomeTotal > 0) {
+          // 금액 일치 → 말소
+          suppressedTransactions.push({
+            ...tx,
+            suppressed_reason: '자동 말소 (헌금함)',
+          });
+        } else {
+          // 금액 불일치 → 매칭실패로 검토 필요
+          needsReview.push({
+            transaction: {
+              ...tx,
+              suppressed_reason: `매칭실패 (수입부: ${incomeTotal.toLocaleString()}, 은행: ${bankAmount.toLocaleString()})`,
+            },
+            suggestions: [],
+          });
+        }
+        continue;
+      }
+
+      // 카드결제 출금 체크
+      if (shouldSuppressCardTransaction(tx)) {
         suppressedTransactions.push({
           ...tx,
-          suppressed_reason: '자동 말소 (헌금함/카드결제)',
+          suppressed_reason: '자동 말소 (카드결제)',
         });
         continue;
       }
@@ -72,12 +147,12 @@ export async function POST(request: NextRequest) {
         let match: MatchingRule | null = null;
 
         if (matchedRule && matchedRule.confidence >= 0.8) {
-          income = createIncomeFromBankTransaction(tx, matchedRule, now);
+          income = createIncomeFromBankTransaction(tx, matchedRule, donors, now);
           match = matchedRule;
         } else {
           // 기본 분류 로직 적용
           const defaultCode = getDefaultIncomeCode(tx.deposit);
-          income = createIncomeFromBankTransactionWithCode(tx, defaultCode.code, defaultCode.name, now);
+          income = createIncomeFromBankTransactionWithCode(tx, defaultCode.code, defaultCode.name, donors, now);
         }
 
         incomeRecords.push({ transaction: tx, record: income, match });
@@ -101,6 +176,7 @@ export async function POST(request: NextRequest) {
         expense: expenseRecords,
         suppressed: suppressedTransactions,
         needsReview,
+        cashOfferingMatchStatus,
       },
       summary: {
         incomeCount: incomeRecords.length,
@@ -119,27 +195,24 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// 말소 대상 판별
-function shouldSuppressTransaction(tx: BankTransaction): boolean {
+// 헌금함 거래 판별
+function isCashOfferingTransaction(tx: BankTransaction): boolean {
   const text = `${tx.description || ''} ${tx.detail || ''} ${tx.memo || ''}`.toLowerCase();
+  return text.includes('헌금함') || text.includes('현금입금');
+}
 
-  // 헌금함 입금 (현금헌금으로 별도 처리)
-  if (tx.deposit > 0 && (text.includes('헌금함') || text.includes('현금입금'))) {
-    return true;
-  }
+// 카드결제 말소 대상 판별
+function shouldSuppressCardTransaction(tx: BankTransaction): boolean {
+  if (tx.withdrawal <= 0) return false;
 
-  // 카드결제 출금 (카드내역으로 별도 처리)
-  if (tx.withdrawal > 0 && (
+  const text = `${tx.description || ''} ${tx.detail || ''} ${tx.memo || ''}`.toLowerCase();
+  return (
     text.includes('nh카드') ||
     text.includes('신용카드') ||
     text.includes('체크카드') ||
     text.includes('카드결제') ||
     text.includes('카드대금')
-  )) {
-    return true;
-  }
-
-  return false;
+  );
 }
 
 // 매칭 규칙 찾기
@@ -206,19 +279,35 @@ function getSuggestedRules(
     .map(item => item.rule);
 }
 
+// 헌금자명에서 대표자 조회
+function findRepresentative(donorName: string, donors: DonorInfo[]): string {
+  const donor = donors.find(d => d.donor_name === donorName);
+  return donor?.representative || donorName;
+}
+
+// detail에서 헌금자명 추출 (좌측 3자리)
+function extractDonorName(detail: string | undefined): string {
+  if (!detail) return '';
+  return detail.substring(0, 3);
+}
+
 // 수입 레코드 생성
 function createIncomeFromBankTransaction(
   tx: BankTransaction,
   rule: MatchingRule,
+  donors: DonorInfo[],
   now: string
 ): IncomeRecord {
+  const donorName = extractDonorName(tx.detail) || tx.memo || rule.target_name;
+  const representative = findRepresentative(donorName, donors);
+
   return {
     id: generateId('INC'),
     date: tx.date,
     source: '계좌이체',
     offering_code: rule.target_code,
-    donor_name: tx.detail || tx.memo || rule.target_name,
-    representative: tx.detail || tx.memo || rule.target_name,
+    donor_name: donorName,
+    representative: representative,
     amount: tx.deposit,
     note: `${tx.description} | ${tx.detail}`,
     input_method: '은행원장',
@@ -233,15 +322,19 @@ function createIncomeFromBankTransactionWithCode(
   tx: BankTransaction,
   code: number,
   name: string,
+  donors: DonorInfo[],
   now: string
 ): IncomeRecord {
+  const donorName = extractDonorName(tx.detail) || name;
+  const representative = findRepresentative(donorName, donors);
+
   return {
     id: generateId('INC'),
     date: tx.date,
     source: '계좌이체',
     offering_code: code,
-    donor_name: tx.detail || name,
-    representative: tx.detail || name,
+    donor_name: donorName,
+    representative: representative,
     amount: tx.deposit,
     note: `${tx.description} | ${tx.detail} (기본분류)`,
     input_method: '은행원장',

@@ -12,18 +12,36 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Upload, FileText, Loader2, CheckCircle2, FileSpreadsheet } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle2, FileSpreadsheet, ArrowRight, RefreshCw, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { BankTransaction } from '@/types';
+import type { BankTransaction, AutoMatchResult, IncomeRecord, ExpenseRecord } from '@/types';
+
+// 워크플로우 단계 타입
+type UploadStep = 'upload' | 'preview' | 'saved' | 'matched' | 'confirmed';
 
 export function BankUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [matching, setMatching] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [data, setData] = useState<BankTransaction[]>([]);
   const [result, setResult] = useState<{ uploaded: number; message: string } | null>(null);
+  const [step, setStep] = useState<UploadStep>('upload');
+  const [matchResult, setMatchResult] = useState<AutoMatchResult | null>(null);
+  const [savedTransactionIds, setSavedTransactionIds] = useState<string[]>([]);
+
+  // 전체 상태 초기화
+  const resetAll = useCallback(() => {
+    setFile(null);
+    setData([]);
+    setResult(null);
+    setStep('upload');
+    setMatchResult(null);
+    setSavedTransactionIds([]);
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -34,6 +52,9 @@ export function BankUpload() {
       setFile(droppedFile);
       setData([]);
       setResult(null);
+      setStep('upload');
+      setMatchResult(null);
+      setSavedTransactionIds([]);
     } else {
       toast.error('XLS 또는 XLSX 파일만 업로드 가능합니다');
     }
@@ -45,6 +66,9 @@ export function BankUpload() {
       setFile(selectedFile);
       setData([]);
       setResult(null);
+      setStep('upload');
+      setMatchResult(null);
+      setSavedTransactionIds([]);
     }
   };
 
@@ -68,6 +92,7 @@ export function BankUpload() {
 
       if (result.success) {
         setData(result.data);
+        setStep('preview');
         toast.success(`${result.data.length}건의 거래 데이터를 불러왔습니다`);
       } else {
         toast.error(result.error || '파일 파싱 중 오류가 발생했습니다');
@@ -94,7 +119,7 @@ export function BankUpload() {
     setData(prev => prev.filter((_, i) => i !== index));
   };
 
-  // 은행원장에 반영
+  // 은행원장에 반영 (1단계)
   const handleSave = async () => {
     if (data.length === 0) {
       toast.error('저장할 데이터가 없습니다');
@@ -114,8 +139,9 @@ export function BankUpload() {
 
       if (result.success) {
         setResult(result);
-        setData([]);
-        setFile(null);
+        // data와 file은 유지 (다음 단계에서 사용)
+        setSavedTransactionIds(data.map(tx => tx.id));
+        setStep('saved');
         toast.success(result.message);
       } else {
         toast.error(result.error || '저장 중 오류가 발생했습니다');
@@ -125,6 +151,81 @@ export function BankUpload() {
       console.error(error);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 원장 매칭 (2단계)
+  const handleMatch = async () => {
+    if (savedTransactionIds.length === 0) {
+      toast.error('매칭할 거래가 없습니다');
+      return;
+    }
+
+    setMatching(true);
+
+    try {
+      const res = await fetch('/api/match/auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionIds: savedTransactionIds }),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        setMatchResult(result.data);
+        setStep('matched');
+        const total = (result.data.autoMatched?.length || 0) +
+                      (result.data.suppressed?.length || 0) +
+                      (result.data.needsReview?.length || 0);
+        toast.success(`${total}건 매칭 완료`);
+      } else {
+        toast.error(result.error || '매칭 중 오류가 발생했습니다');
+      }
+    } catch (error) {
+      toast.error('매칭 중 오류가 발생했습니다');
+      console.error(error);
+    } finally {
+      setMatching(false);
+    }
+  };
+
+  // 정식 반영 (3단계)
+  const handleConfirm = async () => {
+    if (!matchResult) {
+      toast.error('매칭 결과가 없습니다');
+      return;
+    }
+
+    setConfirming(true);
+
+    try {
+      const res = await fetch('/api/match/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          autoMatched: matchResult.autoMatched,
+          suppressed: matchResult.suppressed,
+        }),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        setStep('confirmed');
+        toast.success(`${result.incomeCount || 0}건 수입, ${result.expenseCount || 0}건 지출 반영 완료`);
+        // 완료 후 초기화
+        setTimeout(() => {
+          resetAll();
+        }, 3000);
+      } else {
+        toast.error(result.error || '반영 중 오류가 발생했습니다');
+      }
+    } catch (error) {
+      toast.error('반영 중 오류가 발생했습니다');
+      console.error(error);
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -238,19 +339,175 @@ export function BankUpload() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* 은행원장에 반영 버튼 */}
-              <Button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4 mr-2" />
-                )}
-                은행원장에 반영
-              </Button>
+              {/* 워크플로우 단계 표시 */}
+              <div className="flex items-center justify-center gap-2 py-2">
+                <div className={cn(
+                  'flex items-center gap-1 px-3 py-1 rounded-full text-sm',
+                  step === 'preview' ? 'bg-blue-100 text-blue-700' :
+                  ['saved', 'matched', 'confirmed'].includes(step) ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                )}>
+                  <span className="font-medium">1</span>
+                  <span>은행원장</span>
+                  {['saved', 'matched', 'confirmed'].includes(step) && <CheckCircle2 className="h-4 w-4" />}
+                </div>
+                <ArrowRight className="h-4 w-4 text-slate-400" />
+                <div className={cn(
+                  'flex items-center gap-1 px-3 py-1 rounded-full text-sm',
+                  step === 'saved' ? 'bg-blue-100 text-blue-700' :
+                  ['matched', 'confirmed'].includes(step) ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                )}>
+                  <span className="font-medium">2</span>
+                  <span>원장 매칭</span>
+                  {['matched', 'confirmed'].includes(step) && <CheckCircle2 className="h-4 w-4" />}
+                </div>
+                <ArrowRight className="h-4 w-4 text-slate-400" />
+                <div className={cn(
+                  'flex items-center gap-1 px-3 py-1 rounded-full text-sm',
+                  step === 'matched' ? 'bg-blue-100 text-blue-700' :
+                  step === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                )}>
+                  <span className="font-medium">3</span>
+                  <span>정식 반영</span>
+                  {step === 'confirmed' && <CheckCircle2 className="h-4 w-4" />}
+                </div>
+              </div>
+
+              {/* 1단계: 은행원장에 반영 버튼 */}
+              {step === 'preview' && (
+                <Button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="w-full"
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  1단계: 은행원장에 반영
+                </Button>
+              )}
+
+              {/* 2단계: 원장 매칭 버튼 */}
+              {step === 'saved' && (
+                <Button
+                  onClick={handleMatch}
+                  disabled={matching}
+                  className="w-full bg-amber-600 hover:bg-amber-700"
+                >
+                  {matching ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  2단계: 원장 매칭
+                </Button>
+              )}
+
+              {/* 매칭 결과 표시 */}
+              {matchResult && step === 'matched' && (
+                <div className="space-y-3">
+                  {/* 자동 매칭 결과 */}
+                  {matchResult.autoMatched && matchResult.autoMatched.length > 0 && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <div className="text-sm font-medium text-green-700 mb-2">
+                        자동 매칭 ({matchResult.autoMatched.length}건)
+                      </div>
+                      <div className="space-y-1 max-h-[200px] overflow-auto">
+                        {matchResult.autoMatched.map((item, idx) => {
+                          const record = item.record as IncomeRecord | ExpenseRecord;
+                          const isIncome = 'offering_code' in record;
+                          return (
+                            <div key={idx} className="text-xs bg-white p-2 rounded border border-green-100 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className={cn(
+                                  'px-2 py-0.5 rounded',
+                                  isIncome ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                )}>
+                                  {isIncome ? '수입' : '지출'}
+                                </span>
+                                <span className="text-slate-600">
+                                  {item.transaction.memo || item.transaction.description || '-'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-500">
+                                  {item.match ? item.match.target_name : '기본분류'}
+                                </span>
+                                <span className={cn(
+                                  'font-medium',
+                                  isIncome ? 'text-green-600' : 'text-red-600'
+                                )}>
+                                  {record.amount.toLocaleString()}원
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 말소 처리 */}
+                  {matchResult.suppressed && matchResult.suppressed.length > 0 && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                      <div className="text-sm font-medium text-slate-700 mb-2">
+                        말소 처리 ({matchResult.suppressed.length}건)
+                      </div>
+                      <div className="space-y-1 max-h-[100px] overflow-auto">
+                        {matchResult.suppressed.map((tx, idx) => (
+                          <div key={idx} className="text-xs bg-white p-2 rounded border border-slate-100 flex items-center justify-between">
+                            <span className="text-slate-500">{tx.description}</span>
+                            <span className="text-slate-400">{tx.suppressed_reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 검토 필요 */}
+                  {matchResult.needsReview && matchResult.needsReview.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-amber-700 mb-2">
+                        <AlertCircle className="h-4 w-4" />
+                        수동 검토 필요 ({matchResult.needsReview.length}건)
+                      </div>
+                      <div className="space-y-1 max-h-[100px] overflow-auto">
+                        {matchResult.needsReview.map((item, idx) => (
+                          <div key={idx} className="text-xs bg-white p-2 rounded border border-amber-100">
+                            <span className="text-slate-600">
+                              {item.transaction.memo || item.transaction.description || '-'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3단계: 정식 반영 버튼 */}
+                  <Button
+                    onClick={handleConfirm}
+                    disabled={confirming}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                  >
+                    {confirming ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                    )}
+                    3단계: 정식 반영 (수입부/지출부 저장)
+                  </Button>
+                </div>
+              )}
+
+              {/* 완료 상태 */}
+              {step === 'confirmed' && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                  <CheckCircle2 className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                  <div className="text-green-700 font-medium">모든 작업이 완료되었습니다</div>
+                  <p className="text-sm text-green-600 mt-1">잠시 후 초기화됩니다...</p>
+                </div>
+              )}
 
               {/* 기준일별 합계 (주일) */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">

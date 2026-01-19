@@ -27,12 +27,17 @@ export async function POST(request: NextRequest) {
     const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
 
     // 헤더 찾기 (농협 XLS 형식)
+    // 실제 컬럼 헤더를 찾음 (제목 행과 구분하기 위해 여러 컬럼 헤더가 있는 행을 찾음)
     let headerRowIndex = -1;
-    for (let i = 0; i < Math.min(rawData.length, 10); i++) {
+    for (let i = 0; i < Math.min(rawData.length, 15); i++) {
       const row = rawData[i];
-      if (Array.isArray(row)) {
-        const rowStr = row.join(' ').toLowerCase();
-        if (rowStr.includes('거래일시') || rowStr.includes('출금') || rowStr.includes('입금')) {
+      if (Array.isArray(row) && row.length >= 5) {
+        // 각 셀을 개별적으로 확인하여 헤더 행인지 판단
+        const cells = row.map(cell => String(cell || '').toLowerCase());
+        const hasDateCol = cells.some(c => c.includes('거래일시') || c.includes('거래일자'));
+        const hasAmountCol = cells.some(c => c.includes('출금금액') || c.includes('입금금액') || c.includes('출금액') || c.includes('입금액'));
+
+        if (hasDateCol && hasAmountCol) {
           headerRowIndex = i;
           break;
         }

@@ -8,6 +8,7 @@ import {
   updateMatchingRule,
   addMatchingRule,
   getCardOwners,
+  getDonorInfo,
   generateId,
   getKSTDateTime,
 } from './google-sheets';
@@ -21,6 +22,7 @@ import type {
   AutoMatchResult,
   SyncResult,
   CardOwner,
+  DonorInfo,
 } from '@/types';
 
 // ============================================
@@ -35,6 +37,15 @@ export async function syncCashOfferingsWithDuplicatePrevention(
   const totalAmount = cashOfferings.reduce((sum, co) => sum + co.amount, 0);
   const warnings: string[] = [];
   let suppressedCount = 0;
+
+  // 헌금자정보 조회하여 donor_name → representative 매핑 생성
+  const donorInfoList = await getDonorInfo();
+  const donorToRepMap = new Map<string, string>();
+  for (const info of donorInfoList) {
+    if (info.donor_name && info.representative) {
+      donorToRepMap.set(info.donor_name, info.representative);
+    }
+  }
 
   // 해당 기간의 은행 입금 내역 조회
   const allBankTransactions = await getBankTransactions();
@@ -72,7 +83,7 @@ export async function syncCashOfferingsWithDuplicatePrevention(
   }
 
   // 현금헌금을 수입부로 변환 및 저장
-  const incomeRecords = cashOfferings.map(co => convertCashOfferingToIncome(co));
+  const incomeRecords = cashOfferings.map(co => convertCashOfferingToIncome(co, donorToRepMap));
   await addIncomeRecords(incomeRecords);
 
   return {
@@ -83,14 +94,20 @@ export async function syncCashOfferingsWithDuplicatePrevention(
   };
 }
 
-function convertCashOfferingToIncome(co: CashOffering): IncomeRecord {
+function convertCashOfferingToIncome(
+  co: CashOffering,
+  donorToRepMap: Map<string, string>
+): IncomeRecord {
+  // 헌금자정보에서 대표자 조회, 없으면 donor_name 사용
+  const representative = donorToRepMap.get(co.donor_name) || co.donor_name;
+
   return {
     id: generateId('INC'),
     date: co.date,
     source: '헌금함',
     offering_code: co.code,
     donor_name: co.donor_name,
-    representative: co.donor_name,
+    representative,
     amount: co.amount,
     note: co.note,
     input_method: '현금헌금',

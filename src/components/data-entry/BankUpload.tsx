@@ -887,8 +887,7 @@ export function BankUpload() {
                             <TableHead className="w-[100px]">거래처</TableHead>
                             <TableHead className="w-[120px]">적요</TableHead>
                             <TableHead className="w-[90px] text-right">금액</TableHead>
-                            <TableHead className="w-[50px]">계정</TableHead>
-                            <TableHead className="w-[50px]">분류</TableHead>
+                            <TableHead className="w-[60px]">계정</TableHead>
                             <TableHead className="w-[120px]">비고</TableHead>
                             <TableHead className="w-[40px]"></TableHead>
                           </TableRow>
@@ -931,7 +930,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.payment_method || '계좌이체'}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'payment_method', e.target.value)}
-                                    className="h-6 text-sm w-16"
+                                    className="h-6 text-sm w-20"
                                   />
                                 )}
                               </TableCell>
@@ -989,7 +988,7 @@ export function BankUpload() {
                                   <Input
                                     type="number"
                                     value={item.suggestions?.[0]?.target_code || 0}
-                                    className="h-6 text-sm w-12 text-center bg-amber-50"
+                                    className="h-6 text-sm w-16 text-center bg-amber-50"
                                     readOnly
                                   />
                                 ) : (
@@ -997,21 +996,8 @@ export function BankUpload() {
                                     type="number"
                                     value={item.record?.account_code || 0}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'account_code', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-sm w-12 text-center"
+                                    className="h-6 text-sm w-16 text-center"
                                   />
-                                )}
-                              </TableCell>
-                              <TableCell className="text-sm">
-                                {item.type === 'suppressed' ? (
-                                  <span className="text-red-500">-</span>
-                                ) : item.type === 'needsReview' ? (
-                                  <span className="px-1 py-0.5 bg-amber-100 text-amber-600 rounded text-sm">
-                                    {item.suggestions?.[0]?.target_name || '미분류'}
-                                  </span>
-                                ) : (
-                                  <span className="px-1 py-0.5 bg-slate-100 text-slate-700 rounded text-sm">
-                                    {item.match?.target_name || '-'}
-                                  </span>
                                 )}
                               </TableCell>
                               <TableCell>

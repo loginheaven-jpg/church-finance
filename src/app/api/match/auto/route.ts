@@ -23,6 +23,27 @@ interface CashOfferingMatchStatus {
   matched: boolean;
 }
 
+// 수입부 키워드 매칭 규칙 (우선순위 기반)
+interface IncomeMatchingRule {
+  priority: number;
+  keywords: string[];
+  excludeKeywords?: string[];
+  code: number;
+  name: string;
+}
+
+const INCOME_MATCHING_RULES: IncomeMatchingRule[] = [
+  { priority: 1, keywords: ['건축', '성전', '봉헌'], code: 501, name: '건축헌금' },
+  { priority: 2, keywords: ['십일조', '십일'], code: 12, name: '십일조헌금' },
+  { priority: 3, keywords: ['구제'], excludeKeywords: ['선교'], code: 22, name: '구제헌금' },
+  { priority: 4, keywords: ['선교'], code: 21, name: '선교헌금' },
+  { priority: 5, keywords: ['성탄', '신년'], code: 14, name: '특별헌금' },
+  { priority: 6, keywords: ['감사'], code: 13, name: '감사헌금' },
+  { priority: 7, keywords: ['큐티', '찬조', '지정', '후원'], code: 24, name: '지정헌금' },
+  { priority: 8, keywords: ['커피', '카페'], excludeKeywords: ['주일'], code: 32, name: '기타잡수입' },
+  { priority: 9, keywords: ['주일'], code: 11, name: '주일헌금' },
+];
+
 // 미리보기용 매칭 결과 생성 (저장하지 않음)
 export async function POST(request: NextRequest) {
   try {
@@ -133,18 +154,31 @@ export async function POST(request: NextRequest) {
       const matchedRule = findBestMatchingRule(tx, rules);
 
       if (tx.deposit > 0) {
-        // 수입 거래
-        let income: IncomeRecord;
-        let match: MatchingRule | null = null;
+        // 수입 거래: 우선순위 기반 키워드 매칭 (memo + detail)
+        const offeringResult = determineIncomeOfferingCode(tx.memo, tx.detail, tx.deposit);
+        const income = createIncomeFromBankTransactionWithCode(
+          tx,
+          offeringResult.code,
+          offeringResult.name,
+          donors,
+          now
+        );
 
-        if (matchedRule && matchedRule.confidence >= 0.8) {
-          income = createIncomeFromBankTransaction(tx, matchedRule, donors, now);
-          match = matchedRule;
-        } else {
-          // 기본 분류 로직 적용
-          const defaultCode = getDefaultIncomeCode(tx.deposit);
-          income = createIncomeFromBankTransactionWithCode(tx, defaultCode.code, defaultCode.name, donors, now);
-        }
+        // 키워드 매칭 성공 시 match 정보 생성
+        const match: MatchingRule | null = offeringResult.matchedBy === 'keyword'
+          ? {
+              id: 'income_keyword',
+              pattern: offeringResult.name,
+              rule_type: 'bank_income',
+              target_type: 'income',
+              target_code: offeringResult.code,
+              target_name: offeringResult.name,
+              confidence: 1.0,
+              usage_count: 0,
+              created_at: now,
+              updated_at: now,
+            }
+          : null;
 
         incomeRecords.push({ transaction: tx, record: income, match });
       } else if (tx.withdrawal > 0) {
@@ -375,6 +409,33 @@ function getDefaultIncomeCode(amount: number): { code: number; name: string } {
   } else {
     return { code: 13, name: '감사헌금' };
   }
+}
+
+/**
+ * 수입부 offering_code 결정 (우선순위 기반 키워드 매칭)
+ * - memo + detail 필드 모두 검토
+ * - 키워드 매칭 실패 시 금액 기반 기본 분류
+ */
+function determineIncomeOfferingCode(
+  memo: string | undefined,
+  detail: string | undefined,
+  amount: number
+): { code: number; name: string; matchedBy: 'keyword' | 'default' } {
+  const searchText = `${memo || ''} ${detail || ''}`.toLowerCase();
+
+  for (const rule of INCOME_MATCHING_RULES) {
+    const hasKeyword = rule.keywords.some(kw => searchText.includes(kw));
+    if (!hasKeyword) continue;
+
+    if (rule.excludeKeywords) {
+      const hasExclude = rule.excludeKeywords.some(kw => searchText.includes(kw));
+      if (hasExclude) continue;
+    }
+
+    return { code: rule.code, name: rule.name, matchedBy: 'keyword' };
+  }
+
+  return { ...getDefaultIncomeCode(amount), matchedBy: 'default' };
 }
 
 /**

@@ -358,7 +358,7 @@ export function BankUpload() {
     }
   };
 
-  // 기준일별 합계 계산
+  // 기준일별 합계 계산 (원본 데이터 기반)
   const getDateSummary = () => {
     const dateMap = new Map<string, { withdrawal: number; deposit: number }>();
 
@@ -376,9 +376,43 @@ export function BankUpload() {
       .map(([date, amounts]) => ({ date, ...amounts }));
   };
 
+  // 매칭 결과 기준일별 합계 계산 (반영 대상만)
+  const getMatchedDateSummary = () => {
+    const dateMap = new Map<string, { income: number; expense: number }>();
+
+    // 수입 (매칭된 항목만)
+    unifiedIncome
+      .filter(item => item.type === 'matched' && item.record)
+      .forEach(item => {
+        const dateKey = item.record!.date;
+        const existing = dateMap.get(dateKey) || { income: 0, expense: 0 };
+        dateMap.set(dateKey, {
+          ...existing,
+          income: existing.income + item.record!.amount,
+        });
+      });
+
+    // 지출 (매칭된 항목만)
+    unifiedExpense
+      .filter(item => item.type === 'matched' && item.record)
+      .forEach(item => {
+        const dateKey = item.record!.date;
+        const existing = dateMap.get(dateKey) || { income: 0, expense: 0 };
+        dateMap.set(dateKey, {
+          ...existing,
+          expense: existing.expense + item.record!.amount,
+        });
+      });
+
+    return Array.from(dateMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, amounts]) => ({ date, ...amounts }));
+  };
+
   const totalWithdrawal = data.reduce((sum, item) => sum + item.withdrawal, 0);
   const totalDeposit = data.reduce((sum, item) => sum + item.deposit, 0);
   const dateSummary = getDateSummary();
+  const matchedDateSummary = getMatchedDateSummary();
 
   // 수입/지출 합계 계산 (말소 항목 제외, 매칭된 항목만)
   const incomeTotalAmount = unifiedIncome
@@ -539,6 +573,29 @@ export function BankUpload() {
               {/* 매칭 결과 - 탭 UI */}
               {matchResult && step === 'matched' && (
                 <div className="space-y-4">
+                  {/* 기준일별 합계 (매칭 결과 기반) */}
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="text-sm font-medium text-green-700 mb-2">기준일별 합계 (반영 대상)</div>
+                    <div className="flex flex-wrap gap-3">
+                      {matchedDateSummary.map(({ date, income, expense }) => (
+                        <div key={date} className="bg-white px-3 py-1.5 rounded border border-green-200">
+                          <span className="text-sm text-green-700 mr-2">{date}</span>
+                          {income > 0 && (
+                            <span className="text-green-600 font-semibold mr-2">+{income.toLocaleString()}</span>
+                          )}
+                          {expense > 0 && (
+                            <span className="text-red-600 font-semibold">-{expense.toLocaleString()}</span>
+                          )}
+                        </div>
+                      ))}
+                      <div className="bg-green-100 px-3 py-1.5 rounded border border-green-300">
+                        <span className="text-sm text-green-800 mr-2">반영 총합계</span>
+                        <span className="text-green-700 font-bold mr-2">+{incomeTotalAmount.toLocaleString()}</span>
+                        <span className="text-red-700 font-bold">-{expenseTotalAmount.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* 탭 헤더 (2개: 수입부, 지출부) */}
                   <div className="flex border-b">
                     <button

@@ -10,41 +10,114 @@ async function getFamilyGroup(userName: string): Promise<{
 }> {
   const donorInfos = await getDonorInfo();
 
+  console.log(`[getFamilyGroup] userName: ${userName}`);
+  console.log(`[getFamilyGroup] 헌금자정보 총 ${donorInfos.length}건`);
+  // 첫 번째 레코드의 모든 필드 출력 (헤더 확인용)
+  if (donorInfos.length > 0) {
+    console.log(`[getFamilyGroup] 첫 번째 레코드 필드들:`, Object.keys(donorInfos[0]));
+    console.log(`[getFamilyGroup] 첫 번째 레코드 값:`, JSON.stringify(donorInfos[0]));
+    // 최철영 검색
+    const matchingRecords = donorInfos.filter(d =>
+      String(d.representative || '').includes('최철영') ||
+      String(d.donor_name || '').includes('최철영') ||
+      JSON.stringify(d).includes('최철영')
+    );
+    console.log(`[getFamilyGroup] 최철영 포함 레코드: ${matchingRecords.length}건`);
+    if (matchingRecords.length > 0) {
+      matchingRecords.forEach((r, i) => console.log(`[getFamilyGroup] 매칭${i+1}:`, JSON.stringify(r)));
+    }
+  }
+
   // 1. userName이 대표자인 경우 → 해당 대표자 아래 모든 헌금자
   const asRepresentative = donorInfos.filter(d => d.representative === userName);
+  console.log(`[getFamilyGroup] asRepresentative(대표자=${userName}): ${asRepresentative.length}건`);
   if (asRepresentative.length > 0) {
     const memberNames = new Set<string>();
     asRepresentative.forEach(d => memberNames.add(d.donor_name));
     memberNames.add(userName); // 대표자도 포함
 
-    return {
+    const result = {
       representative: userName,
       members: Array.from(memberNames).map(name => ({
         name,
         isRepresentative: name === userName,
       })),
     };
+    console.log(`[getFamilyGroup] 케이스1 결과:`, JSON.stringify(result));
+    return result;
   }
 
   // 2. userName이 헌금자인 경우 → 같은 대표자 아래 모든 헌금자
   const asDoer = donorInfos.find(d => d.donor_name === userName);
+  console.log(`[getFamilyGroup] asDoer(헌금자=${userName}): ${asDoer ? `대표자=${asDoer.representative}` : '없음'}`);
   if (asDoer && asDoer.representative) {
     const rep = asDoer.representative;
     const sameFamilyDonors = donorInfos.filter(d => d.representative === rep);
+    console.log(`[getFamilyGroup] 같은 대표자(${rep}) 헌금자: ${sameFamilyDonors.length}건`);
     const memberNames = new Set<string>();
     sameFamilyDonors.forEach(d => memberNames.add(d.donor_name));
     memberNames.add(rep); // 대표자도 포함
 
-    return {
+    const result = {
       representative: rep,
       members: Array.from(memberNames).map(name => ({
         name,
         isRepresentative: name === rep,
       })),
     };
+    console.log(`[getFamilyGroup] 케이스2 결과:`, JSON.stringify(result));
+    return result;
   }
 
-  // 3. 헌금자정보에 없는 경우 → 본인만
+  // 3. 헌금자정보에 없는 경우 → 수입부에서 가족 관계 추출 시도
+  console.log(`[getFamilyGroup] 케이스3: 헌금자정보에 없음 → 수입부에서 추출 시도`);
+
+  // 수입부에서 representative가 userName이거나 donor_name이 userName인 레코드 찾기
+  const currentYear = new Date().getFullYear();
+  const incomeRecords = await getIncomeRecords(`${currentYear}-01-01`, `${currentYear}-12-31`);
+
+  // userName이 대표자로 등록된 헌금 레코드 (타인이 userName을 대표자로 지정)
+  const recordsWithUserAsRep = incomeRecords.filter(r => r.representative === userName && r.donor_name !== userName);
+
+  if (recordsWithUserAsRep.length > 0) {
+    const memberNames = new Set<string>();
+    memberNames.add(userName); // 대표자
+    recordsWithUserAsRep.forEach(r => memberNames.add(r.donor_name));
+
+    const result = {
+      representative: userName,
+      members: Array.from(memberNames).map(name => ({
+        name,
+        isRepresentative: name === userName,
+      })),
+    };
+    console.log(`[getFamilyGroup] 케이스3-1(수입부 대표자):`, JSON.stringify(result));
+    return result;
+  }
+
+  // userName 본인의 헌금 레코드에서 대표자 찾기
+  const userOwnRecords = incomeRecords.filter(r => r.donor_name === userName);
+  if (userOwnRecords.length > 0 && userOwnRecords[0].representative && userOwnRecords[0].representative !== userName) {
+    const rep = userOwnRecords[0].representative;
+    // 같은 대표자를 가진 모든 헌금자 찾기
+    const sameFamilyRecords = incomeRecords.filter(r => r.representative === rep);
+    const memberNames = new Set<string>();
+    memberNames.add(rep); // 대표자
+    sameFamilyRecords.forEach(r => memberNames.add(r.donor_name));
+
+    const result = {
+      representative: rep,
+      members: Array.from(memberNames).map(name => ({
+        name,
+        isRepresentative: name === rep,
+      })),
+    };
+    console.log(`[getFamilyGroup] 케이스3-2(수입부 헌금자):`, JSON.stringify(result));
+    return result;
+  }
+
+  // 4. 완전히 정보가 없는 경우 → 본인만
+  console.log(`[getFamilyGroup] 케이스4: 수입부에도 정보 없음 → 본인만`);
   return {
     representative: userName,
     members: [{ name: userName, isRepresentative: true }],

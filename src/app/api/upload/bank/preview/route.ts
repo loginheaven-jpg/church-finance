@@ -62,6 +62,17 @@ export async function POST(request: NextRequest) {
       memo: findColumnIndex(headers, ['이체메모', '메모', '적요2']),
     };
 
+    console.log('Headers found:', headers);
+    console.log('Column indices:', colIndex);
+
+    // 필수 컬럼 확인
+    if (colIndex.date === -1) {
+      return NextResponse.json(
+        { success: false, error: `날짜 컬럼을 찾을 수 없습니다. 헤더: ${headers.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     // 데이터 변환
     const transactions: BankTransaction[] = [];
     const uploadedAt = getKSTDateTime();
@@ -111,7 +122,7 @@ export async function POST(request: NextRequest) {
 
     if (transactions.length === 0) {
       return NextResponse.json(
-        { success: false, error: '유효한 거래 데이터가 없습니다' },
+        { success: false, error: `유효한 거래 데이터가 없습니다. 데이터 행 수: ${dataRows.length}, 날짜컬럼: ${colIndex.date}, 출금컬럼: ${colIndex.withdrawal}, 입금컬럼: ${colIndex.deposit}` },
         { status: 400 }
       );
     }

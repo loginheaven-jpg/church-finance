@@ -108,9 +108,14 @@ export default function MyOfferingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 차트 뷰 상태 (월별 / 연도별)
+  const [chartView, setChartView] = useState<'monthly' | 'yearly'>('monthly');
+
+  // 상세 내역 필터 (헌금종류)
+  const [recordFilter, setRecordFilter] = useState<string>('all');
+
   // 다이얼로그 상태
   const [showCumulativeDialog, setShowCumulativeDialog] = useState(false);
-  const [showYearlyDialog, setShowYearlyDialog] = useState(false);
   const [yearlyHistory, setYearlyHistory] = useState<YearlyHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -137,41 +142,35 @@ export default function MyOfferingPage() {
     fetchData();
   }, [year, mode]);
 
-  // 누계 다이얼로그 열기 (연도별 히스토리 조회)
-  const openCumulativeDialog = async () => {
-    setShowCumulativeDialog(true);
-    if (yearlyHistory.length === 0) {
-      setLoadingHistory(true);
-      try {
-        const res = await fetch(`/api/my-offering?year=${year}&mode=${mode}&includeHistory=true`);
-        if (res.ok) {
-          const result = await res.json();
-          setYearlyHistory(result.yearlyHistory || []);
-        }
-      } catch (err) {
-        console.error('연도별 히스토리 조회 오류:', err);
-      } finally {
-        setLoadingHistory(false);
+  // 연도별 차트로 전환 시 히스토리 로드
+  useEffect(() => {
+    if (chartView === 'yearly' && yearlyHistory.length === 0) {
+      loadYearlyHistory();
+    }
+  }, [chartView]);
+
+  // 연도별 히스토리 로드
+  const loadYearlyHistory = async () => {
+    if (yearlyHistory.length > 0) return;
+    setLoadingHistory(true);
+    try {
+      const res = await fetch(`/api/my-offering?year=${year}&mode=${mode}&includeHistory=true`);
+      if (res.ok) {
+        const result = await res.json();
+        setYearlyHistory(result.yearlyHistory || []);
       }
+    } catch (err) {
+      console.error('연도별 히스토리 조회 오류:', err);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
-  // 연도별 추이 다이얼로그 열기
-  const openYearlyDialog = async () => {
-    setShowYearlyDialog(true);
+  // 누계 다이얼로그 열기
+  const openCumulativeDialog = async () => {
+    setShowCumulativeDialog(true);
     if (yearlyHistory.length === 0) {
-      setLoadingHistory(true);
-      try {
-        const res = await fetch(`/api/my-offering?year=${year}&mode=${mode}&includeHistory=true`);
-        if (res.ok) {
-          const result = await res.json();
-          setYearlyHistory(result.yearlyHistory || []);
-        }
-      } catch (err) {
-        console.error('연도별 히스토리 조회 오류:', err);
-      } finally {
-        setLoadingHistory(false);
-      }
+      await loadYearlyHistory();
     }
   };
 
@@ -181,11 +180,20 @@ export default function MyOfferingPage() {
   const cumulativeTotal = yearlyHistory.reduce((sum, h) => sum + h.totalAmount, 0);
 
   // 월별 차트 데이터 (2년 비교)
-  const chartData = data?.monthlyData.map((current, idx) => ({
+  const monthlyChartData = data?.monthlyData.map((current, idx) => ({
     monthLabel: current.monthLabel,
     [`${year}년`]: current.amount,
     [`${year - 1}년`]: data.previousYearMonthly[idx]?.amount || 0,
   })) || [];
+
+  // 연도별 차트 데이터
+  const yearlyChartData = yearlyHistory.filter(h => h.totalAmount > 0);
+
+  // 필터링된 레코드
+  const filteredRecords = data?.records.filter(record => {
+    if (recordFilter === 'all') return true;
+    return record.offering_code === parseInt(recordFilter);
+  }) || [];
 
   if (loading) {
     return (
@@ -351,55 +359,113 @@ export default function MyOfferingPage() {
         </Card>
       </div>
 
-      {/* 월별 헌금 추이 (2년 비교 선그래프) */}
+      {/* 헌금 추이 (월별/연도별 토글) */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            월별 헌금 추이
+            헌금 추이
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={openYearlyDialog}>
-            연도별 보기
-          </Button>
+          {/* 월별/연도별 토글 */}
+          <div className="flex rounded-lg border overflow-hidden">
+            <button
+              onClick={() => setChartView('monthly')}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                chartView === 'monthly'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              월별
+            </button>
+            <button
+              onClick={() => setChartView('yearly')}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                chartView === 'yearly'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              연도별
+            </button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <XAxis dataKey="monthLabel" />
-                <YAxis
-                  tickFormatter={(value) => formatAmount(value)}
-                  width={60}
-                />
-                <Tooltip
-                  formatter={(value) => [`${Number(value || 0).toLocaleString()}원`, '']}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey={`${year}년`}
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                  activeDot={{ r: 6 }}
-                >
-                  <LabelList
-                    dataKey={`${year}년`}
-                    position="top"
-                    formatter={(value) => (typeof value === 'number' && value > 0) ? formatAmount(value) : ''}
-                    style={{ fontSize: '10px', fill: '#22c55e' }}
+            {chartView === 'monthly' ? (
+              // 월별 차트 (2년 비교)
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyChartData}>
+                  <XAxis dataKey="monthLabel" />
+                  <YAxis
+                    tickFormatter={(value) => formatAmount(value)}
+                    width={60}
                   />
-                </Line>
-                <Line
-                  type="monotone"
-                  dataKey={`${year - 1}년`}
-                  stroke="#94a3b8"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={{ r: 3 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+                  <Tooltip
+                    formatter={(value) => [`${Number(value || 0).toLocaleString()}원`, '']}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey={`${year}년`}
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                  >
+                    <LabelList
+                      dataKey={`${year}년`}
+                      position="top"
+                      formatter={(value) => (typeof value === 'number' && value > 0) ? formatAmount(value) : ''}
+                      style={{ fontSize: '10px', fill: '#22c55e' }}
+                    />
+                  </Line>
+                  <Line
+                    type="monotone"
+                    dataKey={`${year - 1}년`}
+                    stroke="#94a3b8"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={{ r: 3 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              // 연도별 차트
+              loadingHistory ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={yearlyChartData}>
+                    <XAxis dataKey="year" />
+                    <YAxis
+                      tickFormatter={(value) => formatAmount(value)}
+                      width={60}
+                    />
+                    <Tooltip
+                      formatter={(value) => [`${Number(value || 0).toLocaleString()}원`, '헌금액']}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="totalAmount"
+                      stroke="#22c55e"
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    >
+                      <LabelList
+                        dataKey="totalAmount"
+                        position="top"
+                        formatter={(value) => (typeof value === 'number') ? formatAmount(value) : ''}
+                        style={{ fontSize: '10px', fill: '#22c55e' }}
+                      />
+                    </Line>
+                  </LineChart>
+                </ResponsiveContainer>
+              )
+            )}
           </div>
         </CardContent>
       </Card>
@@ -505,11 +571,25 @@ export default function MyOfferingPage() {
 
       {/* 상세 내역 */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>상세 내역</CardTitle>
+          {/* 헌금종류 필터 */}
+          <Select value={recordFilter} onValueChange={setRecordFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="전체" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">전체</SelectItem>
+              {data.summaryByType.map((item) => (
+                <SelectItem key={item.code} value={item.code.toString()}>
+                  {item.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </CardHeader>
         <CardContent>
-          {data.records.length === 0 ? (
+          {filteredRecords.length === 0 ? (
             <p className="text-slate-500 text-center py-8">
               {year}년 헌금 내역이 없습니다
             </p>
@@ -526,7 +606,7 @@ export default function MyOfferingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.records.map((record) => (
+                  {filteredRecords.map((record) => (
                     <tr key={record.id} className="border-b last:border-0 hover:bg-slate-50">
                       <td className="py-3 px-4 text-sm">{record.date}</td>
                       <td className="py-3 px-4 text-sm">{record.donor_name}</td>
@@ -580,52 +660,6 @@ export default function MyOfferingPage() {
                   ))}
                 </div>
               </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* 연도별 추이 다이얼로그 */}
-      <Dialog open={showYearlyDialog} onOpenChange={setShowYearlyDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>연도별 헌금 추이 (2003년~현재)</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            {loadingHistory ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : (
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={yearlyHistory.filter(h => h.totalAmount > 0)}>
-                    <XAxis dataKey="year" />
-                    <YAxis
-                      tickFormatter={(value) => formatAmount(value)}
-                      width={60}
-                    />
-                    <Tooltip
-                      formatter={(value) => [`${Number(value || 0).toLocaleString()}원`, '헌금액']}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="totalAmount"
-                      stroke="#22c55e"
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                      activeDot={{ r: 6 }}
-                    >
-                      <LabelList
-                        dataKey="totalAmount"
-                        position="top"
-                        formatter={(value) => (typeof value === 'number') ? formatAmount(value) : ''}
-                        style={{ fontSize: '10px', fill: '#22c55e' }}
-                      />
-                    </Line>
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
             )}
           </div>
         </DialogContent>

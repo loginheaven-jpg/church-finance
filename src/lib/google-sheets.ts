@@ -301,43 +301,129 @@ export async function getSheetData<T>(sheetName: string): Promise<T[]> {
 }
 
 // ============================================
-// 현금헌금 조회 (외부 시트)
+// 현금헌금 조회 (외부 시트 - 여러 날짜 탭 순회)
 // ============================================
+
+/**
+ * 스프레드시트의 모든 탭(시트) 이름 조회
+ */
+async function getSheetTabs(spreadsheetId: string): Promise<string[]> {
+  const sheets = getGoogleSheetsClient();
+
+  const response = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'sheets.properties.title',
+  });
+
+  return response.data.sheets?.map(s => s.properties?.title || '') || [];
+}
+
+/**
+ * 탭명이 날짜 형식인지 확인 (YYYY/MM/DD)
+ */
+function isDateTabName(tabName: string): boolean {
+  return /^\d{4}\/\d{2}\/\d{2}$/.test(tabName);
+}
+
+/**
+ * 탭명을 날짜 문자열로 변환 (2026/01/18 → 2026-01-18)
+ */
+function tabNameToDate(tabName: string): string {
+  return tabName.replace(/\//g, '-');
+}
 
 export async function fetchCashOfferings(
   startDate?: string,
   endDate?: string
 ): Promise<CashOffering[]> {
   const sheets = getGoogleSheetsClient();
+  const spreadsheetId = CASH_OFFERING_CONFIG.spreadsheetId;
 
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: CASH_OFFERING_CONFIG.spreadsheetId,
-    range: `${CASH_OFFERING_CONFIG.sheetName}!A:H`,
-  });
+  // 1. 모든 탭 목록 조회
+  const allTabs = await getSheetTabs(spreadsheetId);
 
-  const rows = response.data.values;
-  if (!rows || rows.length <= 1) return [];
+  // 2. 날짜 형식 탭만 필터링 (YYYY/MM/DD)
+  const dateTabs = allTabs.filter(isDateTabName);
 
-  const data = rows.slice(1);
+  if (dateTabs.length === 0) {
+    console.warn('날짜 형식 탭이 없습니다. 기존 헌금함 탭 시도...');
+    // 폴백: 기존 헌금함 탭 시도
+    try {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${CASH_OFFERING_CONFIG.sheetName}!A:H`,
+      });
+      const rows = response.data.values;
+      if (!rows || rows.length <= 1) return [];
 
-  const offerings = data
-    .filter(row => row[0] && row[2] && row[3]) // 날짜, 성명, 금액 필수
-    .map(row => ({
-      date: normalizeDate(row[0]),
-      source: row[1] || '헌금함',
-      donor_name: row[2],
-      amount: parseAmount(row[3]),
-      code: parseInt(row[4]) || 11,
-      item: row[5] || '주일헌금',
-      category_code: parseInt(row[6]) || 10,
-      note: row[7] || '',
-    }));
-
-  if (startDate && endDate) {
-    return offerings.filter(o => o.date >= startDate && o.date <= endDate);
+      const data = rows.slice(1);
+      return data
+        .filter(row => row[0] && row[2] && row[3])
+        .map(row => ({
+          date: normalizeDate(row[0]),
+          source: row[1] || '헌금함',
+          donor_name: row[2],
+          amount: parseAmount(row[3]),
+          code: parseInt(row[4]) || 11,
+          item: row[5] || '주일헌금',
+          category_code: parseInt(row[6]) || 10,
+          note: row[7] || '',
+        }));
+    } catch {
+      return [];
+    }
   }
 
-  return offerings;
+  // 3. 시작일~종료일 범위에 해당하는 탭만 선택
+  let targetTabs = dateTabs;
+  if (startDate && endDate) {
+    targetTabs = dateTabs.filter(tabName => {
+      const tabDate = tabNameToDate(tabName);
+      return tabDate >= startDate && tabDate <= endDate;
+    });
+  }
+
+  if (targetTabs.length === 0) {
+    return [];
+  }
+
+  // 4. 각 탭에서 데이터 읽어와 통합
+  const allOfferings: CashOffering[] = [];
+
+  for (const tabName of targetTabs) {
+    try {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${tabName}'!A:H`, // 탭명에 /가 있으므로 따옴표 필요
+      });
+
+      const rows = response.data.values;
+      if (!rows || rows.length <= 1) continue;
+
+      const tabDate = tabNameToDate(tabName); // 탭명에서 날짜 추출
+      const data = rows.slice(1);
+
+      const offerings = data
+        .filter(row => row[1] && row[2]) // 성명(B), 금액(C) 필수 (A는 경로)
+        .map(row => ({
+          date: tabDate, // 탭명에서 추출한 날짜 사용
+          source: row[0] || '헌금함', // A: 경로
+          donor_name: row[1], // B: 성명
+          amount: parseAmount(row[2]), // C: 금액
+          code: parseInt(row[3]) || 11, // D: 소코드
+          item: row[4] || '주일헌금', // E: 소항목
+          category_code: parseInt(row[5]) || 10, // F: 대코드
+          note: row[6] || '', // G: 비고
+        }));
+
+      allOfferings.push(...offerings);
+    } catch (error) {
+      console.warn(`탭 '${tabName}' 읽기 실패:`, error);
+      continue;
+    }
+  }
+
+  return allOfferings;
 }
 
 // ============================================

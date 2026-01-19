@@ -966,9 +966,9 @@ export function BankUpload() {
                               </TableCell>
                               <TableCell className="text-right">
                                 {item.type === 'suppressed' ? (
-                                  <span className="text-xs text-red-600 font-medium">-{item.transaction.withdrawal.toLocaleString()}</span>
+                                  <span className="text-xs text-red-600 font-medium">{item.transaction.withdrawal.toLocaleString()}</span>
                                 ) : item.type === 'needsReview' ? (
-                                  <span className="text-xs text-amber-700 font-medium">-{item.transaction.withdrawal.toLocaleString()}</span>
+                                  <span className="text-xs text-amber-700 font-medium">{item.transaction.withdrawal.toLocaleString()}</span>
                                 ) : (
                                   <Input
                                     type="number"

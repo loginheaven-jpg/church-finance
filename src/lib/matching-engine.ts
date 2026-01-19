@@ -425,11 +425,11 @@ function createExpenseFromBankTransaction(
     date: tx.date, // 기준일 (주일)
     payment_method: '계좌이체',
     vendor: tx.memo || tx.detail || tx.description || '기타',  // memo 우선
-    description: tx.detail || tx.description || '',
+    description: '',
     amount: tx.withdrawal,
     account_code: rule.target_code,
     category_code: Math.floor(rule.target_code / 10) * 10,
-    note: tx.description || '',
+    note: tx.detail || '',  // detail로 변경
     created_at: getKSTDateTime(),
     created_by: 'auto_matcher',
     transaction_date: tx.transaction_date, // 실제 거래일

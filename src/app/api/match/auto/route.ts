@@ -67,18 +67,16 @@ export async function POST(request: NextRequest) {
         });
       });
 
-    // 헌금함 매칭 현황 생성
+    // 헌금함 매칭 현황 생성 (은행원장에 헌금함 거래가 있는 날짜만)
     const cashOfferingMatchStatus: CashOfferingMatchStatus[] = [];
-    const allDates = new Set([...cashOfferingByDate.keys(), ...bankCashOfferingByDate.keys()]);
-    allDates.forEach(date => {
+    bankCashOfferingByDate.forEach((bankData, date) => {
       const incomeTotal = cashOfferingByDate.get(date) || 0;
-      const bankData = bankCashOfferingByDate.get(date);
-      const bankAmount = bankData?.total || 0;
+      const bankAmount = bankData.total;
       cashOfferingMatchStatus.push({
         date,
         incomeTotal,
         bankAmount,
-        matched: incomeTotal === bankAmount && incomeTotal > 0,
+        matched: incomeTotal === bankAmount && bankAmount > 0,
       });
     });
     cashOfferingMatchStatus.sort((a, b) => a.date.localeCompare(b.date));

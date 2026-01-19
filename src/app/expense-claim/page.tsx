@@ -144,10 +144,10 @@ export default function ExpenseClaimPage() {
       const today = new Date();
       const kstDate = new Date(today.getTime() + 9 * 60 * 60 * 1000);
       const dateStr = kstDate.toISOString().slice(0, 10).replace(/-/g, '');
-      const fileName = `지출청구_${dateStr}.xlsx`;
+      const fileName = `지출청구_${dateStr}.xls`;
 
-      // 다운로드
-      XLSX.writeFile(wb, fileName);
+      // 다운로드 (xls 형식)
+      XLSX.writeFile(wb, fileName, { bookType: 'biff8' });
 
       // K컬럼 업데이트 (처리일자 기입)
       const rowIndices = data.map(item => item.rowIndex);

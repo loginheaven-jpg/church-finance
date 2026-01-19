@@ -55,16 +55,20 @@ export async function POST(request: NextRequest) {
       const incomeRecords = income.map(item => item.record);
       await addIncomeRecords(incomeRecords);
 
-      // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가
+      // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가 (실패해도 계속 진행)
       for (const item of income) {
-        await updateBankTransaction(item.transaction.id, {
-          matched_status: 'matched',
-          matched_type: 'income_detail',
-          matched_ids: item.record.id,
-        });
+        try {
+          await updateBankTransaction(item.transaction.id, {
+            matched_status: 'matched',
+            matched_type: 'income_detail',
+            matched_ids: item.record.id,
+          });
 
-        if (item.match?.id) {
-          await incrementRuleUsage(item.match.id);
+          if (item.match?.id) {
+            await incrementRuleUsage(item.match.id);
+          }
+        } catch (updateError) {
+          console.warn('[match/confirm] 수입 은행거래 업데이트 실패 (무시):', item.transaction.id, updateError);
         }
       }
 

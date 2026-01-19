@@ -597,7 +597,7 @@ export function BankUpload() {
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                       <div className="text-sm font-medium text-amber-700 mb-2">헌금함 매칭 현황</div>
                       <div className="overflow-auto">
-                        <table className="w-full text-xs">
+                        <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-amber-200">
                               <th className="text-left py-1 px-2">기준일</th>
@@ -617,9 +617,9 @@ export function BankUpload() {
                                 <td className="py-1 px-2 text-right text-blue-600">{status.bankAmount.toLocaleString()}</td>
                                 <td className="py-1 px-2 text-center">
                                   {status.matched ? (
-                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs">일치</span>
+                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-sm">일치</span>
                                   ) : (
-                                    <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs">불일치</span>
+                                    <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-sm">불일치</span>
                                   )}
                                 </td>
                               </tr>
@@ -714,7 +714,7 @@ export function BankUpload() {
                     >
                       수입부 ({unifiedIncome.length}건)
                       {suppressedIncomeCount > 0 && (
-                        <span className="ml-1 text-xs text-red-500">말소 {suppressedIncomeCount}</span>
+                        <span className="ml-1 text-sm text-red-500">말소 {suppressedIncomeCount}</span>
                       )}
                       <span className="ml-2 text-green-600 font-semibold">
                         {incomeTotalAmount.toLocaleString()}원
@@ -731,7 +731,7 @@ export function BankUpload() {
                     >
                       지출부 ({unifiedExpense.length}건)
                       {(suppressedExpenseCount > 0 || needsReviewCount > 0) && (
-                        <span className="ml-1 text-xs">
+                        <span className="ml-1 text-sm">
                           {suppressedExpenseCount > 0 && <span className="text-red-500">말소 {suppressedExpenseCount}</span>}
                           {needsReviewCount > 0 && <span className="text-amber-500 ml-1">검토 {needsReviewCount}</span>}
                         </span>
@@ -769,32 +769,32 @@ export function BankUpload() {
                                 item.type === 'suppressed' && 'bg-red-50'
                               )}
                             >
-                              <TableCell className="text-xs">{index + 1}</TableCell>
+                              <TableCell className="text-sm">{index + 1}</TableCell>
                               <TableCell>
                                 {item.type === 'suppressed' ? (
-                                  <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">말소</span>
+                                  <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-sm font-medium">말소</span>
                                 ) : (
-                                  <span className="text-slate-300 text-xs">-</span>
+                                  <span className="text-slate-300 text-sm">-</span>
                                 )}
                               </TableCell>
-                              <TableCell className={cn('text-xs', item.type === 'suppressed' ? 'text-red-600' : 'text-blue-600')}>
+                              <TableCell className={cn('text-sm', item.type === 'suppressed' ? 'text-red-600' : 'text-blue-600')}>
                                 {item.type === 'suppressed' ? item.transaction.date : item.record?.date}
                               </TableCell>
-                              <TableCell className="text-xs text-slate-500">
+                              <TableCell className="text-sm text-slate-500">
                                 {item.type === 'suppressed' ? item.transaction.transaction_date : item.record?.transaction_date}
                               </TableCell>
-                              <TableCell className="text-xs">
+                              <TableCell className="text-sm">
                                 {item.type === 'suppressed' ? (
                                   <span className="text-red-500">-</span>
                                 ) : (
                                   <Input
                                     value={item.record?.source || '계좌이체'}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'source', e.target.value)}
-                                    className="h-6 text-xs w-20"
+                                    className="h-6 text-sm w-20"
                                   />
                                 )}
                               </TableCell>
-                              <TableCell className="text-xs">
+                              <TableCell className="text-sm">
                                 {item.type === 'suppressed' ? (
                                   <span className="text-red-500">-</span>
                                 ) : (
@@ -802,52 +802,52 @@ export function BankUpload() {
                                     type="number"
                                     value={item.record?.offering_code || 0}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'offering_code', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-xs w-12 text-center"
+                                    className="h-6 text-sm w-12 text-center"
                                   />
                                 )}
                               </TableCell>
                               <TableCell>
                                 {item.type === 'suppressed' ? (
-                                  <span className="text-xs text-red-600">{item.transaction.memo || item.transaction.detail || '-'}</span>
+                                  <span className="text-sm text-red-600">{item.transaction.memo || item.transaction.detail || '-'}</span>
                                 ) : (
                                   <Input
                                     value={item.record?.donor_name || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'donor_name', e.target.value)}
-                                    className="h-6 text-xs w-20"
+                                    className="h-6 text-sm w-20"
                                   />
                                 )}
                               </TableCell>
                               <TableCell>
                                 {item.type === 'suppressed' ? (
-                                  <span className="text-xs text-red-500">-</span>
+                                  <span className="text-sm text-red-500">-</span>
                                 ) : (
                                   <Input
                                     value={item.record?.representative || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'representative', e.target.value)}
-                                    className="h-6 text-xs w-20"
+                                    className="h-6 text-sm w-20"
                                   />
                                 )}
                               </TableCell>
                               <TableCell className="text-right">
                                 {item.type === 'suppressed' ? (
-                                  <span className="text-xs text-red-600 font-medium">+{item.transaction.deposit.toLocaleString()}</span>
+                                  <span className="text-sm text-red-600 font-medium">+{item.transaction.deposit.toLocaleString()}</span>
                                 ) : (
                                   <Input
                                     type="number"
                                     value={item.record?.amount || 0}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-xs text-right w-20 text-green-600"
+                                    className="h-6 text-sm text-right w-20 text-green-600"
                                   />
                                 )}
                               </TableCell>
                               <TableCell>
                                 {item.type === 'suppressed' ? (
-                                  <span className="text-xs text-red-500">{item.transaction.suppressed_reason}</span>
+                                  <span className="text-sm text-red-500">{item.transaction.suppressed_reason}</span>
                                 ) : (
                                   <Input
                                     value={item.record?.note || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'note', e.target.value)}
-                                    className="h-6 text-xs w-28"
+                                    className="h-6 text-sm w-28"
                                   />
                                 )}
                               </TableCell>
@@ -901,24 +901,24 @@ export function BankUpload() {
                                 item.type === 'needsReview' && 'bg-amber-50'
                               )}
                             >
-                              <TableCell className="text-xs">{index + 1}</TableCell>
+                              <TableCell className="text-sm">{index + 1}</TableCell>
                               <TableCell>
                                 {item.type === 'suppressed' ? (
-                                  <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">말소</span>
+                                  <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-sm font-medium">말소</span>
                                 ) : item.type === 'needsReview' ? (
-                                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">검토</span>
+                                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-sm font-medium">검토</span>
                                 ) : (
-                                  <span className="text-slate-300 text-xs">-</span>
+                                  <span className="text-slate-300 text-sm">-</span>
                                 )}
                               </TableCell>
                               <TableCell className={cn(
-                                'text-xs',
+                                'text-sm',
                                 item.type === 'suppressed' ? 'text-red-600' :
                                 item.type === 'needsReview' ? 'text-amber-600' : 'text-blue-600'
                               )}>
                                 {item.type === 'matched' ? item.record?.date : item.transaction.date}
                               </TableCell>
-                              <TableCell className="text-xs">
+                              <TableCell className="text-sm">
                                 {item.type === 'suppressed' ? (
                                   <span className="text-red-500">-</span>
                                 ) : item.type === 'needsReview' ? (
@@ -927,65 +927,65 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.payment_method || '계좌이체'}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'payment_method', e.target.value)}
-                                    className="h-6 text-xs w-16"
+                                    className="h-6 text-sm w-16"
                                   />
                                 )}
                               </TableCell>
                               <TableCell>
                                 {item.type === 'suppressed' ? (
-                                  <span className="text-xs text-red-600">{item.transaction.memo || item.transaction.detail || '-'}</span>
+                                  <span className="text-sm text-red-600">{item.transaction.memo || item.transaction.detail || '-'}</span>
                                 ) : item.type === 'needsReview' ? (
                                   <Input
                                     value={item.transaction.memo || item.transaction.detail || ''}
                                     onChange={(e) => {
                                       // needsReview 항목은 record가 없으므로 transaction 정보 표시만
                                     }}
-                                    className="h-6 text-xs w-24 bg-amber-50"
+                                    className="h-6 text-sm w-24 bg-amber-50"
                                     readOnly
                                   />
                                 ) : (
                                   <Input
                                     value={item.record?.vendor || ''}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'vendor', e.target.value)}
-                                    className="h-6 text-xs w-24"
+                                    className="h-6 text-sm w-24"
                                   />
                                 )}
                               </TableCell>
                               <TableCell>
                                 {item.type === 'suppressed' ? (
-                                  <span className="text-xs text-red-500">{item.transaction.suppressed_reason}</span>
+                                  <span className="text-sm text-red-500">{item.transaction.suppressed_reason}</span>
                                 ) : item.type === 'needsReview' ? (
-                                  <span className="text-xs text-amber-600">{item.transaction.description || item.transaction.detail || '-'}</span>
+                                  <span className="text-sm text-amber-600">{item.transaction.description || item.transaction.detail || '-'}</span>
                                 ) : (
                                   <Input
                                     value={item.record?.description || ''}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'description', e.target.value)}
-                                    className="h-6 text-xs w-28"
+                                    className="h-6 text-sm w-28"
                                   />
                                 )}
                               </TableCell>
                               <TableCell className="text-right">
                                 {item.type === 'suppressed' ? (
-                                  <span className="text-xs text-red-600 font-medium">{item.transaction.withdrawal.toLocaleString()}</span>
+                                  <span className="text-sm text-red-600 font-medium">{item.transaction.withdrawal.toLocaleString()}</span>
                                 ) : item.type === 'needsReview' ? (
-                                  <span className="text-xs text-amber-700 font-medium">{item.transaction.withdrawal.toLocaleString()}</span>
+                                  <span className="text-sm text-amber-700 font-medium">{item.transaction.withdrawal.toLocaleString()}</span>
                                 ) : (
                                   <Input
                                     type="number"
                                     value={item.record?.amount || 0}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-xs text-right w-20 text-red-600"
+                                    className="h-6 text-sm text-right w-20 text-red-600"
                                   />
                                 )}
                               </TableCell>
-                              <TableCell className="text-xs">
+                              <TableCell className="text-sm">
                                 {item.type === 'suppressed' ? (
                                   <span className="text-red-500">-</span>
                                 ) : item.type === 'needsReview' ? (
                                   <Input
                                     type="number"
                                     value={item.suggestions?.[0]?.target_code || 0}
-                                    className="h-6 text-xs w-12 text-center bg-amber-50"
+                                    className="h-6 text-sm w-12 text-center bg-amber-50"
                                     readOnly
                                   />
                                 ) : (
@@ -993,33 +993,33 @@ export function BankUpload() {
                                     type="number"
                                     value={item.record?.account_code || 0}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'account_code', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-xs w-12 text-center"
+                                    className="h-6 text-sm w-12 text-center"
                                   />
                                 )}
                               </TableCell>
-                              <TableCell className="text-xs">
+                              <TableCell className="text-sm">
                                 {item.type === 'suppressed' ? (
                                   <span className="text-red-500">-</span>
                                 ) : item.type === 'needsReview' ? (
-                                  <span className="px-1 py-0.5 bg-amber-100 text-amber-600 rounded text-xs">
+                                  <span className="px-1 py-0.5 bg-amber-100 text-amber-600 rounded text-sm">
                                     {item.suggestions?.[0]?.target_name || '미분류'}
                                   </span>
                                 ) : (
-                                  <span className="px-1 py-0.5 bg-slate-100 text-slate-700 rounded text-xs">
+                                  <span className="px-1 py-0.5 bg-slate-100 text-slate-700 rounded text-sm">
                                     {item.match?.target_name || '-'}
                                   </span>
                                 )}
                               </TableCell>
                               <TableCell>
                                 {item.type === 'suppressed' ? (
-                                  <span className="text-xs text-red-500">{item.transaction.description}</span>
+                                  <span className="text-sm text-red-500">{item.transaction.description}</span>
                                 ) : item.type === 'needsReview' ? (
-                                  <span className="text-xs text-amber-600">-</span>
+                                  <span className="text-sm text-amber-600">-</span>
                                 ) : (
                                   <Input
                                     value={item.record?.note || ''}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'note', e.target.value)}
-                                    className="h-6 text-xs w-28"
+                                    className="h-6 text-sm w-28"
                                   />
                                 )}
                               </TableCell>

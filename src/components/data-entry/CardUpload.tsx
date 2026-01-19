@@ -98,7 +98,7 @@ export function CardUpload() {
               <FileText className="h-10 w-10 text-blue-600" />
               <div className="text-left">
                 <div className="font-medium text-slate-900">{file.name}</div>
-                <div className="text-sm text-slate-500">
+                <div className="text-base text-slate-500">
                   {(file.size / 1024).toFixed(1)} KB
                 </div>
               </div>
@@ -109,7 +109,7 @@ export function CardUpload() {
               <div className="mt-4 font-medium text-slate-700">
                 파일을 드래그하거나 클릭하여 선택
               </div>
-              <div className="text-sm text-slate-500 mt-1">
+              <div className="text-base text-slate-500 mt-1">
                 XLSX 파일
               </div>
             </div>

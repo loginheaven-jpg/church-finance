@@ -209,7 +209,7 @@ export function CashOfferingSync() {
               <CheckCircle2 className="h-5 w-5" />
               동기화 완료
             </div>
-            <ul className="list-disc list-inside text-sm text-green-600 space-y-1">
+            <ul className="list-disc list-inside text-base text-green-600 space-y-1">
               <li>처리된 헌금: {syncResult.processed}건</li>
               <li>총 금액: {syncResult.totalAmount?.toLocaleString()}원</li>
               {syncResult.suppressedBankTransactions > 0 && (
@@ -217,7 +217,7 @@ export function CashOfferingSync() {
               )}
             </ul>
             {syncResult.warnings?.map((warning, idx) => (
-              <p key={idx} className="text-amber-600 mt-2 text-sm">⚠️ {warning}</p>
+              <p key={idx} className="text-amber-600 mt-2 text-base">⚠️ {warning}</p>
             ))}
           </div>
         )}
@@ -249,16 +249,16 @@ export function CashOfferingSync() {
               </Button>
               {/* 주일별 합계 */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="text-sm font-medium text-blue-700 mb-2">주일별 합계</div>
+                <div className="text-base font-medium text-blue-700 mb-2">주일별 합계</div>
                 <div className="flex flex-wrap gap-3">
                   {sundaySummary.map(({ date, amount }) => (
                     <div key={date} className="bg-white px-3 py-1.5 rounded border border-blue-200">
-                      <span className="text-sm text-blue-600 mr-2">{date}</span>
+                      <span className="text-base text-blue-600 mr-2">{date}</span>
                       <span className="font-semibold text-blue-800">{amount.toLocaleString()}원</span>
                     </div>
                   ))}
                   <div className="bg-blue-100 px-3 py-1.5 rounded border border-blue-300">
-                    <span className="text-sm text-blue-700 mr-2">총합계</span>
+                    <span className="text-base text-blue-700 mr-2">총합계</span>
                     <span className="font-bold text-blue-900">{totalAmount.toLocaleString()}원</span>
                   </div>
                 </div>
@@ -283,21 +283,21 @@ export function CashOfferingSync() {
                   <TableBody>
                     {data.map((item, index) => (
                       <TableRow key={`${item.date}-${index}`}>
-                        <TableCell className="font-medium text-sm">{index + 1}</TableCell>
-                        <TableCell className="text-sm">{item.date}</TableCell>
-                        <TableCell className="text-sm">{item.source}</TableCell>
+                        <TableCell className="font-medium text-base">{index + 1}</TableCell>
+                        <TableCell className="text-base">{item.date}</TableCell>
+                        <TableCell className="text-base">{item.source}</TableCell>
                         <TableCell>
                           <Input
                             value={item.donor_name}
                             onChange={(e) => handleCellChange(index, 'donor_name', e.target.value)}
-                            className="h-7 text-sm w-20"
+                            className="h-7 text-base w-20"
                           />
                         </TableCell>
                         <TableCell>
                           <Input
                             value={item.representative}
                             onChange={(e) => handleCellChange(index, 'representative', e.target.value)}
-                            className="h-7 text-sm w-20"
+                            className="h-7 text-base w-20"
                           />
                         </TableCell>
                         <TableCell className="text-right">
@@ -305,15 +305,15 @@ export function CashOfferingSync() {
                             type="number"
                             value={item.amount}
                             onChange={(e) => handleCellChange(index, 'amount', parseInt(e.target.value) || 0)}
-                            className="h-7 text-sm text-right w-24"
+                            className="h-7 text-base text-right w-24"
                           />
                         </TableCell>
-                        <TableCell className="text-sm">{item.code}</TableCell>
+                        <TableCell className="text-base">{item.code}</TableCell>
                         <TableCell>
                           <Input
                             value={item.note}
                             onChange={(e) => handleCellChange(index, 'note', e.target.value)}
-                            className="h-7 text-sm w-24"
+                            className="h-7 text-base w-24"
                           />
                         </TableCell>
                         <TableCell>

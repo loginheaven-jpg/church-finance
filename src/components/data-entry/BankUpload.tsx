@@ -12,13 +12,39 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Upload, FileText, Loader2, CheckCircle2, FileSpreadsheet, ArrowRight, RefreshCw, AlertCircle } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle2, FileSpreadsheet, ArrowRight, RefreshCw, AlertCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { BankTransaction, AutoMatchResult, IncomeRecord, ExpenseRecord } from '@/types';
+import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
 
 // 워크플로우 단계 타입
 type UploadStep = 'upload' | 'preview' | 'saved' | 'matched' | 'confirmed';
+
+// 매칭 결과 타입
+interface MatchedIncomeItem {
+  transaction: BankTransaction;
+  record: IncomeRecord;
+  match: MatchingRule | null;
+}
+
+interface MatchedExpenseItem {
+  transaction: BankTransaction;
+  record: ExpenseRecord;
+  match: MatchingRule | null;
+}
+
+interface MatchPreviewResult {
+  income: MatchedIncomeItem[];
+  expense: MatchedExpenseItem[];
+  suppressed: BankTransaction[];
+  needsReview: Array<{
+    transaction: BankTransaction;
+    suggestions: MatchingRule[];
+  }>;
+}
+
+// 탭 타입
+type TabType = 'income' | 'expense' | 'suppressed';
 
 export function BankUpload() {
   const [file, setFile] = useState<File | null>(null);
@@ -30,8 +56,9 @@ export function BankUpload() {
   const [data, setData] = useState<BankTransaction[]>([]);
   const [result, setResult] = useState<{ uploaded: number; message: string } | null>(null);
   const [step, setStep] = useState<UploadStep>('upload');
-  const [matchResult, setMatchResult] = useState<AutoMatchResult | null>(null);
+  const [matchResult, setMatchResult] = useState<MatchPreviewResult | null>(null);
   const [savedTransactionIds, setSavedTransactionIds] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<TabType>('income');
 
   // 전체 상태 초기화
   const resetAll = useCallback(() => {
@@ -41,6 +68,7 @@ export function BankUpload() {
     setStep('upload');
     setMatchResult(null);
     setSavedTransactionIds([]);
+    setActiveTab('income');
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -139,7 +167,6 @@ export function BankUpload() {
 
       if (result.success) {
         setResult(result);
-        // data와 file은 유지 (다음 단계에서 사용)
         setSavedTransactionIds(data.map(tx => tx.id));
         setStep('saved');
         toast.success(result.message);
@@ -175,10 +202,8 @@ export function BankUpload() {
       if (result.success) {
         setMatchResult(result.data);
         setStep('matched');
-        const total = (result.data.autoMatched?.length || 0) +
-                      (result.data.suppressed?.length || 0) +
-                      (result.data.needsReview?.length || 0);
-        toast.success(`${total}건 매칭 완료`);
+        setActiveTab('income');
+        toast.success(result.message);
       } else {
         toast.error(result.error || '매칭 중 오류가 발생했습니다');
       }
@@ -188,6 +213,52 @@ export function BankUpload() {
     } finally {
       setMatching(false);
     }
+  };
+
+  // 수입 레코드 수정
+  const handleIncomeChange = (index: number, field: keyof IncomeRecord, value: string | number) => {
+    if (!matchResult) return;
+    setMatchResult(prev => {
+      if (!prev) return prev;
+      const newIncome = [...prev.income];
+      newIncome[index] = {
+        ...newIncome[index],
+        record: { ...newIncome[index].record, [field]: value },
+      };
+      return { ...prev, income: newIncome };
+    });
+  };
+
+  // 지출 레코드 수정
+  const handleExpenseChange = (index: number, field: keyof ExpenseRecord, value: string | number) => {
+    if (!matchResult) return;
+    setMatchResult(prev => {
+      if (!prev) return prev;
+      const newExpense = [...prev.expense];
+      newExpense[index] = {
+        ...newExpense[index],
+        record: { ...newExpense[index].record, [field]: value },
+      };
+      return { ...prev, expense: newExpense };
+    });
+  };
+
+  // 수입 항목 삭제
+  const handleRemoveIncome = (index: number) => {
+    if (!matchResult) return;
+    setMatchResult(prev => {
+      if (!prev) return prev;
+      return { ...prev, income: prev.income.filter((_, i) => i !== index) };
+    });
+  };
+
+  // 지출 항목 삭제
+  const handleRemoveExpense = (index: number) => {
+    if (!matchResult) return;
+    setMatchResult(prev => {
+      if (!prev) return prev;
+      return { ...prev, expense: prev.expense.filter((_, i) => i !== index) };
+    });
   };
 
   // 정식 반영 (3단계)
@@ -204,7 +275,8 @@ export function BankUpload() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          autoMatched: matchResult.autoMatched,
+          income: matchResult.income,
+          expense: matchResult.expense,
           suppressed: matchResult.suppressed,
         }),
       });
@@ -213,8 +285,7 @@ export function BankUpload() {
 
       if (result.success) {
         setStep('confirmed');
-        toast.success(`${result.incomeCount || 0}건 수입, ${result.expenseCount || 0}건 지출 반영 완료`);
-        // 완료 후 초기화
+        toast.success(result.message);
         setTimeout(() => {
           resetAll();
         }, 3000);
@@ -229,12 +300,12 @@ export function BankUpload() {
     }
   };
 
-  // 기준일별 합계 계산 (date = 주일)
+  // 기준일별 합계 계산
   const getDateSummary = () => {
     const dateMap = new Map<string, { withdrawal: number; deposit: number }>();
 
     data.forEach(item => {
-      const dateKey = item.date; // 기준일 (주일) 기준으로 합산
+      const dateKey = item.date;
       const existing = dateMap.get(dateKey) || { withdrawal: 0, deposit: 0 };
       dateMap.set(dateKey, {
         withdrawal: existing.withdrawal + item.withdrawal,
@@ -247,10 +318,13 @@ export function BankUpload() {
       .map(([date, amounts]) => ({ date, ...amounts }));
   };
 
-  // 총액 계산
   const totalWithdrawal = data.reduce((sum, item) => sum + item.withdrawal, 0);
   const totalDeposit = data.reduce((sum, item) => sum + item.deposit, 0);
   const dateSummary = getDateSummary();
+
+  // 수입/지출 합계 계산
+  const incomeTotalAmount = matchResult?.income.reduce((sum, item) => sum + item.record.amount, 0) || 0;
+  const expenseTotalAmount = matchResult?.expense.reduce((sum, item) => sum + item.record.amount, 0) || 0;
 
   return (
     <Card>
@@ -303,7 +377,7 @@ export function BankUpload() {
           )}
         </div>
 
-        {file && data.length === 0 && (
+        {file && data.length === 0 && step === 'upload' && (
           <Button onClick={handlePreview} disabled={loading} className="w-full" variant="outline">
             {loading ? (
               <>
@@ -314,17 +388,6 @@ export function BankUpload() {
               '파일 분석하기'
             )}
           </Button>
-        )}
-
-        {/* 완료 결과 */}
-        {result && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 text-green-700 font-medium mb-2">
-              <CheckCircle2 className="h-5 w-5" />
-              업로드 완료
-            </div>
-            <p className="text-sm text-green-600">{result.message}</p>
-          </div>
         )}
 
         {/* 미리보기 데이터 */}
@@ -404,82 +467,229 @@ export function BankUpload() {
                 </Button>
               )}
 
-              {/* 매칭 결과 표시 */}
+              {/* 매칭 결과 - 탭 UI */}
               {matchResult && step === 'matched' && (
-                <div className="space-y-3">
-                  {/* 자동 매칭 결과 */}
-                  {matchResult.autoMatched && matchResult.autoMatched.length > 0 && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                      <div className="text-sm font-medium text-green-700 mb-2">
-                        자동 매칭 ({matchResult.autoMatched.length}건)
-                      </div>
-                      <div className="space-y-1 max-h-[200px] overflow-auto">
-                        {matchResult.autoMatched.map((item, idx) => {
-                          const record = item.record as IncomeRecord | ExpenseRecord;
-                          const isIncome = 'offering_code' in record;
-                          return (
-                            <div key={idx} className="text-xs bg-white p-2 rounded border border-green-100 flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className={cn(
-                                  'px-2 py-0.5 rounded',
-                                  isIncome ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                                )}>
-                                  {isIncome ? '수입' : '지출'}
+                <div className="space-y-4">
+                  {/* 탭 헤더 */}
+                  <div className="flex border-b">
+                    <button
+                      onClick={() => setActiveTab('income')}
+                      className={cn(
+                        'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                        activeTab === 'income'
+                          ? 'border-green-600 text-green-700 bg-green-50'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      )}
+                    >
+                      수입부 ({matchResult.income.length}건)
+                      <span className="ml-2 text-green-600 font-semibold">
+                        {incomeTotalAmount.toLocaleString()}원
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('expense')}
+                      className={cn(
+                        'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                        activeTab === 'expense'
+                          ? 'border-red-600 text-red-700 bg-red-50'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      )}
+                    >
+                      지출부 ({matchResult.expense.length}건)
+                      <span className="ml-2 text-red-600 font-semibold">
+                        {expenseTotalAmount.toLocaleString()}원
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('suppressed')}
+                      className={cn(
+                        'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                        activeTab === 'suppressed'
+                          ? 'border-slate-600 text-slate-700 bg-slate-50'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      )}
+                    >
+                      말소 ({matchResult.suppressed.length}건)
+                    </button>
+                  </div>
+
+                  {/* 수입부 탭 내용 */}
+                  {activeTab === 'income' && (
+                    <div className="rounded-md border max-h-[300px] overflow-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-white">
+                          <TableRow>
+                            <TableHead className="w-[50px]">No</TableHead>
+                            <TableHead className="min-w-[100px]">기준일</TableHead>
+                            <TableHead className="min-w-[120px]">헌금자</TableHead>
+                            <TableHead className="min-w-[100px]">분류</TableHead>
+                            <TableHead className="min-w-[100px] text-right">금액</TableHead>
+                            <TableHead className="min-w-[150px]">비고</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {matchResult.income.map((item, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="text-sm">{index + 1}</TableCell>
+                              <TableCell className="text-sm text-blue-600">{item.record.date}</TableCell>
+                              <TableCell>
+                                <Input
+                                  value={item.record.donor_name}
+                                  onChange={(e) => handleIncomeChange(index, 'donor_name', e.target.value)}
+                                  className="h-7 text-sm w-28"
+                                />
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
+                                  {item.match?.target_name || '기본분류'}
                                 </span>
-                                <span className="text-slate-600">
-                                  {item.transaction.memo || item.transaction.description || '-'}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-slate-500">
-                                  {item.match ? item.match.target_name : '기본분류'}
-                                </span>
-                                <span className={cn(
-                                  'font-medium',
-                                  isIncome ? 'text-green-600' : 'text-red-600'
-                                )}>
-                                  {record.amount.toLocaleString()}원
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Input
+                                  type="number"
+                                  value={item.record.amount}
+                                  onChange={(e) => handleIncomeChange(index, 'amount', parseInt(e.target.value) || 0)}
+                                  className="h-7 text-sm text-right w-24 text-green-600"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={item.record.note}
+                                  onChange={(e) => handleIncomeChange(index, 'note', e.target.value)}
+                                  className="h-7 text-sm w-36"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveIncome(index)}
+                                  className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      {matchResult.income.length === 0 && (
+                        <div className="p-4 text-center text-slate-500 text-sm">수입 항목이 없습니다</div>
+                      )}
                     </div>
                   )}
 
-                  {/* 말소 처리 */}
-                  {matchResult.suppressed && matchResult.suppressed.length > 0 && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                      <div className="text-sm font-medium text-slate-700 mb-2">
-                        말소 처리 ({matchResult.suppressed.length}건)
-                      </div>
-                      <div className="space-y-1 max-h-[100px] overflow-auto">
-                        {matchResult.suppressed.map((tx, idx) => (
-                          <div key={idx} className="text-xs bg-white p-2 rounded border border-slate-100 flex items-center justify-between">
-                            <span className="text-slate-500">{tx.description}</span>
-                            <span className="text-slate-400">{tx.suppressed_reason}</span>
-                          </div>
-                        ))}
-                      </div>
+                  {/* 지출부 탭 내용 */}
+                  {activeTab === 'expense' && (
+                    <div className="rounded-md border max-h-[300px] overflow-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-white">
+                          <TableRow>
+                            <TableHead className="w-[50px]">No</TableHead>
+                            <TableHead className="min-w-[100px]">기준일</TableHead>
+                            <TableHead className="min-w-[120px]">거래처</TableHead>
+                            <TableHead className="min-w-[100px]">분류</TableHead>
+                            <TableHead className="min-w-[100px] text-right">금액</TableHead>
+                            <TableHead className="min-w-[150px]">비고</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {matchResult.expense.map((item, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="text-sm">{index + 1}</TableCell>
+                              <TableCell className="text-sm text-blue-600">{item.record.date}</TableCell>
+                              <TableCell>
+                                <Input
+                                  value={item.record.vendor}
+                                  onChange={(e) => handleExpenseChange(index, 'vendor', e.target.value)}
+                                  className="h-7 text-sm w-28"
+                                />
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">
+                                  {item.match?.target_name || '-'}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Input
+                                  type="number"
+                                  value={item.record.amount}
+                                  onChange={(e) => handleExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
+                                  className="h-7 text-sm text-right w-24 text-red-600"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={item.record.note}
+                                  onChange={(e) => handleExpenseChange(index, 'note', e.target.value)}
+                                  className="h-7 text-sm w-36"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveExpense(index)}
+                                  className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      {matchResult.expense.length === 0 && (
+                        <div className="p-4 text-center text-slate-500 text-sm">지출 항목이 없습니다</div>
+                      )}
                     </div>
                   )}
 
-                  {/* 검토 필요 */}
-                  {matchResult.needsReview && matchResult.needsReview.length > 0 && (
+                  {/* 말소 탭 내용 */}
+                  {activeTab === 'suppressed' && (
+                    <div className="rounded-md border max-h-[300px] overflow-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-white">
+                          <TableRow>
+                            <TableHead className="w-[50px]">No</TableHead>
+                            <TableHead className="min-w-[100px]">거래일</TableHead>
+                            <TableHead className="min-w-[150px]">내용</TableHead>
+                            <TableHead className="min-w-[100px] text-right">금액</TableHead>
+                            <TableHead className="min-w-[150px]">사유</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {matchResult.suppressed.map((tx, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="text-sm">{index + 1}</TableCell>
+                              <TableCell className="text-sm">{tx.transaction_date}</TableCell>
+                              <TableCell className="text-sm text-slate-600">{tx.description}</TableCell>
+                              <TableCell className="text-right text-sm">
+                                {tx.deposit > 0 && <span className="text-green-600">+{tx.deposit.toLocaleString()}</span>}
+                                {tx.withdrawal > 0 && <span className="text-red-600">-{tx.withdrawal.toLocaleString()}</span>}
+                              </TableCell>
+                              <TableCell className="text-sm text-slate-500">{tx.suppressed_reason}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      {matchResult.suppressed.length === 0 && (
+                        <div className="p-4 text-center text-slate-500 text-sm">말소 항목이 없습니다</div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 검토 필요 항목 알림 */}
+                  {matchResult.needsReview.length > 0 && (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                       <div className="flex items-center gap-2 text-sm font-medium text-amber-700 mb-2">
                         <AlertCircle className="h-4 w-4" />
-                        수동 검토 필요 ({matchResult.needsReview.length}건)
+                        수동 검토 필요 ({matchResult.needsReview.length}건) - 별도 처리 필요
                       </div>
-                      <div className="space-y-1 max-h-[100px] overflow-auto">
-                        {matchResult.needsReview.map((item, idx) => (
-                          <div key={idx} className="text-xs bg-white p-2 rounded border border-amber-100">
-                            <span className="text-slate-600">
-                              {item.transaction.memo || item.transaction.description || '-'}
-                            </span>
-                          </div>
-                        ))}
+                      <div className="text-xs text-amber-600">
+                        매칭 규칙이 없는 지출 거래입니다. 매칭 페이지에서 수동 분류하세요.
                       </div>
                     </div>
                   )}
@@ -495,7 +705,7 @@ export function BankUpload() {
                     ) : (
                       <CheckCircle2 className="h-4 w-4 mr-2" />
                     )}
-                    3단계: 정식 반영 (수입부/지출부 저장)
+                    3단계: 정식 반영 (수입부 {matchResult.income.length}건, 지출부 {matchResult.expense.length}건)
                   </Button>
                 </div>
               )}
@@ -509,115 +719,126 @@ export function BankUpload() {
                 </div>
               )}
 
-              {/* 기준일별 합계 (주일) */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="text-sm font-medium text-blue-700 mb-2">기준일별 합계 (주일)</div>
-                <div className="flex flex-wrap gap-3">
-                  {dateSummary.map(({ date, withdrawal, deposit }) => (
-                    <div key={date} className="bg-white px-3 py-1.5 rounded border border-blue-200">
-                      <span className="text-sm text-blue-600 mr-2">{date}</span>
-                      {deposit > 0 && (
-                        <span className="text-green-600 font-semibold mr-2">+{deposit.toLocaleString()}</span>
-                      )}
-                      {withdrawal > 0 && (
-                        <span className="text-red-600 font-semibold">-{withdrawal.toLocaleString()}</span>
-                      )}
+              {/* 기준일별 합계 (step이 matched 이전일 때만 표시) */}
+              {step !== 'matched' && step !== 'confirmed' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="text-sm font-medium text-blue-700 mb-2">기준일별 합계 (주일)</div>
+                  <div className="flex flex-wrap gap-3">
+                    {dateSummary.map(({ date, withdrawal, deposit }) => (
+                      <div key={date} className="bg-white px-3 py-1.5 rounded border border-blue-200">
+                        <span className="text-sm text-blue-600 mr-2">{date}</span>
+                        {deposit > 0 && (
+                          <span className="text-green-600 font-semibold mr-2">+{deposit.toLocaleString()}</span>
+                        )}
+                        {withdrawal > 0 && (
+                          <span className="text-red-600 font-semibold">-{withdrawal.toLocaleString()}</span>
+                        )}
+                      </div>
+                    ))}
+                    <div className="bg-blue-100 px-3 py-1.5 rounded border border-blue-300">
+                      <span className="text-sm text-blue-700 mr-2">총합계</span>
+                      <span className="text-green-700 font-bold mr-2">+{totalDeposit.toLocaleString()}</span>
+                      <span className="text-red-700 font-bold">-{totalWithdrawal.toLocaleString()}</span>
                     </div>
-                  ))}
-                  <div className="bg-blue-100 px-3 py-1.5 rounded border border-blue-300">
-                    <span className="text-sm text-blue-700 mr-2">총합계</span>
-                    <span className="text-green-700 font-bold mr-2">+{totalDeposit.toLocaleString()}</span>
-                    <span className="text-red-700 font-bold">-{totalWithdrawal.toLocaleString()}</span>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* 테이블 */}
-              <div className="rounded-md border max-h-[400px] overflow-auto">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-white">
-                    <TableRow>
-                      <TableHead className="w-[50px]">No</TableHead>
-                      <TableHead className="min-w-[100px]">거래일</TableHead>
-                      <TableHead className="min-w-[100px]">기준일</TableHead>
-                      <TableHead className="min-w-[100px] text-right">출금</TableHead>
-                      <TableHead className="min-w-[100px] text-right">입금</TableHead>
-                      <TableHead className="min-w-[100px] text-right">잔액</TableHead>
-                      <TableHead className="min-w-[120px]">거래내용</TableHead>
-                      <TableHead className="min-w-[120px]">기록사항</TableHead>
-                      <TableHead className="min-w-[80px]">메모</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.map((item, index) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium text-sm">{index + 1}</TableCell>
-                        <TableCell className="text-sm">{item.transaction_date}</TableCell>
-                        <TableCell className="text-sm text-blue-600">{item.date}</TableCell>
-                        <TableCell className="text-right">
-                          {item.withdrawal > 0 ? (
-                            <Input
-                              type="number"
-                              value={item.withdrawal}
-                              onChange={(e) => handleCellChange(index, 'withdrawal', parseInt(e.target.value) || 0)}
-                              className="h-7 text-sm text-right w-24 text-red-600"
-                            />
-                          ) : (
-                            <span className="text-slate-300">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {item.deposit > 0 ? (
-                            <Input
-                              type="number"
-                              value={item.deposit}
-                              onChange={(e) => handleCellChange(index, 'deposit', parseInt(e.target.value) || 0)}
-                              className="h-7 text-sm text-right w-24 text-green-600"
-                            />
-                          ) : (
-                            <span className="text-slate-300">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right text-sm">
-                          {item.balance.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={item.description}
-                            onChange={(e) => handleCellChange(index, 'description', e.target.value)}
-                            className="h-7 text-sm w-28"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={item.detail}
-                            onChange={(e) => handleCellChange(index, 'detail', e.target.value)}
-                            className="h-7 text-sm w-28"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={item.memo}
-                            onChange={(e) => handleCellChange(index, 'memo', e.target.value)}
-                            className="h-7 text-sm w-20"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveRow(index)}
-                            className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                          >
-                            &times;
-                          </Button>
-                        </TableCell>
+              {/* 테이블 (step이 matched 이전일 때만 표시) */}
+              {step !== 'matched' && step !== 'confirmed' && (
+                <div className="rounded-md border max-h-[400px] overflow-auto">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-white">
+                      <TableRow>
+                        <TableHead className="w-[50px]">No</TableHead>
+                        <TableHead className="min-w-[100px]">거래일</TableHead>
+                        <TableHead className="min-w-[100px]">기준일</TableHead>
+                        <TableHead className="min-w-[100px] text-right">출금</TableHead>
+                        <TableHead className="min-w-[100px] text-right">입금</TableHead>
+                        <TableHead className="min-w-[100px] text-right">잔액</TableHead>
+                        <TableHead className="min-w-[120px]">거래내용</TableHead>
+                        <TableHead className="min-w-[120px]">기록사항</TableHead>
+                        <TableHead className="min-w-[80px]">메모</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {data.map((item, index) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium text-sm">{index + 1}</TableCell>
+                          <TableCell className="text-sm">{item.transaction_date}</TableCell>
+                          <TableCell className="text-sm text-blue-600">{item.date}</TableCell>
+                          <TableCell className="text-right">
+                            {item.withdrawal > 0 ? (
+                              <Input
+                                type="number"
+                                value={item.withdrawal}
+                                onChange={(e) => handleCellChange(index, 'withdrawal', parseInt(e.target.value) || 0)}
+                                className="h-7 text-sm text-right w-24 text-red-600"
+                                disabled={step !== 'preview'}
+                              />
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {item.deposit > 0 ? (
+                              <Input
+                                type="number"
+                                value={item.deposit}
+                                onChange={(e) => handleCellChange(index, 'deposit', parseInt(e.target.value) || 0)}
+                                className="h-7 text-sm text-right w-24 text-green-600"
+                                disabled={step !== 'preview'}
+                              />
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {item.balance.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={item.description}
+                              onChange={(e) => handleCellChange(index, 'description', e.target.value)}
+                              className="h-7 text-sm w-28"
+                              disabled={step !== 'preview'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={item.detail}
+                              onChange={(e) => handleCellChange(index, 'detail', e.target.value)}
+                              className="h-7 text-sm w-28"
+                              disabled={step !== 'preview'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={item.memo}
+                              onChange={(e) => handleCellChange(index, 'memo', e.target.value)}
+                              className="h-7 text-sm w-20"
+                              disabled={step !== 'preview'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {step === 'preview' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveRow(index)}
+                                className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                              >
+                                &times;
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

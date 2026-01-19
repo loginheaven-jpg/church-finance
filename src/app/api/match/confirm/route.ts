@@ -3,104 +3,106 @@ import {
   addIncomeRecords,
   addExpenseRecords,
   updateBankTransaction,
-  generateId,
-  getKSTDateTime,
 } from '@/lib/google-sheets';
-import { learnFromManualMatch } from '@/lib/matching-engine';
-import type { BankTransaction, IncomeRecord, ExpenseRecord } from '@/types';
+import { incrementRuleUsage } from '@/lib/matching-engine';
+import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
 
+interface MatchedIncomeItem {
+  transaction: BankTransaction;
+  record: IncomeRecord;
+  match: MatchingRule | null;
+}
+
+interface MatchedExpenseItem {
+  transaction: BankTransaction;
+  record: ExpenseRecord;
+  match: MatchingRule | null;
+}
+
+// 배치 확정 API
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      transactionId,
-      transaction,
-      classification,
+      income,
+      expense,
+      suppressed,
     } = body as {
-      transactionId: string;
-      transaction: BankTransaction;
-      classification: {
-        type: 'income' | 'expense';
-        code: number;
-        name: string;
-        category_code?: number;
-        category_name?: string;
-        donor_name?: string;
-        vendor?: string;
-        description?: string;
-        note?: string;
-      };
+      income: MatchedIncomeItem[];
+      expense: MatchedExpenseItem[];
+      suppressed: BankTransaction[];
     };
 
-    if (!transactionId || !classification) {
-      return NextResponse.json(
-        { success: false, error: '필수 정보가 누락되었습니다' },
-        { status: 400 }
-      );
+    let incomeCount = 0;
+    let expenseCount = 0;
+    let suppressedCount = 0;
+
+    // 수입 레코드 저장
+    if (income && income.length > 0) {
+      const incomeRecords = income.map(item => item.record);
+      await addIncomeRecords(incomeRecords);
+
+      // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가
+      for (const item of income) {
+        await updateBankTransaction(item.transaction.id, {
+          matched_status: 'matched',
+          matched_type: 'income_detail',
+          matched_ids: item.record.id,
+        });
+
+        if (item.match?.id) {
+          await incrementRuleUsage(item.match.id);
+        }
+      }
+
+      incomeCount = incomeRecords.length;
     }
 
-    const now = getKSTDateTime();
-    let recordId = '';
+    // 지출 레코드 저장
+    if (expense && expense.length > 0) {
+      const expenseRecords = expense.map(item => item.record);
+      await addExpenseRecords(expenseRecords);
 
-    if (classification.type === 'income') {
-      const incomeRecord: IncomeRecord = {
-        id: generateId('INC'),
-        date: transaction.transaction_date,
-        source: '계좌이체',
-        offering_code: classification.code,
-        donor_name: classification.donor_name || transaction.detail || '',
-        representative: classification.donor_name || transaction.detail || '',
-        amount: transaction.deposit,
-        note: classification.note || `${transaction.description} | ${transaction.detail}`,
-        input_method: '수동매칭',
-        created_at: now,
-        created_by: 'manual_matcher',
-      };
+      // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가
+      for (const item of expense) {
+        await updateBankTransaction(item.transaction.id, {
+          matched_status: 'matched',
+          matched_type: 'expense_detail',
+          matched_ids: item.record.id,
+        });
 
-      await addIncomeRecords([incomeRecord]);
-      recordId = incomeRecord.id;
-    } else {
-      const expenseRecord: ExpenseRecord = {
-        id: generateId('EXP'),
-        date: transaction.transaction_date,
-        payment_method: '계좌이체',
-        vendor: classification.vendor || transaction.detail || transaction.description || '',
-        description: classification.description || transaction.description || '',
-        amount: transaction.withdrawal,
-        account_code: classification.code,
-        category_code: classification.category_code || Math.floor(classification.code / 10) * 10,
-        note: classification.note || '',
-        created_at: now,
-        created_by: 'manual_matcher',
-      };
+        if (item.match?.id) {
+          await incrementRuleUsage(item.match.id);
+        }
+      }
 
-      await addExpenseRecords([expenseRecord]);
-      recordId = expenseRecord.id;
+      expenseCount = expenseRecords.length;
     }
 
-    // 은행 거래 상태 업데이트
-    await updateBankTransaction(transactionId, {
-      matched_status: 'matched',
-      matched_type: classification.type === 'income' ? 'income_detail' : 'expense_detail',
-      matched_ids: recordId,
-    });
+    // 말소 처리
+    if (suppressed && suppressed.length > 0) {
+      for (const tx of suppressed) {
+        await updateBankTransaction(tx.id, {
+          matched_status: 'suppressed',
+          suppressed: true,
+          suppressed_reason: tx.suppressed_reason || '자동 말소',
+        });
+      }
 
-    // 학습 기능 실행
-    await learnFromManualMatch(transaction, {
-      type: classification.type,
-      code: classification.code,
-      name: classification.name,
-    });
+      suppressedCount = suppressed.length;
+    }
 
     return NextResponse.json({
       success: true,
-      recordId,
-      message: '거래가 분류되었습니다',
+      incomeCount,
+      expenseCount,
+      suppressedCount,
+      message: `수입 ${incomeCount}건, 지출 ${expenseCount}건, 말소 ${suppressedCount}건 반영 완료`,
     });
   } catch (error) {
     console.error('Match confirm error:', error);
     return NextResponse.json(
-      { success: false, error: '거래 분류 중 오류가 발생했습니다' },
+      { success: false, error: '반영 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }

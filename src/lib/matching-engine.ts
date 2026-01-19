@@ -436,7 +436,7 @@ function createExpenseFromBankTransaction(
   };
 }
 
-async function incrementRuleUsage(ruleId: string): Promise<void> {
+export async function incrementRuleUsage(ruleId: string): Promise<void> {
   const rules = await getMatchingRules();
   const rule = rules.find(r => r.id === ruleId);
   if (rule) {

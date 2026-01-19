@@ -802,7 +802,7 @@ export function BankUpload() {
                                     type="number"
                                     value={item.record?.offering_code || 0}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'offering_code', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-sm w-12 text-center"
+                                    className="h-6 text-sm w-16 text-center"
                                   />
                                 )}
                               </TableCell>

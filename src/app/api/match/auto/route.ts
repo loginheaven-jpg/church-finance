@@ -195,10 +195,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// 헌금함 거래 판별
+// 헌금함 거래 판별 (detail 좌측 3자리가 '헌금함'인 경우)
 function isCashOfferingTransaction(tx: BankTransaction): boolean {
-  const text = `${tx.description || ''} ${tx.detail || ''} ${tx.memo || ''}`.toLowerCase();
-  return text.includes('헌금함') || text.includes('현금입금');
+  const donorName = (tx.detail || '').substring(0, 3);
+  return donorName === '헌금함';
 }
 
 // 카드결제 말소 대상 판별

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchCashOfferings, addIncomeRecords, getBankTransactions, updateBankTransaction, generateId, getKSTDateTime } from '@/lib/google-sheets';
+import { fetchCashOfferings, addIncomeRecords, getBankTransactions, updateBankTransaction, generateId, getKSTDateTime, getWeekEndingSunday } from '@/lib/google-sheets';
 import { syncCashOfferingsWithDuplicatePrevention } from '@/lib/matching-engine';
 import type { IncomeRecord } from '@/types';
 
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       // previewData를 수입부 레코드로 변환
       const incomeRecords: IncomeRecord[] = previewData.map((item: PreviewData) => ({
         id: generateId('INC'),
-        date: item.date,
+        date: getWeekEndingSunday(item.date), // 기준일 (주일)
         source: '헌금함',
         offering_code: item.code,
         donor_name: item.donor_name,
@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
         input_method: '현금헌금',
         created_at: getKSTDateTime(),
         created_by: 'cash_sync',
+        transaction_date: item.date, // 실제 거래일
       }));
 
       await addIncomeRecords(incomeRecords);

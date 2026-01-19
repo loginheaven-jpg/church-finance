@@ -128,12 +128,12 @@ export function BankUpload() {
     }
   };
 
-  // 날짜별 합계 계산
+  // 기준일별 합계 계산 (date = 주일)
   const getDateSummary = () => {
     const dateMap = new Map<string, { withdrawal: number; deposit: number }>();
 
     data.forEach(item => {
-      const dateKey = item.transaction_date;
+      const dateKey = item.date; // 기준일 (주일) 기준으로 합산
       const existing = dateMap.get(dateKey) || { withdrawal: 0, deposit: 0 };
       dateMap.set(dateKey, {
         withdrawal: existing.withdrawal + item.withdrawal,
@@ -252,9 +252,9 @@ export function BankUpload() {
                 은행원장에 반영
               </Button>
 
-              {/* 날짜별 합계 */}
+              {/* 기준일별 합계 (주일) */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="text-sm font-medium text-blue-700 mb-2">날짜별 합계</div>
+                <div className="text-sm font-medium text-blue-700 mb-2">기준일별 합계 (주일)</div>
                 <div className="flex flex-wrap gap-3">
                   {dateSummary.map(({ date, withdrawal, deposit }) => (
                     <div key={date} className="bg-white px-3 py-1.5 rounded border border-blue-200">
@@ -281,7 +281,8 @@ export function BankUpload() {
                   <TableHeader className="sticky top-0 bg-white">
                     <TableRow>
                       <TableHead className="w-[50px]">No</TableHead>
-                      <TableHead className="min-w-[100px]">날짜</TableHead>
+                      <TableHead className="min-w-[100px]">거래일</TableHead>
+                      <TableHead className="min-w-[100px]">기준일</TableHead>
                       <TableHead className="min-w-[100px] text-right">출금</TableHead>
                       <TableHead className="min-w-[100px] text-right">입금</TableHead>
                       <TableHead className="min-w-[100px] text-right">잔액</TableHead>
@@ -296,6 +297,7 @@ export function BankUpload() {
                       <TableRow key={item.id}>
                         <TableCell className="font-medium text-sm">{index + 1}</TableCell>
                         <TableCell className="text-sm">{item.transaction_date}</TableCell>
+                        <TableCell className="text-sm text-blue-600">{item.date}</TableCell>
                         <TableCell className="text-right">
                           {item.withdrawal > 0 ? (
                             <Input

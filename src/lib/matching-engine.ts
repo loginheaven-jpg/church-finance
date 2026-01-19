@@ -11,6 +11,7 @@ import {
   getDonorInfo,
   generateId,
   getKSTDateTime,
+  getWeekEndingSunday,
 } from './google-sheets';
 import type {
   BankTransaction,
@@ -103,7 +104,7 @@ function convertCashOfferingToIncome(
 
   return {
     id: generateId('INC'),
-    date: co.date,
+    date: getWeekEndingSunday(co.date), // 기준일 (주일)
     source: '헌금함',
     offering_code: co.code,
     donor_name: co.donor_name,
@@ -113,6 +114,7 @@ function convertCashOfferingToIncome(
     input_method: '현금헌금',
     created_at: getKSTDateTime(),
     created_by: 'cash_sync',
+    transaction_date: co.date, // 실제 거래일
   };
 }
 
@@ -351,7 +353,7 @@ function createIncomeFromBankTransaction(
 ): IncomeRecord {
   return {
     id: generateId('INC'),
-    date: tx.transaction_date,
+    date: tx.date, // 기준일 (주일)
     source: '계좌이체',
     offering_code: rule.target_code,
     donor_name: tx.detail || rule.target_name,
@@ -361,6 +363,7 @@ function createIncomeFromBankTransaction(
     input_method: '은행원장',
     created_at: getKSTDateTime(),
     created_by: 'auto_matcher',
+    transaction_date: tx.transaction_date, // 실제 거래일
   };
 }
 
@@ -370,7 +373,7 @@ function createExpenseFromBankTransaction(
 ): ExpenseRecord {
   return {
     id: generateId('EXP'),
-    date: tx.transaction_date,
+    date: tx.date, // 기준일 (주일)
     payment_method: '계좌이체',
     vendor: tx.detail || tx.description || '기타',
     description: tx.detail || tx.description || '',
@@ -380,6 +383,7 @@ function createExpenseFromBankTransaction(
     note: tx.description || '',
     created_at: getKSTDateTime(),
     created_by: 'auto_matcher',
+    transaction_date: tx.transaction_date, // 실제 거래일
   };
 }
 

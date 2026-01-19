@@ -5,7 +5,7 @@
 // 수입 레코드
 export interface IncomeRecord {
   id: string;
-  date: string;
+  date: string; // 기준일 (해당 주의 일요일)
   source: string; // 헌금함, 계좌이체
   offering_code: number;
   donor_name: string;
@@ -15,12 +15,13 @@ export interface IncomeRecord {
   input_method: string; // 현금헌금, 은행원장
   created_at: string;
   created_by?: string;
+  transaction_date?: string; // 실제 거래일
 }
 
 // 지출 레코드
 export interface ExpenseRecord {
   id: string;
-  date: string;
+  date: string; // 기준일 (해당 주의 일요일)
   payment_method: string; // 계좌이체, 법인카드, 현금
   vendor: string;
   description: string;
@@ -30,12 +31,14 @@ export interface ExpenseRecord {
   note: string;
   created_at: string;
   created_by?: string;
+  transaction_date?: string; // 실제 거래일
 }
 
 // 은행 거래
 export interface BankTransaction {
   id: string;
-  transaction_date: string;
+  transaction_date: string; // 실제 거래일
+  date: string; // 기준일 (해당 주의 일요일)
   withdrawal: number;
   deposit: number;
   balance: number;

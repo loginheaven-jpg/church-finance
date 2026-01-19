@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import { generateId, getKSTDateTime } from '@/lib/google-sheets';
+import { generateId, getKSTDateTime, getWeekEndingSunday } from '@/lib/google-sheets';
 import type { BankTransaction } from '@/types';
 
 export async function POST(request: NextRequest) {
@@ -105,7 +105,8 @@ export async function POST(request: NextRequest) {
 
       const transaction: BankTransaction = {
         id: generateId('BANK'),
-        transaction_date: date,
+        transaction_date: date, // 실제 거래일
+        date: getWeekEndingSunday(date), // 기준일 (주일)
         withdrawal,
         deposit,
         balance: parseAmount(row[colIndex.balance]),

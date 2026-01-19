@@ -434,7 +434,7 @@ export async function fetchCashOfferings(
 export async function addIncomeRecords(records: IncomeRecord[]): Promise<void> {
   const rows = records.map(r => [
     r.id,
-    r.date,
+    r.date, // 기준일 (주일)
     r.source,
     r.offering_code,
     r.donor_name,
@@ -444,6 +444,7 @@ export async function addIncomeRecords(records: IncomeRecord[]): Promise<void> {
     r.input_method,
     r.created_at,
     r.created_by || '',
+    r.transaction_date || '', // 실제 거래일
   ]);
 
   await appendToSheet(FINANCE_CONFIG.sheets.income, rows);
@@ -468,7 +469,7 @@ export async function getIncomeRecords(
 export async function addExpenseRecords(records: ExpenseRecord[]): Promise<void> {
   const rows = records.map(r => [
     r.id,
-    r.date,
+    r.date, // 기준일 (주일)
     r.payment_method,
     r.vendor,
     r.description,
@@ -478,6 +479,7 @@ export async function addExpenseRecords(records: ExpenseRecord[]): Promise<void>
     r.note,
     r.created_at,
     r.created_by || '',
+    r.transaction_date || '', // 실제 거래일
   ]);
 
   await appendToSheet(FINANCE_CONFIG.sheets.expense, rows);
@@ -502,7 +504,8 @@ export async function getExpenseRecords(
 export async function addBankTransactions(transactions: BankTransaction[]): Promise<void> {
   const rows = transactions.map(t => [
     t.id,
-    t.transaction_date,
+    t.transaction_date, // 실제 거래일
+    t.date, // 기준일 (주일)
     t.withdrawal,
     t.deposit,
     t.balance,
@@ -552,7 +555,7 @@ export async function updateBankTransaction(
 
   await updateSheet(
     FINANCE_CONFIG.sheets.bank,
-    `A${rowIndex + 1}:P${rowIndex + 1}`,
+    `A${rowIndex + 1}:Q${rowIndex + 1}`,
     [updatedRow as (string | number | boolean)[]]
   );
 }
@@ -1026,15 +1029,15 @@ export async function initializeSheets(): Promise<void> {
     [FINANCE_CONFIG.sheets.income]: [
       'id', 'date', 'source', 'offering_code',
       'donor_name', 'representative', 'amount', 'note', 'input_method',
-      'created_at', 'created_by'
+      'created_at', 'created_by', 'transaction_date'
     ],
     [FINANCE_CONFIG.sheets.expense]: [
       'id', 'date', 'payment_method', 'vendor', 'description',
       'amount', 'account_code', 'category_code',
-      'note', 'created_at', 'created_by'
+      'note', 'created_at', 'created_by', 'transaction_date'
     ],
     [FINANCE_CONFIG.sheets.bank]: [
-      'id', 'transaction_date', 'withdrawal', 'deposit', 'balance',
+      'id', 'transaction_date', 'date', 'withdrawal', 'deposit', 'balance',
       'description', 'detail', 'branch', 'time', 'memo',
       'matched_status', 'matched_type', 'matched_ids', 'suppressed', 'suppressed_reason',
       'uploaded_at'
@@ -1262,6 +1265,27 @@ export function getKSTDateTime(): string {
   const now = new Date();
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return kst.toISOString();
+}
+
+/**
+ * 주어진 날짜가 속한 주의 일요일(기준일) 반환
+ * 주간: 월요일~일요일
+ * @param dateStr YYYY-MM-DD 형식
+ * @returns 해당 주의 일요일 날짜 (YYYY-MM-DD)
+ */
+export function getWeekEndingSunday(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  const dayOfWeek = date.getDay(); // 0=일, 1=월, ..., 6=토
+
+  // 일요일이면 그대로, 아니면 다음 일요일로
+  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+  date.setDate(date.getDate() + daysUntilSunday);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 }
 
 // ============================================

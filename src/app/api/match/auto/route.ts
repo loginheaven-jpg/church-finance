@@ -129,14 +129,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 카드결제 출금 체크
-      if (shouldSuppressCardTransaction(tx)) {
-        suppressedTransactions.push({
-          ...tx,
-          suppressed_reason: '자동 말소 (카드결제)',
-        });
-        continue;
-      }
+      // 카드결제는 여기서 말소하지 않음 (카드내역 업로드 시 별도 처리)
 
       // 매칭 규칙 찾기
       const matchedRule = findBestMatchingRule(tx, rules);
@@ -199,20 +192,6 @@ export async function POST(request: NextRequest) {
 function isCashOfferingTransaction(tx: BankTransaction): boolean {
   const donorName = (tx.detail || '').substring(0, 3);
   return donorName === '헌금함';
-}
-
-// 카드결제 말소 대상 판별
-function shouldSuppressCardTransaction(tx: BankTransaction): boolean {
-  if (tx.withdrawal <= 0) return false;
-
-  const text = `${tx.description || ''} ${tx.detail || ''} ${tx.memo || ''}`.toLowerCase();
-  return (
-    text.includes('nh카드') ||
-    text.includes('신용카드') ||
-    text.includes('체크카드') ||
-    text.includes('카드결제') ||
-    text.includes('카드대금')
-  );
 }
 
 // 매칭 규칙 찾기

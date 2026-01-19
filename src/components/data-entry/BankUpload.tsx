@@ -438,6 +438,16 @@ export function BankUpload() {
   const matchedIncomeCount = unifiedIncome.filter(item => item.type === 'matched').length;
   const matchedExpenseCount = unifiedExpense.filter(item => item.type === 'matched').length;
 
+  // 검증용 합계 계산 (수입)
+  const suppressedIncomeItems = unifiedIncome.filter(item => item.type === 'suppressed');
+  const suppressedIncomeTotal = suppressedIncomeItems.reduce((sum, item) => sum + item.transaction.deposit, 0);
+  const bankIncomeTotal = incomeTotalAmount + suppressedIncomeTotal;
+
+  // 검증용 합계 계산 (지출)
+  const suppressedExpenseItems = unifiedExpense.filter(item => item.type === 'suppressed');
+  const suppressedExpenseTotal = suppressedExpenseItems.reduce((sum, item) => sum + item.transaction.withdrawal, 0);
+  const bankExpenseTotal = expenseTotalAmount + suppressedExpenseTotal;
+
   return (
     <Card>
       <CardHeader>
@@ -642,6 +652,54 @@ export function BankUpload() {
                       </div>
                     </div>
                   </div>
+
+                  {/* 검증 라인 (수입) */}
+                  {suppressedIncomeCount > 0 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                      <span className="text-blue-800">
+                        <span className="font-medium">은행원장 수입합계</span>{' '}
+                        <span className="text-blue-600 font-bold">{bankIncomeTotal.toLocaleString()}원</span>
+                        {' - '}
+                        <span className="font-medium">말소금액</span>{' '}
+                        <span className="text-red-600">
+                          ({suppressedIncomeCount}건 {suppressedIncomeTotal.toLocaleString()}원
+                          {suppressedIncomeCount <= 5 && (
+                            <span className="text-red-500">
+                              {' = '}
+                              {suppressedIncomeItems.map((item, i) => (
+                                <span key={i}>
+                                  {i > 0 && ' + '}
+                                  {item.transaction.deposit.toLocaleString()}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                          )
+                        </span>
+                        {' = '}
+                        <span className="font-medium">반영 총합계</span>{' '}
+                        <span className="text-green-600 font-bold">{incomeTotalAmount.toLocaleString()}원</span>
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 검증 라인 (지출) */}
+                  {suppressedExpenseCount > 0 && (
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm">
+                      <span className="text-orange-800">
+                        <span className="font-medium">은행원장 지출합계</span>{' '}
+                        <span className="text-orange-600 font-bold">{bankExpenseTotal.toLocaleString()}원</span>
+                        {' - '}
+                        <span className="font-medium">말소금액</span>{' '}
+                        <span className="text-red-600">
+                          ({suppressedExpenseCount}건 {suppressedExpenseTotal.toLocaleString()}원)
+                        </span>
+                        {' = '}
+                        <span className="font-medium">반영 총합계</span>{' '}
+                        <span className="text-red-600 font-bold">{expenseTotalAmount.toLocaleString()}원</span>
+                      </span>
+                    </div>
+                  )}
 
                   {/* 탭 헤더 (2개: 수입부, 지출부) */}
                   <div className="flex border-b">

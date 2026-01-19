@@ -255,9 +255,23 @@ export async function autoMatchBankTransactions(): Promise<AutoMatchResult> {
         result.autoMatched.push({ transaction: tx, match: matchedRule, record: expense });
       }
     } else {
-      // 신뢰도 낮음 → 수동 검토
-      const suggestions = getSuggestedRules(tx, rules, 3);
-      result.needsReview.push({ transaction: tx, suggestions });
+      // 신뢰도 낮음
+      if (tx.deposit > 0) {
+        // 수입: 기본 분류 로직 적용
+        const defaultCode = getDefaultIncomeCode(tx.deposit);
+        const income = createIncomeFromBankTransactionWithCode(tx, defaultCode.code, defaultCode.name);
+        await addIncomeRecords([income]);
+        await updateBankTransaction(tx.id, {
+          matched_status: 'matched',
+          matched_type: 'income_detail',
+          matched_ids: income.id,
+        });
+        result.autoMatched.push({ transaction: tx, match: null, record: income });
+      } else {
+        // 지출: 수동 검토
+        const suggestions = getSuggestedRules(tx, rules, 3);
+        result.needsReview.push({ transaction: tx, suggestions });
+      }
     }
   }
 
@@ -268,7 +282,15 @@ function findBestMatchingRule(
   transaction: BankTransaction,
   rules: MatchingRule[]
 ): MatchingRule | null {
-  const searchText = `${transaction.description || ''} ${transaction.detail || ''} ${transaction.memo || ''}`.toLowerCase();
+  // 수입/지출에 따라 검색 대상 분리
+  let searchText: string;
+  if (transaction.deposit > 0) {
+    // 수입: memo만 검토
+    searchText = (transaction.memo || '').toLowerCase();
+  } else {
+    // 지출: detail + description 검토
+    searchText = `${transaction.detail || ''} ${transaction.description || ''}`.toLowerCase();
+  }
 
   let bestMatch: MatchingRule | null = null;
   let bestScore = 0;
@@ -317,7 +339,13 @@ function getSuggestedRules(
   rules: MatchingRule[],
   limit: number
 ): MatchingRule[] {
-  const searchText = `${transaction.description || ''} ${transaction.detail || ''} ${transaction.memo || ''}`.toLowerCase();
+  // 동일한 검색 대상 분리 로직 적용
+  let searchText: string;
+  if (transaction.deposit > 0) {
+    searchText = (transaction.memo || '').toLowerCase();
+  } else {
+    searchText = `${transaction.detail || ''} ${transaction.description || ''}`.toLowerCase();
+  }
 
   return rules
     .map(rule => ({ rule, score: calculateMatchScore(searchText, rule) }))
@@ -367,6 +395,27 @@ function createIncomeFromBankTransaction(
   };
 }
 
+function createIncomeFromBankTransactionWithCode(
+  tx: BankTransaction,
+  code: number,
+  name: string
+): IncomeRecord {
+  return {
+    id: generateId('INC'),
+    date: tx.date, // 기준일 (주일)
+    source: '계좌이체',
+    offering_code: code,
+    donor_name: tx.detail || name,
+    representative: tx.detail || name,
+    amount: tx.deposit,
+    note: `${tx.description} | ${tx.detail} (기본분류)`,
+    input_method: '은행원장',
+    created_at: getKSTDateTime(),
+    created_by: 'auto_matcher',
+    transaction_date: tx.transaction_date, // 실제 거래일
+  };
+}
+
 function createExpenseFromBankTransaction(
   tx: BankTransaction,
   rule: MatchingRule
@@ -375,7 +424,7 @@ function createExpenseFromBankTransaction(
     id: generateId('EXP'),
     date: tx.date, // 기준일 (주일)
     payment_method: '계좌이체',
-    vendor: tx.detail || tx.description || '기타',
+    vendor: tx.memo || tx.detail || tx.description || '기타',  // memo 우선
     description: tx.detail || tx.description || '',
     amount: tx.withdrawal,
     account_code: rule.target_code,
@@ -468,6 +517,31 @@ function extractKeyPattern(text: string): string {
   }
 
   return pattern || text.substring(0, 10);
+}
+
+// ============================================
+// 5. 수입 기본 분류 로직 (규칙 매칭 실패 시)
+// ============================================
+
+/**
+ * 금액 기반 기본 분류
+ * - 금액 < 50,000 → 11 (주일헌금)
+ * - 금액 >= 50,000 && 만원단위만 → 13 (감사헌금)
+ * - 금액 >= 50,000 && 천원단위 포함 → 12 (십일조)
+ */
+function getDefaultIncomeCode(amount: number): { code: number; name: string } {
+  if (amount < 50000) {
+    return { code: 11, name: '주일헌금' };
+  }
+
+  // 만원 단위인지 확인 (천원 단위가 0인 경우)
+  const hasThousands = (amount % 10000) !== 0;
+
+  if (hasThousands) {
+    return { code: 12, name: '십일조' };
+  } else {
+    return { code: 13, name: '감사헌금' };
+  }
 }
 
 // ============================================

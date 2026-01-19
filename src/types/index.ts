@@ -249,7 +249,7 @@ export interface UploadResult {
 export interface AutoMatchResult {
   autoMatched: Array<{
     transaction: BankTransaction;
-    match: MatchingRule;
+    match: MatchingRule | null;  // null: 기본 분류 사용
     record: IncomeRecord | ExpenseRecord;
   }>;
   suppressed: BankTransaction[];

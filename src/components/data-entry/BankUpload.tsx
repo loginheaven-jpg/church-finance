@@ -345,6 +345,11 @@ export function BankUpload() {
       return;
     }
 
+    // 중복 클릭 방지 - 이미 confirming 중이면 무시
+    if (confirming) {
+      return;
+    }
+
     setConfirming(true);
 
     try {
@@ -385,6 +390,14 @@ export function BankUpload() {
         ...unifiedExpense.filter(item => item.type === 'suppressed').map(item => item.transaction),
       ];
 
+      // 디버깅: 전송되는 데이터 확인
+      console.log('[handleConfirm] 전송 데이터:', {
+        income: incomeToSave.length,
+        expense: expenseToSave.length,
+        suppressed: suppressedToSave.length,
+        expenseDetails: expenseToSave.map(e => ({ vendor: e.record.vendor, amount: e.record.amount, account_code: e.record.account_code }))
+      });
+
       const res = await fetch('/api/match/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -396,23 +409,25 @@ export function BankUpload() {
       });
 
       const result = await res.json();
+      console.log('[handleConfirm] API 응답:', result);
 
       if (result.success) {
         setStep('confirmed');
         setUnifiedIncome([]);  // 중복 반영 방지를 위해 즉시 초기화
         setUnifiedExpense([]); // 중복 반영 방지를 위해 즉시 초기화
+        // 성공 시 confirming을 true로 유지하여 중복 클릭 방지
         toast.success(result.message);
         setTimeout(() => {
           resetAll();
         }, 3000);
       } else {
         toast.error(result.error || '반영 중 오류가 발생했습니다');
+        setConfirming(false);  // 실패 시에만 버튼 다시 활성화
       }
     } catch (error) {
       toast.error('반영 중 오류가 발생했습니다');
-      console.error(error);
-    } finally {
-      setConfirming(false);
+      console.error('[handleConfirm] 에러:', error);
+      setConfirming(false);  // 에러 시에만 버튼 다시 활성화
     }
   };
 
@@ -885,7 +900,7 @@ export function BankUpload() {
                                     type="number"
                                     value={item.record?.amount || 0}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-sm text-right w-20 text-green-600"
+                                    className="h-6 text-sm text-right w-36 text-green-600"
                                   />
                                 )}
                               </TableCell>
@@ -1025,14 +1040,14 @@ export function BankUpload() {
                                     type="number"
                                     value={item.record?.amount || item.transaction.withdrawal}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-sm text-right w-28 text-amber-700 bg-amber-50"
+                                    className="h-6 text-sm text-right w-36 text-amber-700 bg-amber-50"
                                   />
                                 ) : (
                                   <Input
                                     type="number"
                                     value={item.record?.amount || 0}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-sm text-right w-28 text-red-600"
+                                    className="h-6 text-sm text-right w-36 text-red-600"
                                   />
                                 )}
                               </TableCell>

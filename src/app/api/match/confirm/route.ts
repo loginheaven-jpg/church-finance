@@ -33,6 +33,19 @@ export async function POST(request: NextRequest) {
       suppressed: BankTransaction[];
     };
 
+    // 디버깅: 수신된 데이터 확인
+    console.log('[match/confirm] 수신 데이터:', {
+      incomeCount: income?.length || 0,
+      expenseCount: expense?.length || 0,
+      suppressedCount: suppressed?.length || 0,
+      expenseRecords: expense?.map(e => ({
+        id: e.record?.id,
+        vendor: e.record?.vendor,
+        amount: e.record?.amount,
+        account_code: e.record?.account_code
+      }))
+    });
+
     let incomeCount = 0;
     let expenseCount = 0;
     let suppressedCount = 0;
@@ -61,7 +74,9 @@ export async function POST(request: NextRequest) {
     // 지출 레코드 저장
     if (expense && expense.length > 0) {
       const expenseRecords = expense.map(item => item.record);
+      console.log('[match/confirm] 지출 레코드 저장 시작:', expenseRecords.length, '건');
       await addExpenseRecords(expenseRecords);
+      console.log('[match/confirm] 지출 레코드 저장 완료');
 
       // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가
       for (const item of expense) {
@@ -77,6 +92,8 @@ export async function POST(request: NextRequest) {
       }
 
       expenseCount = expenseRecords.length;
+    } else {
+      console.log('[match/confirm] 지출 데이터 없음 - expense:', expense);
     }
 
     // 말소 처리

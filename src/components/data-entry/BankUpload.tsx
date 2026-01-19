@@ -353,9 +353,31 @@ export function BankUpload() {
         .filter(item => item.type === 'matched' && item.record)
         .map(item => ({ transaction: item.transaction, record: item.record!, match: item.match }));
 
+      // 지출: matched + needsReview 모두 반영 (needsReview는 record 자동 생성)
       const expenseToSave = unifiedExpense
-        .filter(item => item.type === 'matched' && item.record)
-        .map(item => ({ transaction: item.transaction, record: item.record!, match: item.match }));
+        .filter(item => item.type === 'matched' || item.type === 'needsReview')
+        .map(item => {
+          if (item.type === 'matched' && item.record) {
+            return { transaction: item.transaction, record: item.record, match: item.match };
+          }
+          // needsReview → record 자동 생성
+          const now = new Date().toISOString();
+          const newRecord: ExpenseRecord = {
+            id: `EXP-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+            date: item.transaction.date,
+            payment_method: '계좌이체',
+            vendor: item.transaction.memo || item.transaction.detail || '기타',
+            description: item.transaction.description || '',
+            amount: item.transaction.withdrawal,
+            account_code: item.suggestions?.[0]?.target_code || 0,
+            category_code: Math.floor((item.suggestions?.[0]?.target_code || 0) / 10) * 10,
+            note: item.transaction.detail || '',
+            created_at: now,
+            created_by: 'auto_review',
+            transaction_date: item.transaction.transaction_date,
+          };
+          return { transaction: item.transaction, record: newRecord, match: item.suggestions?.[0] || null };
+        });
 
       // 말소 항목 추출
       const suppressedToSave = [
@@ -377,6 +399,8 @@ export function BankUpload() {
 
       if (result.success) {
         setStep('confirmed');
+        setUnifiedIncome([]);  // 중복 반영 방지를 위해 즉시 초기화
+        setUnifiedExpense([]); // 중복 반영 방지를 위해 즉시 초기화
         toast.success(result.message);
         setTimeout(() => {
           resetAll();
@@ -1077,7 +1101,7 @@ export function BankUpload() {
                     ) : (
                       <CheckCircle2 className="h-4 w-4 mr-2" />
                     )}
-                    3단계: 정식 반영 (수입 {matchedIncomeCount}건, 지출 {matchedExpenseCount}건, 말소 {suppressedIncomeCount + suppressedExpenseCount}건)
+                    3단계: 정식 반영 (수입 {matchedIncomeCount}건, 지출 {matchedExpenseCount + needsReviewCount}건, 말소 {suppressedIncomeCount + suppressedExpenseCount}건)
                   </Button>
                 </div>
               )}

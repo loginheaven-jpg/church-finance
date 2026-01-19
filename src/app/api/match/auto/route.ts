@@ -149,11 +149,31 @@ export async function POST(request: NextRequest) {
         incomeRecords.push({ transaction: tx, record: income, match });
       } else if (tx.withdrawal > 0) {
         // 지출 거래
-        if (matchedRule && matchedRule.confidence >= 0.8) {
+        // [1순위] detail 앞 2자리 숫자 추출 시도
+        const extracted = extractAccountCodeFromDetail(tx.detail || '');
+
+        if (extracted) {
+          // 1순위 성공 → 추출된 코드로 지출 레코드 생성
+          const expense = createExpenseFromExtractedCode(tx, extracted, now);
+          const extractedMatch: MatchingRule = {
+            id: 'detail_prefix',
+            pattern: extracted.code.toString(),
+            rule_type: 'bank_expense',
+            target_type: 'expense',
+            target_code: extracted.code,
+            target_name: `코드${extracted.code}`,
+            confidence: 1.0,
+            usage_count: 0,
+            created_at: now,
+            updated_at: now,
+          };
+          expenseRecords.push({ transaction: tx, record: expense, match: extractedMatch });
+        } else if (matchedRule && matchedRule.confidence >= 0.8) {
+          // [2순위] 키워드 매칭 성공
           const expense = createExpenseFromBankTransaction(tx, matchedRule, now);
           expenseRecords.push({ transaction: tx, record: expense, match: matchedRule });
         } else {
-          // 낮은 신뢰도 → 검토 필요
+          // [3순위] 매칭 실패 → 검토 필요
           const suggestions = getSuggestedRules(tx, rules, 3);
           needsReview.push({ transaction: tx, suggestions });
         }
@@ -355,4 +375,48 @@ function getDefaultIncomeCode(amount: number): { code: number; name: string } {
   } else {
     return { code: 13, name: '감사헌금' };
   }
+}
+
+/**
+ * detail 필드에서 account_code 추출 (지출부 1순위 규칙)
+ * - 앞 2자리가 숫자이고, 3번째 문자가 숫자가 아닌 경우 추출
+ * - 예: "43청소년부현수막2800" → { code: 43, rest: "청소년부현수막2800" }
+ */
+function extractAccountCodeFromDetail(detail: string): { code: number; rest: string } | null {
+  if (!detail || detail.length < 3) return null;
+
+  const first2 = detail.substring(0, 2);
+  const third = detail.charAt(2);
+
+  // 앞 2자리가 숫자이고, 3번째가 숫자가 아닌 경우
+  if (/^\d{2}$/.test(first2) && !/\d/.test(third)) {
+    return {
+      code: parseInt(first2, 10),
+      rest: detail.substring(2),
+    };
+  }
+
+  return null;
+}
+
+// detail에서 추출한 코드로 지출 레코드 생성 (1순위)
+function createExpenseFromExtractedCode(
+  tx: BankTransaction,
+  extracted: { code: number; rest: string },
+  now: string
+): ExpenseRecord {
+  return {
+    id: generateId('EXP'),
+    date: tx.date,
+    payment_method: '계좌이체',
+    vendor: tx.memo || '기타',
+    description: '',
+    amount: tx.withdrawal,
+    account_code: extracted.code,
+    category_code: Math.floor(extracted.code / 10) * 10,
+    note: extracted.rest,  // "청소년부현수막2800"
+    created_at: now,
+    created_by: 'auto_matcher',
+    transaction_date: tx.transaction_date,
+  };
 }

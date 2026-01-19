@@ -882,6 +882,7 @@ export function BankUpload() {
                             <TableHead className="w-[40px]">No</TableHead>
                             <TableHead className="w-[50px]">상태</TableHead>
                             <TableHead className="w-[90px]">기준일</TableHead>
+                            <TableHead className="w-[80px]">이체일</TableHead>
                             <TableHead className="w-[70px]">결제방법</TableHead>
                             <TableHead className="w-[100px]">거래처</TableHead>
                             <TableHead className="w-[120px]">적요</TableHead>
@@ -917,6 +918,9 @@ export function BankUpload() {
                                 item.type === 'needsReview' ? 'text-amber-600' : 'text-blue-600'
                               )}>
                                 {item.type === 'matched' ? item.record?.date : item.transaction.date}
+                              </TableCell>
+                              <TableCell className="text-sm text-slate-500">
+                                {item.type === 'matched' ? item.record?.transaction_date : item.transaction.transaction_date}
                               </TableCell>
                               <TableCell className="text-sm">
                                 {item.type === 'suppressed' ? (
@@ -1014,7 +1018,7 @@ export function BankUpload() {
                                 {item.type === 'suppressed' ? (
                                   <span className="text-sm text-red-500">{item.transaction.description}</span>
                                 ) : item.type === 'needsReview' ? (
-                                  <span className="text-sm text-amber-600">-</span>
+                                  <span className="text-sm text-amber-600">{item.transaction.detail || '-'}</span>
                                 ) : (
                                   <Input
                                     value={item.record?.note || ''}

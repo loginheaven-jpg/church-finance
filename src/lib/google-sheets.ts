@@ -403,17 +403,18 @@ export async function fetchCashOfferings(
       const tabDate = tabNameToDate(tabName); // 탭명에서 날짜 추출
       const data = rows.slice(1);
 
+      // 헌금함 시트 컬럼: A=?, B=경로, C=성명, D=금액, E=소코드, F=소항목, G=대코드, H=비고
       const offerings = data
-        .filter(row => row[1] && row[2]) // 성명(B), 금액(C) 필수 (A는 경로)
+        .filter(row => row[2] && row[3]) // 성명(C), 금액(D) 필수
         .map(row => ({
           date: tabDate, // 탭명에서 추출한 날짜 사용
-          source: row[0] || '헌금함', // A: 경로
-          donor_name: row[1], // B: 성명
-          amount: parseAmount(row[2]), // C: 금액
-          code: parseInt(row[3]) || 11, // D: 소코드
-          item: row[4] || '주일헌금', // E: 소항목
-          category_code: parseInt(row[5]) || 10, // F: 대코드
-          note: row[6] || '', // G: 비고
+          source: row[1] || '헌금함', // B: 경로
+          donor_name: row[2], // C: 성명
+          amount: parseAmount(row[3]), // D: 금액
+          code: parseInt(row[4]) || 11, // E: 소코드
+          item: row[5] || '주일헌금', // F: 소항목
+          category_code: parseInt(row[6]) || 10, // G: 대코드
+          note: row[7] || '', // H: 비고
         }));
 
       allOfferings.push(...offerings);

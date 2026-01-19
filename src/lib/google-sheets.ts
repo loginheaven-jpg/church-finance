@@ -690,6 +690,23 @@ export async function updateMatchingRule(
   );
 }
 
+export async function clearMatchingRules(): Promise<number> {
+  const sheets = getGoogleSheetsClient();
+  const rows = await readSheet(FINANCE_CONFIG.sheets.matchingRules);
+
+  if (rows.length <= 1) return 0; // 헤더만 있으면 삭제할 것 없음
+
+  const deleteCount = rows.length - 1;
+
+  // 헤더를 제외한 모든 데이터 삭제 (2행부터)
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${FINANCE_CONFIG.sheets.matchingRules}!A2:J${rows.length}`,
+  });
+
+  return deleteCount;
+}
+
 // ============================================
 // 헌금자 정보 관련
 // ============================================

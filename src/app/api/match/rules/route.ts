@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getMatchingRules, addMatchingRule, getKSTDateTime } from '@/lib/google-sheets';
+import { getMatchingRules, addMatchingRule, clearMatchingRules, getKSTDateTime } from '@/lib/google-sheets';
 import type { MatchingRule } from '@/types';
 
 // GET: 모든 매칭규칙 조회
@@ -57,6 +57,24 @@ export async function POST(request: NextRequest) {
     console.error('Add matching rules error:', error);
     return NextResponse.json(
       { success: false, error: '매칭규칙 추가 중 오류가 발생했습니다' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: 모든 매칭규칙 삭제
+export async function DELETE() {
+  try {
+    const deletedCount = await clearMatchingRules();
+    return NextResponse.json({
+      success: true,
+      deleted: deletedCount,
+      message: `${deletedCount}개의 매칭규칙이 삭제되었습니다`,
+    });
+  } catch (error) {
+    console.error('Delete matching rules error:', error);
+    return NextResponse.json(
+      { success: false, error: '매칭규칙 삭제 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }

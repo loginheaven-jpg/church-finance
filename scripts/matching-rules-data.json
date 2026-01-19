@@ -1,0 +1,24 @@
+{
+  "rules": [
+    {"rule_type": "bank_income", "pattern": "십일", "target_type": "income", "target_code": 12, "target_name": "십일조", "confidence": 0.95},
+    {"rule_type": "bank_income", "pattern": "건축", "target_type": "income", "target_code": 501, "target_name": "건축헌금", "confidence": 0.95},
+    {"rule_type": "bank_income", "pattern": "감사", "target_type": "income", "target_code": 13, "target_name": "감사헌금", "confidence": 0.9},
+    {"rule_type": "bank_income", "pattern": "선교", "target_type": "income", "target_code": 21, "target_name": "선교헌금", "confidence": 0.95},
+    {"rule_type": "bank_income", "pattern": "주일", "target_type": "income", "target_code": 11, "target_name": "주일헌금", "confidence": 0.85},
+    {"rule_type": "bank_income", "pattern": "구제", "target_type": "income", "target_code": 22, "target_name": "구제헌금", "confidence": 0.95},
+    {"rule_type": "bank_income", "pattern": "큐티", "target_type": "income", "target_code": 24, "target_name": "큐티", "confidence": 0.95},
+    {"rule_type": "bank_expense", "pattern": "수도", "target_type": "expense", "target_code": 63, "target_name": "수도료", "confidence": 0.95},
+    {"rule_type": "bank_expense", "pattern": "코원", "target_type": "expense", "target_code": 62, "target_name": "가스비", "confidence": 0.95},
+    {"rule_type": "bank_expense", "pattern": "어린이재단", "target_type": "expense", "target_code": 53, "target_name": "어린이재단", "confidence": 0.95},
+    {"rule_type": "bank_expense", "pattern": "대출", "target_type": "expense", "target_code": 501, "target_name": "대출상환", "confidence": 0.9},
+    {"rule_type": "bank_expense", "pattern": "결산", "target_type": "expense", "target_code": 94, "target_name": "결산", "confidence": 0.85},
+    {"rule_type": "bank_expense", "pattern": "현대엘리", "target_type": "expense", "target_code": 64, "target_name": "엘리베이터", "confidence": 0.95},
+    {"rule_type": "bank_expense", "pattern": "KT801691", "target_type": "expense", "target_code": 71, "target_name": "통신비(KT)", "confidence": 0.95},
+    {"rule_type": "bank_expense", "pattern": "전기", "target_type": "expense", "target_code": 61, "target_name": "전기료", "confidence": 0.85},
+    {"rule_type": "bank_expense", "pattern": "한국전력", "target_type": "expense", "target_code": 61, "target_name": "전기료", "confidence": 0.95},
+    {"rule_type": "bank_expense", "pattern": "LGU", "target_type": "expense", "target_code": 91, "target_name": "통신비(LGU)", "confidence": 0.9},
+    {"rule_type": "bank_expense", "pattern": "진성전기", "target_type": "expense", "target_code": 64, "target_name": "전기시설", "confidence": 0.95},
+    {"rule_type": "bank_expense", "pattern": "렌탈", "target_type": "expense", "target_code": 64, "target_name": "렌탈비", "confidence": 0.9},
+    {"rule_type": "bank_expense", "pattern": "배지윤", "target_type": "expense", "target_code": 23, "target_name": "배지윤", "confidence": 0.95}
+  ]
+}

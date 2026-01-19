@@ -440,21 +440,32 @@ function determineIncomeOfferingCode(
 
 /**
  * detail 필드에서 account_code 추출 (지출부 1순위 규칙)
- * - 앞 2자리가 숫자이고, 3번째 문자가 숫자가 아닌 경우 추출
- * - 예: "43청소년부현수막2800" → { code: 43, rest: "청소년부현수막2800" }
+ * - 숫자로 시작하면 좌측 2자리 추출
+ * - 단, 50으로 시작하면 좌측 3자리 추출 (예: 501대출상환)
+ * - 50 다음이 숫자가 아니면 매칭 실패 → needsReview
  */
 function extractAccountCodeFromDetail(detail: string): { code: number; rest: string } | null {
-  if (!detail || detail.length < 3) return null;
+  if (!detail || detail.length < 2) return null;
+
+  // 숫자로 시작하지 않으면 실패
+  if (!/^\d/.test(detail)) return null;
 
   const first2 = detail.substring(0, 2);
-  const third = detail.charAt(2);
 
-  // 앞 2자리가 숫자이고, 3번째가 숫자가 아닌 경우
-  if (/^\d{2}$/.test(first2) && !/\d/.test(third)) {
-    return {
-      code: parseInt(first2, 10),
-      rest: detail.substring(2),
-    };
+  // 50으로 시작하면 3자리 추출 시도
+  if (first2 === '50') {
+    const first3 = detail.substring(0, 3);
+    // 3자리가 모두 숫자여야 함 (예: 501)
+    if (/^\d{3}/.test(first3)) {
+      return { code: parseInt(first3, 10), rest: detail.substring(3) };
+    }
+    // 50 다음이 숫자가 아니면 매칭 실패 → null 반환 → needsReview
+    return null;
+  }
+
+  // 그 외: 좌측 2자리 추출
+  if (/^\d{2}/.test(first2)) {
+    return { code: parseInt(first2, 10), rest: detail.substring(2) };
   }
 
   return null;

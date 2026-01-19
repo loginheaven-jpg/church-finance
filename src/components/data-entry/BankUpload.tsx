@@ -293,10 +293,35 @@ export function BankUpload() {
     setUnifiedExpense(prev => {
       const newItems = [...prev];
       const item = newItems[index];
+
       if (item.type === 'matched' && item.record) {
         newItems[index] = {
           ...item,
           record: { ...item.record, [field]: value },
+        };
+      } else if (item.type === 'needsReview') {
+        // needsReview 항목 편집 시 matched로 전환하고 record 생성
+        const now = new Date().toISOString();
+        const newRecord: ExpenseRecord = {
+          id: `EXP-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+          date: item.transaction.date,
+          payment_method: '계좌이체',
+          vendor: item.transaction.memo || item.transaction.detail || '기타',
+          description: item.transaction.description || '',
+          amount: item.transaction.withdrawal,
+          account_code: item.suggestions?.[0]?.target_code || 0,
+          category_code: Math.floor((item.suggestions?.[0]?.target_code || 0) / 10) * 10,
+          note: item.transaction.detail || '',
+          created_at: now,
+          created_by: 'manual_edit',
+          transaction_date: item.transaction.transaction_date,
+          [field]: value,
+        };
+        newItems[index] = {
+          ...item,
+          type: 'matched',
+          record: newRecord,
+          match: item.suggestions?.[0] || null,
         };
       }
       return newItems;
@@ -939,12 +964,9 @@ export function BankUpload() {
                                   <span className="text-sm text-red-600">{item.transaction.memo || item.transaction.detail || '-'}</span>
                                 ) : item.type === 'needsReview' ? (
                                   <Input
-                                    value={item.transaction.memo || item.transaction.detail || ''}
-                                    onChange={(e) => {
-                                      // needsReview 항목은 record가 없으므로 transaction 정보 표시만
-                                    }}
+                                    value={item.record?.vendor || item.transaction.memo || item.transaction.detail || ''}
+                                    onChange={(e) => handleUnifiedExpenseChange(index, 'vendor', e.target.value)}
                                     className="h-6 text-sm w-24 bg-amber-50"
-                                    readOnly
                                   />
                                 ) : (
                                   <Input
@@ -958,7 +980,11 @@ export function BankUpload() {
                                 {item.type === 'suppressed' ? (
                                   <span className="text-sm text-red-500">{item.transaction.suppressed_reason}</span>
                                 ) : item.type === 'needsReview' ? (
-                                  <span className="text-sm text-amber-600">{item.transaction.description || item.transaction.detail || '-'}</span>
+                                  <Input
+                                    value={item.record?.description || item.transaction.description || ''}
+                                    onChange={(e) => handleUnifiedExpenseChange(index, 'description', e.target.value)}
+                                    className="h-6 text-sm w-28 bg-amber-50"
+                                  />
                                 ) : (
                                   <Input
                                     value={item.record?.description || ''}
@@ -971,13 +997,18 @@ export function BankUpload() {
                                 {item.type === 'suppressed' ? (
                                   <span className="text-sm text-red-600 font-medium">{item.transaction.withdrawal.toLocaleString()}</span>
                                 ) : item.type === 'needsReview' ? (
-                                  <span className="text-sm text-amber-700 font-medium">{item.transaction.withdrawal.toLocaleString()}</span>
+                                  <Input
+                                    type="number"
+                                    value={item.record?.amount || item.transaction.withdrawal}
+                                    onChange={(e) => handleUnifiedExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
+                                    className="h-6 text-sm text-right w-28 text-amber-700 bg-amber-50"
+                                  />
                                 ) : (
                                   <Input
                                     type="number"
                                     value={item.record?.amount || 0}
                                     onChange={(e) => handleUnifiedExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-sm text-right w-20 text-red-600"
+                                    className="h-6 text-sm text-right w-28 text-red-600"
                                   />
                                 )}
                               </TableCell>
@@ -987,9 +1018,9 @@ export function BankUpload() {
                                 ) : item.type === 'needsReview' ? (
                                   <Input
                                     type="number"
-                                    value={item.suggestions?.[0]?.target_code || 0}
+                                    value={item.record?.account_code || item.suggestions?.[0]?.target_code || 0}
+                                    onChange={(e) => handleUnifiedExpenseChange(index, 'account_code', parseInt(e.target.value) || 0)}
                                     className="h-6 text-sm w-16 text-center bg-amber-50"
-                                    readOnly
                                   />
                                 ) : (
                                   <Input

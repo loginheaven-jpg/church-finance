@@ -51,13 +51,15 @@ export async function POST(request: NextRequest) {
 
     // 컬럼 인덱스 매핑
     const colIndex = {
-      date: findColumnIndex(headers, ['거래일시', '거래일', '일시']),
-      withdrawal: findColumnIndex(headers, ['출금액', '출금', '지급금액']),
-      deposit: findColumnIndex(headers, ['입금액', '입금', '입금금액']),
-      balance: findColumnIndex(headers, ['잔액', '거래후잔액']),
+      date: findColumnIndex(headers, ['거래일시', '거래일자', '거래일', '일시']),
+      withdrawal: findColumnIndex(headers, ['출금액', '출금금액', '출금', '지급금액']),
+      deposit: findColumnIndex(headers, ['입금액', '입금금액', '입금', '입금금액']),
+      balance: findColumnIndex(headers, ['잔액', '거래후잔액', '거래 후 잔액']),
       description: findColumnIndex(headers, ['적요', '거래내용', '내용']),
       detail: findColumnIndex(headers, ['거래기록사항', '비고', '메모', '기록사항']),
       branch: findColumnIndex(headers, ['거래점', '지점']),
+      time: findColumnIndex(headers, ['거래시간', '시간']),
+      memo: findColumnIndex(headers, ['이체메모', '메모', '적요2']),
     };
 
     // 데이터 변환
@@ -80,6 +82,11 @@ export async function POST(request: NextRequest) {
       // 입출금 둘 다 없으면 스킵
       if (withdrawal === 0 && deposit === 0) continue;
 
+      // 시간: 별도 컬럼이 있으면 사용, 없으면 날짜에서 파싱된 시간 사용
+      const timeValue = colIndex.time >= 0 ? String(row[colIndex.time] || '') : time;
+      // 메모: 별도 컬럼이 있으면 사용
+      const memoValue = colIndex.memo >= 0 ? String(row[colIndex.memo] || '') : '';
+
       const transaction: BankTransaction = {
         id: generateId('BANK'),
         transaction_date: date,
@@ -89,8 +96,8 @@ export async function POST(request: NextRequest) {
         description: String(row[colIndex.description] || ''),
         detail: String(row[colIndex.detail] || ''),
         branch: String(row[colIndex.branch] || ''),
-        time,
-        memo: '',
+        time: timeValue,
+        memo: memoValue,
         matched_status: 'pending',
         matched_type: '',
         matched_ids: '',

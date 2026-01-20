@@ -1269,7 +1269,8 @@ export function generateId(prefix: string): string {
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   const dateStr = kst.toISOString().slice(0, 10).replace(/-/g, '');
   const timeStr = kst.getTime().toString().slice(-6);
-  return `${prefix}${dateStr}${timeStr}`;
+  const random = Math.random().toString(36).substring(2, 6);  // 4자리 랜덤 문자열
+  return `${prefix}${dateStr}${timeStr}${random}`;
 }
 
 export function getKSTDate(): string {

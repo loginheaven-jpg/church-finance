@@ -55,6 +55,7 @@ export default function CardExpenseIntegrationPage() {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   // 지출부코드 로드 및 임시저장 데이터 확인
   useEffect(() => {
@@ -83,18 +84,33 @@ export default function CardExpenseIntegrationPage() {
     if (transactions.length === 0) return;
 
     const timeoutId = setTimeout(() => {
+      const now = new Date();
       const draft = {
         transactions,
         matchingRecord,
         totalAmount,
         warning,
-        savedAt: new Date().toISOString(),
+        savedAt: now.toISOString(),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+      setLastSavedAt(now);
     }, 1000); // 1초 후 자동저장
 
     return () => clearTimeout(timeoutId);
   }, [transactions, matchingRecord, totalAmount, warning]);
+
+  // 페이지 이탈 경고 (브라우저 닫기/새로고침)
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (transactions.length > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [transactions.length]);
 
   // 임시저장 불러오기
   const loadDraft = () => {
@@ -462,6 +478,12 @@ export default function CardExpenseIntegrationPage() {
               {!isSuperAdmin && session?.name && (
                 <span className="text-slate-500">
                   ({session.name}님의 카드)
+                </span>
+              )}
+              {/* 자동저장 상태 */}
+              {lastSavedAt && (
+                <span className="text-green-600 text-xs ml-auto">
+                  ✓ 자동저장됨 ({lastSavedAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })})
                 </span>
               )}
             </CardDescription>

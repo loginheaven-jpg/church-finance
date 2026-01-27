@@ -30,9 +30,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, Upload, CreditCard, AlertTriangle, Check, FileSpreadsheet } from 'lucide-react';
+import { Loader2, Upload, CreditCard, AlertTriangle, Check, FileSpreadsheet, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CardExpenseItem, CardExpenseParseResponse, ExpenseCode } from '@/types';
+
+// localStorage 키
+const STORAGE_KEY = 'card-expense-draft';
 
 export default function CardExpenseIntegrationPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -43,9 +46,11 @@ export default function CardExpenseIntegrationPage() {
   const [warning, setWarning] = useState<string | null>(null);
   const [expenseCodes, setExpenseCodes] = useState<ExpenseCode[]>([]);
   const [applying, setApplying] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
 
-  // 지출부코드 로드
+  // 지출부코드 로드 및 임시저장 데이터 확인
   useEffect(() => {
     const fetchCodes = async () => {
       try {
@@ -59,7 +64,64 @@ export default function CardExpenseIntegrationPage() {
       }
     };
     fetchCodes();
+
+    // 임시저장 데이터 확인
+    const draft = localStorage.getItem(STORAGE_KEY);
+    if (draft) {
+      setHasDraft(true);
+    }
   }, []);
+
+  // 임시저장 불러오기
+  const loadDraft = () => {
+    try {
+      const draft = localStorage.getItem(STORAGE_KEY);
+      if (draft) {
+        const data = JSON.parse(draft);
+        setTransactions(data.transactions || []);
+        setMatchingRecord(data.matchingRecord || null);
+        setTotalAmount(data.totalAmount || 0);
+        setWarning(data.warning || null);
+        toast.success('임시저장된 데이터를 불러왔습니다');
+        setHasDraft(false);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('임시저장 데이터 불러오기 실패');
+    }
+  };
+
+  // 임시저장
+  const handleSaveDraft = () => {
+    if (transactions.length === 0) {
+      toast.error('저장할 데이터가 없습니다');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const draft = {
+        transactions,
+        matchingRecord,
+        totalAmount,
+        warning,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+      toast.success('임시저장되었습니다');
+    } catch (error) {
+      console.error(error);
+      toast.error('임시저장 실패');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 임시저장 삭제
+  const clearDraft = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setHasDraft(false);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -163,6 +225,8 @@ export default function CardExpenseIntegrationPage() {
         setMatchingRecord(null);
         setWarning(null);
         setConfirmDialogOpen(false);
+        // 임시저장 데이터 삭제
+        clearDraft();
       } else {
         toast.error(data.error || '반영 실패');
       }
@@ -191,8 +255,25 @@ export default function CardExpenseIntegrationPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-900">카드대금 세부반영</h1>
+        <h1 className="text-3xl font-bold text-slate-900">카드내역 입력</h1>
       </div>
+
+      {/* 임시저장 데이터 알림 */}
+      {hasDraft && transactions.length === 0 && (
+        <Alert>
+          <Save className="h-4 w-4" />
+          <AlertTitle>임시저장된 데이터가 있습니다</AlertTitle>
+          <AlertDescription className="flex items-center gap-2">
+            <span>이전에 작업하던 카드내역이 있습니다.</span>
+            <Button size="sm" variant="outline" onClick={loadDraft}>
+              불러오기
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clearDraft}>
+              삭제
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* 파일 업로드 */}
       <Card>
@@ -302,7 +383,7 @@ export default function CardExpenseIntegrationPage() {
                         key={tx.tempId}
                         className={isIncomplete ? 'bg-amber-50' : ''}
                       >
-                        <TableCell className="text-sm">{tx.transaction_date}</TableCell>
+                        <TableCell className="text-sm">{tx.transaction_date || '-'}</TableCell>
                         <TableCell className="text-sm">{tx.vendor}</TableCell>
                         <TableCell className="text-sm">{tx.note}</TableCell>
                         <TableCell className="text-right font-medium">
@@ -354,6 +435,23 @@ export default function CardExpenseIntegrationPage() {
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={handleSaveDraft}
+                disabled={saving || transactions.length === 0}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    저장 중...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    임시저장
+                  </>
+                )}
+              </Button>
               <Button
                 onClick={() => setConfirmDialogOpen(true)}
                 disabled={incompleteCount > 0 || !matchingRecord || applying}

@@ -119,3 +119,12 @@ export const SESSION_COOKIE_NAME = 'finance-session';
 
 // 세션 만료 시간 (7일)
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
+
+/**
+ * 카드소유자 이름 매칭 (완전 일치)
+ * 세션의 사용자 이름과 카드소유자 이름이 일치하는지 확인
+ */
+export function isCardOwnerMatch(sessionName: string, cardOwner: string | undefined): boolean {
+  if (!cardOwner || !sessionName) return false;
+  return sessionName.trim() === cardOwner.trim();
+}

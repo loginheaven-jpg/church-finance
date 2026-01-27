@@ -30,14 +30,19 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, Upload, CreditCard, AlertTriangle, Check, FileSpreadsheet, Save } from 'lucide-react';
+import { Loader2, Upload, CreditCard, AlertTriangle, Check, FileSpreadsheet, Save, Filter } from 'lucide-react';
 import { toast } from 'sonner';
+import { useFinanceSession } from '@/lib/auth/use-finance-session';
+import { isCardOwnerMatch } from '@/lib/auth/finance-permissions';
 import type { CardExpenseItem, CardExpenseParseResponse, ExpenseCode } from '@/types';
 
 // localStorage 키
 const STORAGE_KEY = 'card-expense-draft';
 
 export default function CardExpenseIntegrationPage() {
+  const session = useFinanceSession();
+  const isSuperAdmin = session?.finance_role === 'super_admin';
+
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [transactions, setTransactions] = useState<CardExpenseItem[]>([]);
@@ -49,6 +54,7 @@ export default function CardExpenseIntegrationPage() {
   const [saving, setSaving] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
+  const [selectedOwner, setSelectedOwner] = useState<string>('all');
 
   // 지출부코드 로드 및 임시저장 데이터 확인
   useEffect(() => {
@@ -210,7 +216,7 @@ export default function CardExpenseIntegrationPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transactions,
+          transactions: filteredTransactions,
           nhCardRecordId: matchingRecord.id,
         }),
       });
@@ -238,8 +244,27 @@ export default function CardExpenseIntegrationPage() {
     }
   };
 
-  // 미완료 항목 수
-  const incompleteCount = transactions.filter(
+  // 고유 보유자 목록 (super_admin 필터용)
+  const uniqueOwners = [...new Set(transactions.map(tx => tx.vendor).filter(Boolean))].sort();
+
+  // 보유자별 필터링
+  const filteredTransactions = (() => {
+    if (isSuperAdmin) {
+      // super_admin: 전체 또는 선택된 보유자
+      if (selectedOwner === 'all') return transactions;
+      return transactions.filter(tx => tx.vendor === selectedOwner);
+    } else {
+      // 그 외: 본인 카드만
+      if (!session?.name) return [];
+      return transactions.filter(tx => isCardOwnerMatch(session.name, tx.vendor));
+    }
+  })();
+
+  // 필터된 거래의 합계
+  const filteredTotalAmount = filteredTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+
+  // 미완료 항목 수 (필터된 데이터 기준)
+  const incompleteCount = filteredTransactions.filter(
     (tx) => !tx.description || tx.account_code === null
   ).length;
 
@@ -349,15 +374,41 @@ export default function CardExpenseIntegrationPage() {
       {transactions.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              카드 거래 내역
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                카드 거래 내역
+              </CardTitle>
+              {/* super_admin만 보유자 필터 표시 */}
+              {isSuperAdmin && uniqueOwners.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-slate-500" />
+                  <Select value={selectedOwner} onValueChange={setSelectedOwner}>
+                    <SelectTrigger className="w-[140px] h-8">
+                      <SelectValue placeholder="보유자 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">전체 ({transactions.length}건)</SelectItem>
+                      {uniqueOwners.map(owner => (
+                        <SelectItem key={owner} value={owner}>
+                          {owner} ({transactions.filter(tx => tx.vendor === owner).length}건)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
             <CardDescription>
-              {transactions.length}건 | 합계: {totalAmount.toLocaleString()}원
+              {filteredTransactions.length}건 | 합계: {filteredTotalAmount.toLocaleString()}원
               {incompleteCount > 0 && (
                 <span className="text-amber-600 ml-2">
                   ({incompleteCount}건 입력 필요)
+                </span>
+              )}
+              {!isSuperAdmin && session?.name && (
+                <span className="text-slate-500 ml-2">
+                  ({session.name}님의 카드)
                 </span>
               )}
             </CardDescription>
@@ -376,7 +427,7 @@ export default function CardExpenseIntegrationPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((tx) => {
+                  {filteredTransactions.map((tx) => {
                     const isIncomplete = !tx.description || tx.account_code === null;
                     return (
                       <TableRow
@@ -454,7 +505,7 @@ export default function CardExpenseIntegrationPage() {
               </Button>
               <Button
                 onClick={() => setConfirmDialogOpen(true)}
-                disabled={incompleteCount > 0 || !matchingRecord || applying}
+                disabled={incompleteCount > 0 || !matchingRecord || applying || filteredTransactions.length === 0}
               >
                 {applying ? (
                   <>
@@ -479,8 +530,10 @@ export default function CardExpenseIntegrationPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>지출부에 반영하시겠습니까?</AlertDialogTitle>
             <AlertDialogDescription>
-              {transactions.length}건의 카드 거래가 지출부에 추가되고,
-              기존 NH카드대금 항목({matchingRecord?.amount.toLocaleString()}원)은 삭제됩니다.
+              {filteredTransactions.length}건의 카드 거래({filteredTotalAmount.toLocaleString()}원)가 지출부에 추가됩니다.
+              {isSuperAdmin && selectedOwner === 'all' && matchingRecord && (
+                <><br />기존 NH카드대금 항목({matchingRecord.amount.toLocaleString()}원)은 삭제됩니다.</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

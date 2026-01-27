@@ -24,6 +24,41 @@ import { Loader2, CreditCard, Check, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CardTransaction, ExpenseCode } from '@/types';
 
+// 날짜 포맷 함수 (숫자 시리얼 번호 또는 문자열 처리)
+function formatDate(value: string | number | undefined | null): string {
+  if (!value && value !== 0) return '-';
+
+  // 숫자인 경우 (Google Sheets 시리얼 번호)
+  if (typeof value === 'number') {
+    // Excel/Google Sheets 날짜 시리얼 번호 변환 (1899-12-30 기준)
+    const date = new Date((value - 25569) * 86400 * 1000);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+    return '-';
+  }
+
+  // 문자열인 경우
+  const str = String(value).trim();
+  if (!str) return '-';
+
+  // 이미 날짜 형식이면 그대로 반환
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.split('T')[0];
+  }
+
+  // 숫자 문자열인 경우 (시리얼 번호가 문자열로 전달된 경우)
+  const num = Number(str);
+  if (!isNaN(num) && num > 40000 && num < 60000) {
+    const date = new Date((num - 25569) * 86400 * 1000);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  }
+
+  return str || '-';
+}
+
 export default function CardDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<CardTransaction[]>([]);
@@ -166,7 +201,7 @@ export default function CardDetailsPage() {
               <TableBody>
                 {transactions.map((tx) => (
                   <TableRow key={tx.id}>
-                    <TableCell>{tx.sale_date || tx.billing_date}</TableCell>
+                    <TableCell>{formatDate(tx.sale_date) !== '-' ? formatDate(tx.sale_date) : formatDate(tx.billing_date)}</TableCell>
                     <TableCell>{tx.card_owner || '미지정'}</TableCell>
                     <TableCell>{tx.merchant}</TableCell>
                     <TableCell className="text-right font-medium">

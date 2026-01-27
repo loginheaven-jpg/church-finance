@@ -60,10 +60,11 @@ export async function POST(request: NextRequest) {
     const dataRows = rawData.slice(headerRowIndex + 1);
 
     // 컬럼 인덱스 매핑 (사용자 지정: C/D=카드번호, G=가맹점, H=매출일, K=거래금액)
+    // NH카드 엑셀 기준: H컬럼(인덱스 7)이 매출일
     const colIndex = {
       cardNumber: findColumnIndex(headers, ['카드번호']),
       merchant: findColumnIndex(headers, ['가맹점명', '가맹점', '상호', '이용가맹점']),
-      saleDate: findColumnIndex(headers, ['매출일', '이용일', '거래일']),
+      saleDate: findColumnIndexWithFallback(headers, ['매출일', '이용일', '거래일', '매출일자', '이용일자', '거래일자'], 7),
       transactionAmount: findColumnIndex(headers, ['거래금액', '청구금액', '이용금액']),
     };
 
@@ -131,7 +132,8 @@ export async function POST(request: NextRequest) {
 
       // 디버그: 첫 5개 행의 데이터 로깅
       if (transactions.length <= 5) {
-        console.log(`Row ${i}: amount=${amount}, merchant="${merchant}", saleDate=${parseDate(row[colIndex.saleDate])}`);
+        const rawSaleDate = row[colIndex.saleDate];
+        console.log(`Row ${i}: amount=${amount}, merchant="${merchant}", rawSaleDate=[${rawSaleDate}] type=${typeof rawSaleDate}, parsed=${parseDate(rawSaleDate)}, colIndex.saleDate=${colIndex.saleDate}`);
       }
     }
 
@@ -200,6 +202,18 @@ function findColumnIndex(headers: string[], candidates: string[]): number {
         return i;
       }
     }
+  }
+  return -1;
+}
+
+// 헤더 매칭 실패 시 fallback 인덱스 사용
+function findColumnIndexWithFallback(headers: string[], candidates: string[], fallbackIndex: number): number {
+  const found = findColumnIndex(headers, candidates);
+  if (found >= 0) return found;
+  // 헤더 매칭 실패 시 fallback 인덱스 반환 (단, 헤더 범위 내일 때만)
+  if (fallbackIndex >= 0 && fallbackIndex < headers.length) {
+    console.log(`Column not found by header, using fallback index ${fallbackIndex} for: ${candidates.join(', ')}`);
+    return fallbackIndex;
   }
   return -1;
 }

@@ -130,10 +130,11 @@ export async function POST(request: NextRequest) {
       transactions.push(item);
       totalAmount += amount;
 
-      // 디버그: 첫 5개 행의 데이터 로깅
-      if (transactions.length <= 5) {
+      // 디버그: 첫 3개 행의 전체 데이터 로깅
+      if (transactions.length <= 3) {
         const rawSaleDate = row[colIndex.saleDate];
-        console.log(`Row ${i}: amount=${amount}, merchant="${merchant}", rawSaleDate=[${rawSaleDate}] type=${typeof rawSaleDate}, parsed=${parseDate(rawSaleDate)}, colIndex.saleDate=${colIndex.saleDate}`);
+        console.log(`Row ${i} full data:`, JSON.stringify(row.slice(0, 12)));
+        console.log(`Row ${i}: saleDate col[${colIndex.saleDate}]=[${rawSaleDate}] type=${typeof rawSaleDate}, parsed="${parseDate(rawSaleDate)}"`);
       }
     }
 
@@ -238,8 +239,8 @@ function parseDate(value: unknown): string {
     }
   }
 
-  // String 형식
-  const str = String(value).split(' ')[0].replace(/\//g, '-');
+  // String 형식 (슬래시와 점 모두 하이픈으로 변환: 2025.11.18 → 2025-11-18)
+  const str = String(value).split(' ')[0].replace(/[.\/]/g, '-');
   const dateMatch = str.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (dateMatch) {
     const [, year, month, day] = dateMatch;

@@ -507,17 +507,32 @@ export async function findNhCardExpenseRecord(
   // NH카드 관련 키워드
   const nhCardKeywords = ['nh카드대금', 'nh기업카드', 'nh카드', '농협카드'];
 
+  // 금액 파싱 함수 (쉼표 제거)
+  const parseAmount = (val: unknown): number => {
+    if (typeof val === 'number') return val;
+    const str = String(val || '').replace(/[,원\s]/g, '');
+    return Number(str) || 0;
+  };
+
+  // 디버그: 찾고자 하는 금액 로깅
+  console.log(`Finding NH카드대금 with amount: ${totalAmount}`);
+
   // 헤더 제외한 데이터 검색
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const description = String(row[4] || '').trim().toLowerCase();
     const vendor = String(row[3] || '').trim().toLowerCase();
-    const amount = Number(row[5]) || 0;
+    const amount = parseAmount(row[5]);
 
-    // description 또는 vendor가 NH카드 관련 키워드를 포함하고 금액이 일치하는 행
+    // description 또는 vendor가 NH카드 관련 키워드를 포함하는지 확인
     const isNhCard = nhCardKeywords.some(
       (keyword) => description.includes(keyword) || vendor.includes(keyword)
     );
+
+    // 디버그: NH카드 관련 행 발견 시 로깅
+    if (isNhCard) {
+      console.log(`Found NH카드 row: vendor="${vendor}", desc="${description}", amount=${amount} (raw: ${row[5]})`);
+    }
 
     if (isNhCard && amount === totalAmount) {
       return {
@@ -538,6 +553,7 @@ export async function findNhCardExpenseRecord(
     }
   }
 
+  console.log('No matching NH카드대금 record found');
   return null;
 }
 

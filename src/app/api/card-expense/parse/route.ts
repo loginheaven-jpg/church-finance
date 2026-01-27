@@ -268,24 +268,28 @@ function applyAutoClassification(
   vendor: string,
   note: string
 ): { description: string; accountCode: number | null } {
-  // 정옥숙 → 차량유지 (65)
+  const noteLower = note.toLowerCase();
+
+  // 1. 정옥숙 → 모두 차량유지 (65)
   if (vendor === '정옥숙') {
     return { description: '차량유지', accountCode: 65 };
   }
 
-  // 최병희 + 주유소/하이패스 → 차량유지 (65)
-  if (vendor === '최병희') {
-    const noteLower = note.toLowerCase();
-    // 주유소 패턴: 주유소, 주유, GS칼텍스, SK에너지, 현대오일뱅크, S-OIL 등
-    const isGasStation = noteLower.includes('주유소') || noteLower.includes('주유');
-    // 하이패스 패턴: 하이패스, hipass, hi-pass, 도로공사, 고속도로 등
-    const isHighpass = noteLower.includes('하이패스') ||
-                       noteLower.includes('hipass') ||
-                       noteLower.includes('hi-pass') ||
-                       noteLower.includes('도로공사') ||
-                       noteLower.includes('고속도로');
+  // 2. 후불하이패스 → 보유자 무관하게 차량유지 (65)
+  const isHighpass = noteLower.includes('하이패스') ||
+                     noteLower.includes('후불하이패스') ||
+                     noteLower.includes('hipass') ||
+                     noteLower.includes('hi-pass') ||
+                     noteLower.includes('도로공사') ||
+                     noteLower.includes('고속도로');
+  if (isHighpass) {
+    return { description: '차량유지', accountCode: 65 };
+  }
 
-    if (isGasStation || isHighpass) {
+  // 3. 최병희 + 주유소 → 차량유지 (65)
+  if (vendor === '최병희') {
+    const isGasStation = noteLower.includes('주유소') || noteLower.includes('주유');
+    if (isGasStation) {
       return { description: '차량유지', accountCode: 65 };
     }
   }

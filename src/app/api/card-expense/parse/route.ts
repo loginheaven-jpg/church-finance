@@ -301,9 +301,12 @@ function applyAutoClassification(
     return { description: '차량유지', accountCode: 65 };
   }
 
-  // 3. 최병희 + 주유소 → 차량유지 (65)
+  // 3. 최병희 + 주유소/석유/오일 → 차량유지 (65)
   if (vendor === '최병희') {
-    const isGasStation = noteLower.includes('주유소') || noteLower.includes('주유');
+    const isGasStation = noteLower.includes('주유소') ||
+                         noteLower.includes('주유') ||
+                         noteLower.includes('석유') ||
+                         noteLower.includes('오일');
     if (isGasStation) {
       return { description: '차량유지', accountCode: 65 };
     }

@@ -497,6 +497,92 @@ export async function getExpenseRecords(
   return data;
 }
 
+// NH카드대금 행 검색 (총액으로 매칭)
+export async function findNhCardExpenseRecord(
+  totalAmount: number
+): Promise<(ExpenseRecord & { rowIndex: number }) | null> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.expense);
+  if (rows.length <= 1) return null;
+
+  // 헤더 제외한 데이터 검색
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const description = String(row[4] || '').trim();
+    const vendor = String(row[3] || '').trim();
+    const amount = Number(row[5]) || 0;
+
+    // description 또는 vendor가 'NH카드대금'이고 금액이 일치하는 행
+    if (
+      (description === 'NH카드대금' || vendor === 'NH카드대금') &&
+      amount === totalAmount
+    ) {
+      return {
+        id: String(row[0] || ''),
+        date: String(row[1] || ''),
+        payment_method: String(row[2] || ''),
+        vendor: vendor,
+        description: description,
+        amount: amount,
+        account_code: Number(row[6]) || 0,
+        category_code: Number(row[7]) || 0,
+        note: String(row[8] || ''),
+        created_at: String(row[9] || ''),
+        created_by: String(row[10] || ''),
+        transaction_date: String(row[11] || ''),
+        rowIndex: i + 1, // 1-based (시트 행 번호)
+      };
+    }
+  }
+
+  return null;
+}
+
+// 지출 레코드 삭제 (ID로)
+export async function deleteExpenseRecord(id: string): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.expense;
+
+  // 시트 ID 가져오기
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+
+  const sheet = spreadsheet.data.sheets?.find(
+    (s) => s.properties?.title === sheetName
+  );
+
+  if (!sheet?.properties?.sheetId) {
+    throw new Error('지출부 시트를 찾을 수 없습니다');
+  }
+
+  // 행 찾기
+  const rows = await readSheet(sheetName);
+  const rowIndex = rows.findIndex((row) => row[0] === id);
+
+  if (rowIndex === -1) {
+    throw new Error(`지출 레코드를 찾을 수 없습니다: ${id}`);
+  }
+
+  // 행 삭제
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId: sheet.properties.sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1,
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
 // ============================================
 // 은행원장 관련
 // ============================================

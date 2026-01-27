@@ -84,6 +84,34 @@ export interface CardOwner {
   created_at: string;
 }
 
+// 카드대금 세부내역 (임시 데이터)
+export interface CardExpenseItem {
+  tempId: string;
+  date: string;           // NH카드대금 행의 기준일
+  payment_method: string; // "법인카드"
+  vendor: string;         // 카드소유자명
+  amount: number;         // 거래금액
+  note: string;           // 이용가맹점
+  transaction_date: string; // 매출일
+  description: string;    // 내역 (자동/수동)
+  account_code: number | null; // 계정코드 (자동/수동)
+  card_number: string;    // 원본 카드번호
+}
+
+// 카드대금 파싱 응답
+export interface CardExpenseParseResponse {
+  success: boolean;
+  transactions: CardExpenseItem[];
+  matchingRecord: {
+    id: string;
+    date: string;
+    amount: number;
+  } | null;
+  totalAmount: number;
+  warning?: string;
+  error?: string;
+}
+
 // 매칭 규칙
 export interface MatchingRule {
   id: string;

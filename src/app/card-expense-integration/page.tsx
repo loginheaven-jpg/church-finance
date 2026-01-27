@@ -78,6 +78,24 @@ export default function CardExpenseIntegrationPage() {
     }
   }, []);
 
+  // 자동저장 (transactions 변경 시)
+  useEffect(() => {
+    if (transactions.length === 0) return;
+
+    const timeoutId = setTimeout(() => {
+      const draft = {
+        transactions,
+        matchingRecord,
+        totalAmount,
+        warning,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+    }, 1000); // 1초 후 자동저장
+
+    return () => clearTimeout(timeoutId);
+  }, [transactions, matchingRecord, totalAmount, warning]);
+
   // 임시저장 불러오기
   const loadDraft = () => {
     try {
@@ -114,7 +132,7 @@ export default function CardExpenseIntegrationPage() {
         savedAt: new Date().toISOString(),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-      toast.success('임시저장되었습니다');
+      toast.success('저장되었습니다');
     } catch (error) {
       console.error(error);
       toast.error('임시저장 실패');
@@ -248,7 +266,7 @@ export default function CardExpenseIntegrationPage() {
   const uniqueOwners = [...new Set(transactions.map(tx => tx.vendor).filter(Boolean))].sort();
 
   // 보유자별 필터링
-  const filteredTransactions = (() => {
+  const baseFilteredTransactions = (() => {
     if (isSuperAdmin) {
       // super_admin: 전체 또는 선택된 보유자
       if (selectedOwner === 'all') return transactions;
@@ -260,6 +278,21 @@ export default function CardExpenseIntegrationPage() {
     }
   })();
 
+  // 정렬: 내역 빈값 먼저 → 보유자 → 거래일
+  const filteredTransactions = [...baseFilteredTransactions].sort((a, b) => {
+    // 1. 내역이 비어있는 것 먼저
+    const aIncomplete = !a.description || a.account_code === null;
+    const bIncomplete = !b.description || b.account_code === null;
+    if (aIncomplete !== bIncomplete) return aIncomplete ? -1 : 1;
+
+    // 2. 보유자 정렬
+    const vendorCompare = (a.vendor || '').localeCompare(b.vendor || '', 'ko');
+    if (vendorCompare !== 0) return vendorCompare;
+
+    // 3. 거래일 정렬
+    return (a.transaction_date || '').localeCompare(b.transaction_date || '');
+  });
+
   // 필터된 거래의 합계
   const filteredTotalAmount = filteredTransactions.reduce((sum, tx) => sum + tx.amount, 0);
 
@@ -267,6 +300,13 @@ export default function CardExpenseIntegrationPage() {
   const incompleteCount = filteredTransactions.filter(
     (tx) => !tx.description || tx.account_code === null
   ).length;
+
+  // 보유자별 입력현황 (완료/전체)
+  const ownerStats = uniqueOwners.map(owner => {
+    const ownerTxs = transactions.filter(tx => tx.vendor === owner);
+    const completedCount = ownerTxs.filter(tx => tx.description && tx.account_code !== null).length;
+    return { owner, completed: completedCount, total: ownerTxs.length };
+  });
 
   // 코드 그룹화
   const groupedCodes = expenseCodes.reduce((acc, code) => {
@@ -399,15 +439,28 @@ export default function CardExpenseIntegrationPage() {
                 </div>
               )}
             </div>
-            <CardDescription>
-              {filteredTransactions.length}건 | 합계: {filteredTotalAmount.toLocaleString()}원
+            <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                {filteredTransactions.length}건 | 합계: {filteredTotalAmount.toLocaleString()}원
+              </span>
+              {/* 보유자별 입력현황 */}
+              {ownerStats.length > 0 && (
+                <span className="text-slate-600">
+                  {ownerStats.map((stat, idx) => (
+                    <span key={stat.owner} className={stat.completed === stat.total ? 'text-green-600' : ''}>
+                      {idx > 0 && ' '}
+                      {stat.owner} {stat.completed}/{stat.total}
+                    </span>
+                  ))}
+                </span>
+              )}
               {incompleteCount > 0 && (
-                <span className="text-amber-600 ml-2">
+                <span className="text-amber-600">
                   ({incompleteCount}건 입력 필요)
                 </span>
               )}
               {!isSuperAdmin && session?.name && (
-                <span className="text-slate-500 ml-2">
+                <span className="text-slate-500">
                   ({session.name}님의 카드)
                 </span>
               )}
@@ -499,7 +552,7 @@ export default function CardExpenseIntegrationPage() {
                 ) : (
                   <>
                     <Save className="mr-2 h-4 w-4" />
-                    임시저장
+                    저장
                   </>
                 )}
               </Button>

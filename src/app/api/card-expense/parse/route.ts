@@ -77,8 +77,13 @@ export async function POST(request: NextRequest) {
     let cardOwners: CardOwner[] = [];
     try {
       cardOwners = await getCardOwners();
-    } catch {
-      // 카드 소유자 테이블이 없을 수 있음
+      // 디버그: 카드소유자 목록 로깅
+      console.log('Card owners:', cardOwners.map(o => ({
+        card_number: o.card_number,
+        owner_name: o.owner_name
+      })));
+    } catch (err) {
+      console.log('Failed to get card owners:', err);
     }
 
     // 데이터 변환
@@ -232,8 +237,30 @@ function parseDate(value: unknown): string {
 
 function findCardOwner(cardNumber: string, owners: CardOwner[]): string {
   if (!cardNumber) return '';
-  const owner = owners.find((o) => o.card_number === cardNumber);
-  return owner?.owner_name || '';
+
+  // 카드번호 정규화 (하이픈, 공백, 마스킹 문자 제거)
+  const normalizeCardNumber = (num: string): string => {
+    return num.replace(/[-\s*]/g, '');
+  };
+
+  const normalizedInput = normalizeCardNumber(cardNumber);
+
+  // 1차: 정확히 일치
+  let owner = owners.find((o) => o.card_number === cardNumber);
+  if (owner) return owner.owner_name;
+
+  // 2차: 정규화 후 일치
+  owner = owners.find((o) => normalizeCardNumber(o.card_number) === normalizedInput);
+  if (owner) return owner.owner_name;
+
+  // 3차: 뒤 4자리로 매칭 (카드 식별에 주로 사용)
+  const last4Digits = cardNumber.replace(/\D/g, '').slice(-4);
+  if (last4Digits.length === 4) {
+    owner = owners.find((o) => o.card_number.replace(/\D/g, '').slice(-4) === last4Digits);
+    if (owner) return owner.owner_name;
+  }
+
+  return '';
 }
 
 // 자동 분류 규칙 적용

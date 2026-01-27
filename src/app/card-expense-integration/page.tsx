@@ -108,7 +108,11 @@ export default function CardExpenseIntegrationPage() {
       const data: CardExpenseParseResponse = await res.json();
 
       if (data.success) {
-        setTransactions(data.transactions);
+        // 보유자별 정렬
+        const sortedTransactions = [...data.transactions].sort((a, b) =>
+          a.vendor.localeCompare(b.vendor, 'ko')
+        );
+        setTransactions(sortedTransactions);
         setMatchingRecord(data.matchingRecord);
         setTotalAmount(data.totalAmount);
         setWarning(data.warning || null);
@@ -283,7 +287,7 @@ export default function CardExpenseIntegrationPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[100px]">거래일</TableHead>
-                    <TableHead className="w-[80px]">소유자</TableHead>
+                    <TableHead className="w-[80px]">보유자</TableHead>
                     <TableHead>가맹점</TableHead>
                     <TableHead className="text-right w-[100px]">금액</TableHead>
                     <TableHead className="w-[150px]">내역</TableHead>

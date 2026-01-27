@@ -504,24 +504,28 @@ export async function findNhCardExpenseRecord(
   const rows = await readSheet(FINANCE_CONFIG.sheets.expense);
   if (rows.length <= 1) return null;
 
+  // NH카드 관련 키워드
+  const nhCardKeywords = ['nh카드대금', 'nh기업카드', 'nh카드', '농협카드'];
+
   // 헤더 제외한 데이터 검색
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    const description = String(row[4] || '').trim();
-    const vendor = String(row[3] || '').trim();
+    const description = String(row[4] || '').trim().toLowerCase();
+    const vendor = String(row[3] || '').trim().toLowerCase();
     const amount = Number(row[5]) || 0;
 
-    // description 또는 vendor가 'NH카드대금'이고 금액이 일치하는 행
-    if (
-      (description === 'NH카드대금' || vendor === 'NH카드대금') &&
-      amount === totalAmount
-    ) {
+    // description 또는 vendor가 NH카드 관련 키워드를 포함하고 금액이 일치하는 행
+    const isNhCard = nhCardKeywords.some(
+      (keyword) => description.includes(keyword) || vendor.includes(keyword)
+    );
+
+    if (isNhCard && amount === totalAmount) {
       return {
         id: String(row[0] || ''),
         date: String(row[1] || ''),
         payment_method: String(row[2] || ''),
-        vendor: vendor,
-        description: description,
+        vendor: String(row[3] || '').trim(),
+        description: String(row[4] || '').trim(),
         amount: amount,
         account_code: Number(row[6]) || 0,
         category_code: Number(row[7]) || 0,

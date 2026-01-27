@@ -67,6 +67,12 @@ export async function POST(request: NextRequest) {
       transactionAmount: findColumnIndex(headers, ['거래금액', '청구금액', '이용금액']),
     };
 
+    // 디버그: 컬럼 매핑 정보 로깅
+    console.log('Column mapping:', {
+      headers: headers.slice(0, 15),
+      colIndex,
+    });
+
     // 카드 소유자 목록 조회
     let cardOwners: CardOwner[] = [];
     try {
@@ -78,6 +84,7 @@ export async function POST(request: NextRequest) {
     // 데이터 변환
     const transactions: CardExpenseItem[] = [];
     let totalAmount = 0;
+    let skippedRows: { reason: string; row: unknown[] }[] = [];
 
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i] as unknown[];
@@ -85,14 +92,15 @@ export async function POST(request: NextRequest) {
 
       const cardNumber = String(row[colIndex.cardNumber] || '').trim();
       const merchant = String(row[colIndex.merchant] || '').trim();
-
-      // 가맹점 필수
-      if (!merchant) continue;
-
       const amount = parseAmount(row[colIndex.transactionAmount]);
 
-      // 금액이 없으면 스킵
-      if (amount === 0) continue;
+      // 금액이 없으면 스킵 (가맹점 조건 제거 - 금액이 있으면 처리)
+      if (amount === 0) {
+        if (merchant) {
+          skippedRows.push({ reason: '금액 0', row });
+        }
+        continue;
+      }
 
       // 카드소유자 매핑
       const vendor = findCardOwner(cardNumber, cardOwners);
@@ -106,7 +114,7 @@ export async function POST(request: NextRequest) {
         payment_method: '법인카드',
         vendor: vendor || `미등록(${cardNumber})`,
         amount,
-        note: merchant,
+        note: merchant || '(가맹점 정보 없음)',
         transaction_date: parseDate(row[colIndex.saleDate]),
         description,
         account_code: accountCode,
@@ -115,7 +123,15 @@ export async function POST(request: NextRequest) {
 
       transactions.push(item);
       totalAmount += amount;
+
+      // 디버그: 첫 5개 행의 데이터 로깅
+      if (transactions.length <= 5) {
+        console.log(`Row ${i}: amount=${amount}, merchant="${merchant}", saleDate=${parseDate(row[colIndex.saleDate])}`);
+      }
     }
+
+    // 디버그: 총 금액 로깅
+    console.log(`Total parsed: ${transactions.length} transactions, amount=${totalAmount}`);
 
     if (transactions.length === 0) {
       return NextResponse.json<CardExpenseParseResponse>(
@@ -233,7 +249,16 @@ function applyAutoClassification(
   // 최병희 + 주유소/하이패스 → 차량유지 (65)
   if (vendor === '최병희') {
     const noteLower = note.toLowerCase();
-    if (noteLower.includes('주유소') || noteLower.includes('하이패스')) {
+    // 주유소 패턴: 주유소, 주유, GS칼텍스, SK에너지, 현대오일뱅크, S-OIL 등
+    const isGasStation = noteLower.includes('주유소') || noteLower.includes('주유');
+    // 하이패스 패턴: 하이패스, hipass, hi-pass, 도로공사, 고속도로 등
+    const isHighpass = noteLower.includes('하이패스') ||
+                       noteLower.includes('hipass') ||
+                       noteLower.includes('hi-pass') ||
+                       noteLower.includes('도로공사') ||
+                       noteLower.includes('고속도로');
+
+    if (isGasStation || isHighpass) {
       return { description: '차량유지', accountCode: 65 };
     }
   }

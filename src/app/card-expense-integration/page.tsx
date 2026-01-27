@@ -210,10 +210,15 @@ export default function CardExpenseIntegrationPage() {
       const data: CardExpenseParseResponse = await res.json();
 
       if (data.success) {
-        // 보유자별 정렬
-        const sortedTransactions = [...data.transactions].sort((a, b) =>
-          a.vendor.localeCompare(b.vendor, 'ko')
-        );
+        // 초기 정렬: 내역 빈값 먼저 → 보유자 → 거래일 (이후 입력 중에는 정렬하지 않음)
+        const sortedTransactions = [...data.transactions].sort((a, b) => {
+          const aIncomplete = !a.description || a.account_code === null;
+          const bIncomplete = !b.description || b.account_code === null;
+          if (aIncomplete !== bIncomplete) return aIncomplete ? -1 : 1;
+          const vendorCompare = (a.vendor || '').localeCompare(b.vendor || '', 'ko');
+          if (vendorCompare !== 0) return vendorCompare;
+          return (a.transaction_date || '').localeCompare(b.transaction_date || '');
+        });
         setTransactions(sortedTransactions);
         setMatchingRecord(data.matchingRecord);
         setTotalAmount(data.totalAmount);
@@ -294,20 +299,8 @@ export default function CardExpenseIntegrationPage() {
     }
   })();
 
-  // 정렬: 내역 빈값 먼저 → 보유자 → 거래일
-  const filteredTransactions = [...baseFilteredTransactions].sort((a, b) => {
-    // 1. 내역이 비어있는 것 먼저
-    const aIncomplete = !a.description || a.account_code === null;
-    const bIncomplete = !b.description || b.account_code === null;
-    if (aIncomplete !== bIncomplete) return aIncomplete ? -1 : 1;
-
-    // 2. 보유자 정렬
-    const vendorCompare = (a.vendor || '').localeCompare(b.vendor || '', 'ko');
-    if (vendorCompare !== 0) return vendorCompare;
-
-    // 3. 거래일 정렬
-    return (a.transaction_date || '').localeCompare(b.transaction_date || '');
-  });
+  // 필터만 적용 (정렬은 초기 로드 시에만 적용되어 입력 중 행 이동 방지)
+  const filteredTransactions = baseFilteredTransactions;
 
   // 필터된 거래의 합계
   const filteredTotalAmount = filteredTransactions.reduce((sum, tx) => sum + tx.amount, 0);
@@ -465,7 +458,7 @@ export default function CardExpenseIntegrationPage() {
                   {ownerStats.map((stat, idx) => (
                     <span key={stat.owner} className={stat.completed === stat.total ? 'text-green-600' : ''}>
                       {idx > 0 && ' '}
-                      {stat.owner} {stat.completed}/{stat.total}
+                      {stat.owner} {stat.completed === stat.total ? '완료' : `${stat.completed}/${stat.total}`}
                     </span>
                   ))}
                 </span>

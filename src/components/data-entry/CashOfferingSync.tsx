@@ -406,7 +406,7 @@ export function CashOfferingSync() {
                             type="number"
                             value={item.amount}
                             onChange={(e) => handleCellChange(index, 'amount', parseInt(e.target.value) || 0)}
-                            className="h-7 text-base text-right w-24"
+                            className="h-7 text-base text-right w-20"
                             disabled={item.isDuplicate}
                           />
                         </TableCell>
@@ -415,7 +415,7 @@ export function CashOfferingSync() {
                           <Input
                             value={item.note}
                             onChange={(e) => handleCellChange(index, 'note', e.target.value)}
-                            className="h-7 text-base w-36"
+                            className="h-7 text-base w-48"
                             disabled={item.isDuplicate}
                           />
                         </TableCell>

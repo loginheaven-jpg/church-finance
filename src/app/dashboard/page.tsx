@@ -41,6 +41,9 @@ interface DashboardStats {
   // 동기집행률 관련
   yearlyIncome?: number;
   yearlyExpense?: number;
+  // 연간 전체 합계 (필터 없음)
+  yearlyTotalIncome?: number;
+  yearlyTotalExpense?: number;
   carryoverBalance?: number;
   totalBudget?: number;
   syncBudget?: number;
@@ -164,8 +167,8 @@ function DashboardContent() {
       {/* 8-Week Chart */}
       <WeeklyChart
         data={weeklyData}
-        yearlyIncome={stats?.yearlyIncome}
-        yearlyExpense={stats?.yearlyExpense}
+        yearlyIncome={stats?.yearlyTotalIncome}
+        yearlyExpense={stats?.yearlyTotalExpense}
       />
 
       {/* Budget Execution Rate Card */}

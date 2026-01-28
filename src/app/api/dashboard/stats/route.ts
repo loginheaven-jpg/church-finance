@@ -273,12 +273,18 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.amount - a.amount);
 
-    // 연간 수입/지출 합계 (자본수입/건축 제외한 일반회계만)
+    // 연간 수입/지출 합계 (자본수입/건축 제외한 일반회계만 - 예산 집행률용)
     const yearlyIncome = yearlyIncomeRecords
       .filter(r => r.offering_code < 40 || r.offering_code >= 500)
       .reduce((sum, r) => sum + (r.amount || 0), 0);
     const yearlyExpense = yearlyExpenseRecords
       .filter(r => r.category_code < 500) // 건축비 제외
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    // 연간 전체 수입/지출 합계 (필터 없음 - 차트 표시용)
+    const yearlyTotalIncome = yearlyIncomeRecords
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    const yearlyTotalExpense = yearlyExpenseRecords
       .reduce((sum, r) => sum + (r.amount || 0), 0);
 
     // 이월잔액
@@ -371,6 +377,8 @@ export async function GET(request: NextRequest) {
       // 새로운 동기집행률 관련 데이터
       yearlyIncome,
       yearlyExpense,
+      yearlyTotalIncome,
+      yearlyTotalExpense,
       carryoverBalance,
       totalBudget,
       syncBudget,
@@ -410,6 +418,8 @@ export async function GET(request: NextRequest) {
       expenseSummary: [],
       yearlyIncome: 0,
       yearlyExpense: 0,
+      yearlyTotalIncome: 0,
+      yearlyTotalExpense: 0,
       carryoverBalance: 0,
       totalBudget: 0,
       syncBudget: 0,

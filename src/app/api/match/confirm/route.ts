@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   addIncomeRecords,
   addExpenseRecords,
-  updateBankTransaction,
+  updateBankTransactionsBatch,
   getBankTransactions,
 } from '@/lib/google-sheets';
 import { incrementRuleUsage } from '@/lib/matching-engine';
@@ -79,29 +79,21 @@ export async function POST(request: NextRequest) {
         incomeSuccess = true;
         incomeCount = 0;
       } else {
-        // 먼저 은행 거래 상태를 순차적으로 업데이트 (API 속도 제한 방지)
-        let statusUpdateFailCount = 0;
-        const successfulItems: typeof newIncomeItems = [];
+        // 배치 업데이트로 은행거래 상태 일괄 업데이트 (API 호출 1회)
+        const batchUpdates = newIncomeItems.map(item => ({
+          id: item.transaction.id,
+          matched_status: 'matched' as const,
+          matched_type: 'income_detail',
+          matched_ids: item.record.id,
+        }));
 
-        for (const item of newIncomeItems) {
-          try {
-            await updateBankTransaction(item.transaction.id, {
-              matched_status: 'matched',
-              matched_type: 'income_detail',
-              matched_ids: item.record.id,
-            });
-            successfulItems.push(item);
-            // API 속도 제한 방지를 위한 딜레이 (100ms)
-            if (newIncomeItems.indexOf(item) < newIncomeItems.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-          } catch (err) {
-            statusUpdateFailCount++;
-            console.error('[match/confirm] 수입 은행거래 상태 업데이트 실패:', item.transaction.id, err);
-          }
-        }
+        const batchResult = await updateBankTransactionsBatch(batchUpdates);
+        console.log('[match/confirm] 수입 배치 업데이트 결과 - 성공:', batchResult.success.length, '실패:', batchResult.failed.length);
 
-        // 상태 업데이트 성공한 항목만 수입부에 추가
+        // 성공한 항목만 수입부에 추가
+        const successIdSet = new Set(batchResult.success);
+        const successfulItems = newIncomeItems.filter(item => successIdSet.has(item.transaction.id));
+
         if (successfulItems.length > 0) {
           const incomeRecords = successfulItems.map(item => item.record);
           await addIncomeRecords(incomeRecords);
@@ -115,11 +107,11 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        if (statusUpdateFailCount > 0) {
-          console.warn('[match/confirm] 수입 은행거래 상태 업데이트 실패:', statusUpdateFailCount, '건');
+        if (batchResult.failed.length > 0) {
+          console.warn('[match/confirm] 수입 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건');
           if (successfulItems.length === 0) {
             incomeSuccess = false;
-            incomeError = `은행원장 상태 업데이트 실패 ${statusUpdateFailCount}건`;
+            incomeError = `은행원장 상태 업데이트 실패 ${batchResult.failed.length}건`;
           }
         }
       }
@@ -128,11 +120,6 @@ export async function POST(request: NextRequest) {
       incomeError = error instanceof Error ? error.message : String(error);
       console.error('[match/confirm] 수입 레코드 저장 실패:', incomeError);
     }
-  }
-
-  // Google Sheets API 속도 제한 방지를 위한 딜레이
-  if (income && income.length > 0 && expense && expense.length > 0) {
-    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   // 지출 레코드 저장 (독립적 처리)
@@ -165,29 +152,21 @@ export async function POST(request: NextRequest) {
       if (validExpenseItems.length > 0) {
         console.log('[match/confirm] 지출 처리 시작:', validExpenseItems.length, '건');
 
-        // 먼저 은행 거래 상태를 순차적으로 업데이트 (API 속도 제한 방지)
-        let statusUpdateFailCount = 0;
-        const successfulItems: typeof validExpenseItems = [];
+        // 배치 업데이트로 은행거래 상태 일괄 업데이트 (API 호출 1회)
+        const batchUpdates = validExpenseItems.map(item => ({
+          id: item.transaction.id,
+          matched_status: 'matched' as const,
+          matched_type: 'expense_detail',
+          matched_ids: item.record.id,
+        }));
 
-        for (const item of validExpenseItems) {
-          try {
-            await updateBankTransaction(item.transaction.id, {
-              matched_status: 'matched',
-              matched_type: 'expense_detail',
-              matched_ids: item.record.id,
-            });
-            successfulItems.push(item);
-            // API 속도 제한 방지를 위한 딜레이 (100ms)
-            if (validExpenseItems.indexOf(item) < validExpenseItems.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-          } catch (err) {
-            statusUpdateFailCount++;
-            console.error('[match/confirm] 지출 은행거래 상태 업데이트 실패:', item.transaction.id, err);
-          }
-        }
+        const batchResult = await updateBankTransactionsBatch(batchUpdates);
+        console.log('[match/confirm] 배치 업데이트 결과 - 성공:', batchResult.success.length, '실패:', batchResult.failed.length);
 
-        // 상태 업데이트 성공한 항목만 지출부에 추가
+        // 성공한 항목만 지출부에 추가
+        const successIdSet = new Set(batchResult.success);
+        const successfulItems = validExpenseItems.filter(item => successIdSet.has(item.transaction.id));
+
         if (successfulItems.length > 0) {
           const expenseRecords = successfulItems.map(item => item.record);
           await addExpenseRecords(expenseRecords);
@@ -201,11 +180,11 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        if (statusUpdateFailCount > 0) {
-          console.warn('[match/confirm] 지출 은행거래 상태 업데이트 실패:', statusUpdateFailCount, '건');
+        if (batchResult.failed.length > 0) {
+          console.warn('[match/confirm] 지출 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건');
           if (successfulItems.length === 0) {
             expenseSuccess = false;
-            expenseError = `은행원장 상태 업데이트 실패 ${statusUpdateFailCount}건`;
+            expenseError = `은행원장 상태 업데이트 실패 ${batchResult.failed.length}건`;
           }
         }
       }
@@ -216,12 +195,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Google Sheets API 속도 제한 방지를 위한 딜레이
-  if ((income?.length > 0 || expense?.length > 0) && suppressed && suppressed.length > 0) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-
-  // 말소 처리 (병렬 처리, 서버 상태 기준으로 중복 방지)
+  // 말소 처리 (배치 업데이트, 서버 상태 기준으로 중복 방지)
   if (suppressed && suppressed.length > 0) {
     try {
       // 중복 필터링
@@ -234,30 +208,22 @@ export async function POST(request: NextRequest) {
         return true;
       });
 
-      // 순차 처리 (API 속도 제한 방지)
+      // 배치 업데이트로 말소 처리 (API 호출 1회)
       if (newSuppressed.length > 0) {
-        let suppressFailCount = 0;
+        const batchUpdates = newSuppressed.map(tx => ({
+          id: tx.id,
+          matched_status: 'suppressed' as const,
+          suppressed: true,
+          suppressed_reason: tx.suppressed_reason || '자동 말소',
+        }));
 
-        for (const tx of newSuppressed) {
-          try {
-            await updateBankTransaction(tx.id, {
-              matched_status: 'suppressed',
-              suppressed: true,
-              suppressed_reason: tx.suppressed_reason || '자동 말소',
-            });
-            suppressedCount++;
-            // API 속도 제한 방지를 위한 딜레이 (100ms)
-            if (newSuppressed.indexOf(tx) < newSuppressed.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-          } catch (err) {
-            suppressFailCount++;
-            console.error('[match/confirm] 말소 처리 실패:', tx.id, err);
-          }
-        }
+        const batchResult = await updateBankTransactionsBatch(batchUpdates);
+        console.log('[match/confirm] 말소 배치 업데이트 결과 - 성공:', batchResult.success.length, '실패:', batchResult.failed.length);
 
-        if (suppressFailCount > 0) {
-          console.warn('[match/confirm] 말소 처리 실패:', suppressFailCount, '건');
+        suppressedCount = batchResult.success.length;
+
+        if (batchResult.failed.length > 0) {
+          console.warn('[match/confirm] 말소 처리 실패:', batchResult.failed.length, '건');
           if (suppressedCount === 0) {
             suppressedSuccess = false;
           }

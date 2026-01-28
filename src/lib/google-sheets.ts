@@ -665,49 +665,179 @@ export async function updateBankTransaction(
   const headers = rows[0];
   const currentRow = rows[rowIndex];
 
-  // 헤더 검증: matched_status 컬럼 위치 확인
+  // 필수 컬럼 인덱스 확인
   const matchedStatusIdx = headers.indexOf('matched_status');
+  const matchedTypeIdx = headers.indexOf('matched_type');
+  const matchedIdsIdx = headers.indexOf('matched_ids');
+  const suppressedIdx = headers.indexOf('suppressed');
+  const suppressedReasonIdx = headers.indexOf('suppressed_reason');
+
   if (matchedStatusIdx === -1) {
-    console.error('[updateBankTransaction] matched_status 헤더를 찾을 수 없음! 헤더:', headers);
-    throw new Error('matched_status column not found in headers');
+    console.error('[updateBankTransaction] matched_status 헤더 없음! 헤더:', headers.join(', '));
+    throw new Error('matched_status column not found');
   }
 
   const currentStatus = currentRow[matchedStatusIdx] || 'unknown';
-  console.log('[updateBankTransaction] ID:', id, '현재상태:', currentStatus, '→', updates.matched_status, '(row:', rowIndex + 1, ', col:', matchedStatusIdx + 1, ')');
 
-  // currentRow가 headers보다 짧을 수 있으므로 undefined 대신 빈 문자열 사용
-  const updatedRow = headers.map((header, idx) => {
-    if (header in updates) {
-      const value = (updates as Record<string, unknown>)[header];
-      // undefined나 null이면 빈 문자열로 변환
-      return value ?? '';
-    }
-    // currentRow[idx]가 undefined면 빈 문자열 반환
-    return currentRow[idx] ?? '';
-  });
+  // 업데이트할 행 데이터 구성 (현재 데이터 복사 후 명시적 업데이트)
+  const updatedRow = [...currentRow];
 
-  // 업데이트할 값 확인
-  console.log('[updateBankTransaction] updatedRow[matched_status]:', updatedRow[matchedStatusIdx]);
+  // 행 길이가 헤더보다 짧으면 확장
+  while (updatedRow.length < headers.length) {
+    updatedRow.push('');
+  }
+
+  // 명시적으로 각 필드 업데이트 (헤더 이름 의존 제거)
+  if (updates.matched_status !== undefined && matchedStatusIdx !== -1) {
+    updatedRow[matchedStatusIdx] = updates.matched_status;
+  }
+  if (updates.matched_type !== undefined && matchedTypeIdx !== -1) {
+    updatedRow[matchedTypeIdx] = updates.matched_type;
+  }
+  if (updates.matched_ids !== undefined && matchedIdsIdx !== -1) {
+    updatedRow[matchedIdsIdx] = updates.matched_ids;
+  }
+  if (updates.suppressed !== undefined && suppressedIdx !== -1) {
+    updatedRow[suppressedIdx] = String(updates.suppressed);
+  }
+  if (updates.suppressed_reason !== undefined && suppressedReasonIdx !== -1) {
+    updatedRow[suppressedReasonIdx] = updates.suppressed_reason;
+  }
+
+  // 동적 범위 계산 (헤더 길이 기반)
+  const lastColIndex = Math.min(headers.length - 1, 25); // 최대 Z열까지
+  const lastColLetter = String.fromCharCode(65 + lastColIndex);
+  const range = `A${rowIndex + 1}:${lastColLetter}${rowIndex + 1}`;
+
+  console.log('[updateBankTransaction] ID:', id, '상태:', currentStatus, '→', updates.matched_status,
+    '(row:', rowIndex + 1, ', statusCol:', matchedStatusIdx + 1, ', range:', range, ')');
 
   await updateSheet(
     FINANCE_CONFIG.sheets.bank,
-    `A${rowIndex + 1}:Q${rowIndex + 1}`,
-    [updatedRow as (string | number | boolean)[]]
+    range,
+    [updatedRow.slice(0, lastColIndex + 1) as (string | number | boolean)[]]
   );
 
-  // 업데이트 검증: 실제로 값이 변경되었는지 확인
-  const verifyRows = await readSheet(FINANCE_CONFIG.sheets.bank, `A${rowIndex + 1}:Q${rowIndex + 1}`);
-  if (verifyRows && verifyRows[0]) {
-    const verifyStatus = verifyRows[0][matchedStatusIdx];
-    console.log('[updateBankTransaction] 검증:', id, '- 저장된 상태:', verifyStatus);
-    if (verifyStatus !== updates.matched_status) {
-      console.error('[updateBankTransaction] 불일치! 요청:', updates.matched_status, '저장됨:', verifyStatus);
-    }
-  } else {
-    console.warn('[updateBankTransaction] 검증 실패: 행 읽기 불가');
+  console.log('[updateBankTransaction] 완료:', id);
+}
+
+// 배치 업데이트: 여러 은행거래 상태를 한 번의 API 호출로 업데이트
+export async function updateBankTransactionsBatch(
+  updates: Array<{
+    id: string;
+    matched_status: 'matched' | 'suppressed';
+    matched_type?: string;
+    matched_ids?: string;
+    suppressed?: boolean;
+    suppressed_reason?: string;
+  }>
+): Promise<{ success: string[]; failed: string[] }> {
+  const sheets = getGoogleSheetsClient();
+
+  // 1. 은행원장 전체 읽기 (한 번만)
+  const rows = await readSheet(FINANCE_CONFIG.sheets.bank);
+  if (rows.length === 0) {
+    console.error('[updateBankTransactionsBatch] 은행원장이 비어있음');
+    return { success: [], failed: updates.map(u => u.id) };
   }
 
-  console.log('[updateBankTransaction] 완료:', id);
+  const headers = rows[0];
+
+  // 컬럼 인덱스 찾기
+  const matchedStatusIdx = headers.indexOf('matched_status');
+  const matchedTypeIdx = headers.indexOf('matched_type');
+  const matchedIdsIdx = headers.indexOf('matched_ids');
+  const suppressedIdx = headers.indexOf('suppressed');
+  const suppressedReasonIdx = headers.indexOf('suppressed_reason');
+
+  if (matchedStatusIdx === -1) {
+    console.error('[updateBankTransactionsBatch] matched_status 헤더 없음');
+    return { success: [], failed: updates.map(u => u.id) };
+  }
+
+  // 2. ID → 행 인덱스 맵 생성
+  const idToRowIndex = new Map<string, number>();
+  rows.forEach((row, idx) => {
+    if (idx > 0 && row[0]) { // 헤더 제외
+      idToRowIndex.set(row[0], idx);
+    }
+  });
+
+  // 3. 배치 업데이트 요청 구성
+  const batchRequests: Array<{
+    range: string;
+    values: (string | number | boolean)[][];
+  }> = [];
+
+  const successIds: string[] = [];
+  const failedIds: string[] = [];
+
+  for (const update of updates) {
+    const rowIndex = idToRowIndex.get(update.id);
+    if (rowIndex === undefined) {
+      console.warn('[updateBankTransactionsBatch] ID 없음:', update.id);
+      failedIds.push(update.id);
+      continue;
+    }
+
+    const currentRow = [...rows[rowIndex]];
+
+    // 행 길이 확장
+    while (currentRow.length < headers.length) {
+      currentRow.push('');
+    }
+
+    // 값 업데이트
+    currentRow[matchedStatusIdx] = update.matched_status;
+    if (update.matched_type !== undefined && matchedTypeIdx !== -1) {
+      currentRow[matchedTypeIdx] = update.matched_type;
+    }
+    if (update.matched_ids !== undefined && matchedIdsIdx !== -1) {
+      currentRow[matchedIdsIdx] = update.matched_ids;
+    }
+    if (update.suppressed !== undefined && suppressedIdx !== -1) {
+      currentRow[suppressedIdx] = String(update.suppressed);
+    }
+    if (update.suppressed_reason !== undefined && suppressedReasonIdx !== -1) {
+      currentRow[suppressedReasonIdx] = update.suppressed_reason;
+    }
+
+    // 범위는 A:Q (17열)로 제한
+    const range = `${FINANCE_CONFIG.sheets.bank}!A${rowIndex + 1}:Q${rowIndex + 1}`;
+    batchRequests.push({
+      range,
+      values: [currentRow.slice(0, 17) as (string | number | boolean)[]],
+    });
+
+    successIds.push(update.id);
+  }
+
+  if (batchRequests.length === 0) {
+    console.warn('[updateBankTransactionsBatch] 업데이트할 항목 없음');
+    return { success: [], failed: failedIds };
+  }
+
+  // 4. 배치 업데이트 실행 (한 번의 API 호출)
+  console.log('[updateBankTransactionsBatch] 배치 업데이트 시작:', batchRequests.length, '건');
+
+  try {
+    const response = await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      requestBody: {
+        valueInputOption: 'USER_ENTERED',
+        data: batchRequests,
+      },
+    });
+
+    const updatedCells = response.data.totalUpdatedCells || 0;
+    console.log('[updateBankTransactionsBatch] 완료:', successIds.length, '건, 업데이트된 셀:', updatedCells);
+
+    return { success: successIds, failed: failedIds };
+  } catch (error) {
+    console.error('[updateBankTransactionsBatch] 배치 업데이트 실패:', error);
+    // 배치 실패 시 모든 항목 실패로 처리
+    return { success: [], failed: [...successIds, ...failedIds] };
+  }
 }
 
 // ============================================

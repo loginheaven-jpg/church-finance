@@ -900,7 +900,7 @@ export function BankUpload() {
                                     type="number"
                                     value={item.record?.amount || 0}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-sm text-right w-16 text-green-600"
+                                    className="h-6 text-sm text-right w-28 text-green-600"
                                   />
                                 )}
                               </TableCell>
@@ -911,7 +911,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.note || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'note', e.target.value)}
-                                    className="h-6 text-sm w-40"
+                                    className="h-6 text-sm w-48"
                                   />
                                 )}
                               </TableCell>

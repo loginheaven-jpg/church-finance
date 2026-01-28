@@ -465,6 +465,10 @@ export function BankUpload() {
         expenseDetails: expenseToSave.map(e => ({ vendor: e.record.vendor, amount: e.record.amount, account_code: e.record.account_code }))
       });
 
+      // 30초 타임아웃 설정
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const res = await fetch('/api/match/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -473,7 +477,10 @@ export function BankUpload() {
           expense: expenseToSave,
           suppressed: suppressedToSave,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       const result = await res.json();
       console.log('[handleConfirm] API 응답:', result);
@@ -492,7 +499,11 @@ export function BankUpload() {
         setConfirming(false);  // 실패 시에만 버튼 다시 활성화
       }
     } catch (error) {
-      toast.error('반영 중 오류가 발생했습니다');
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast.error('요청 시간이 초과되었습니다. 다시 시도해주세요.');
+      } else {
+        toast.error('반영 중 오류가 발생했습니다');
+      }
       console.error('[handleConfirm] 에러:', error);
       setConfirming(false);  // 에러 시에만 버튼 다시 활성화
     }
@@ -886,9 +897,9 @@ export function BankUpload() {
                             <TableHead className="w-[80px]">입금방법</TableHead>
                             <TableHead className="w-[50px]">코드</TableHead>
                             <TableHead className="w-[80px]">헌금자</TableHead>
-                            <TableHead className="w-[96px]">대표자</TableHead>
+                            <TableHead className="w-[120px]">대표자</TableHead>
                             <TableHead className="w-[70px] text-right">금액</TableHead>
-                            <TableHead className="w-[184px]">비고</TableHead>
+                            <TableHead className="w-[208px]">비고</TableHead>
                             <TableHead className="w-[40px]"></TableHead>
                           </TableRow>
                         </TableHeader>
@@ -955,7 +966,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.representative || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'representative', e.target.value)}
-                                    className="h-6 text-sm w-24"
+                                    className="h-6 text-sm w-32"
                                   />
                                 )}
                               </TableCell>
@@ -978,7 +989,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.note || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'note', e.target.value)}
-                                    className="h-6 text-sm w-64"
+                                    className="h-6 text-sm w-80"
                                   />
                                 )}
                               </TableCell>

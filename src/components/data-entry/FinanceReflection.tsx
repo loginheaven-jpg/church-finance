@@ -437,10 +437,10 @@ export function FinanceReflection() {
             </div>
 
             {/* 스크롤 영역: 테이블 */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 min-h-0">
               {/* 수입부 탭 */}
               {activeTab === 'income' && (
-                <div className="rounded-md border max-h-full overflow-auto">
+                <div className="rounded-md border h-full overflow-auto">
                   <Table>
                     <TableHeader className="sticky top-0 bg-white z-10">
                       <TableRow>
@@ -571,7 +571,7 @@ export function FinanceReflection() {
 
               {/* 지출부 탭 */}
               {activeTab === 'expense' && (
-                <div className="rounded-md border max-h-full overflow-auto">
+                <div className="rounded-md border h-full overflow-auto">
                   <Table>
                     <TableHeader className="sticky top-0 bg-white z-10">
                       <TableRow>

@@ -126,6 +126,7 @@ export function BankUpload() {
     setActiveTab('income');
     setUnifiedIncome([]);
     setUnifiedExpense([]);
+    setConfirming(false);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {

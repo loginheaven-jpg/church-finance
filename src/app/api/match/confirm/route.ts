@@ -79,29 +79,49 @@ export async function POST(request: NextRequest) {
         incomeSuccess = true;
         incomeCount = 0;
       } else {
-        const incomeRecords = newIncomeItems.map(item => item.record);
-        await addIncomeRecords(incomeRecords);
+        // 먼저 은행 거래 상태를 순차적으로 업데이트 (API 속도 제한 방지)
+        let statusUpdateFailCount = 0;
+        const successfulItems: typeof newIncomeItems = [];
 
-        // 은행 거래 상태 업데이트 (병렬 처리로 속도 개선)
-        const updatePromises = newIncomeItems.map(item =>
-          updateBankTransaction(item.transaction.id, {
-            matched_status: 'matched',
-            matched_type: 'income_detail',
-            matched_ids: item.record.id,
-          }).catch(err => {
-            console.warn('[match/confirm] 수입 은행거래 업데이트 실패 (무시):', item.transaction.id, err);
-          })
-        );
-        await Promise.allSettled(updatePromises);
-
-        // 규칙 사용 횟수 증가 (병렬 처리)
-        const ruleIds = newIncomeItems.filter(item => item.match?.id).map(item => item.match!.id);
-        if (ruleIds.length > 0) {
-          await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
+        for (const item of newIncomeItems) {
+          try {
+            await updateBankTransaction(item.transaction.id, {
+              matched_status: 'matched',
+              matched_type: 'income_detail',
+              matched_ids: item.record.id,
+            });
+            successfulItems.push(item);
+            // API 속도 제한 방지를 위한 딜레이 (100ms)
+            if (newIncomeItems.indexOf(item) < newIncomeItems.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          } catch (err) {
+            statusUpdateFailCount++;
+            console.error('[match/confirm] 수입 은행거래 상태 업데이트 실패:', item.transaction.id, err);
+          }
         }
 
-        incomeCount = incomeRecords.length;
-        console.log('[match/confirm] 수입 레코드 저장 완료:', incomeCount, '건');
+        // 상태 업데이트 성공한 항목만 수입부에 추가
+        if (successfulItems.length > 0) {
+          const incomeRecords = successfulItems.map(item => item.record);
+          await addIncomeRecords(incomeRecords);
+          incomeCount = incomeRecords.length;
+          console.log('[match/confirm] 수입 레코드 저장 완료:', incomeCount, '건');
+
+          // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
+          const ruleIds = successfulItems.filter(item => item.match?.id).map(item => item.match!.id);
+          if (ruleIds.length > 0) {
+            await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
+          }
+        }
+
+        if (statusUpdateFailCount > 0) {
+          console.warn('[match/confirm] 수입 은행거래 상태 업데이트 실패:', statusUpdateFailCount, '건');
+          if (successfulItems.length === 0) {
+            incomeSuccess = false;
+            incomeError = `은행원장 상태 업데이트 실패 ${statusUpdateFailCount}건`;
+          }
+        }
       }
     } catch (error) {
       incomeSuccess = false;
@@ -138,31 +158,51 @@ export async function POST(request: NextRequest) {
       });
 
       if (validExpenseItems.length > 0) {
-        const expenseRecords = validExpenseItems.map(item => item.record);
-        console.log('[match/confirm] 지출 레코드 저장 시작:', expenseRecords.length, '건');
+        console.log('[match/confirm] 지출 처리 시작:', validExpenseItems.length, '건');
 
-        await addExpenseRecords(expenseRecords);
-        console.log('[match/confirm] 지출 레코드 저장 완료');
+        // 먼저 은행 거래 상태를 순차적으로 업데이트 (API 속도 제한 방지)
+        let statusUpdateFailCount = 0;
+        const successfulItems: typeof validExpenseItems = [];
 
-        // 은행 거래 상태 업데이트 (병렬 처리로 속도 개선)
-        const updatePromises = validExpenseItems.map(item =>
-          updateBankTransaction(item.transaction.id, {
-            matched_status: 'matched',
-            matched_type: 'expense_detail',
-            matched_ids: item.record.id,
-          }).catch(err => {
-            console.error('[match/confirm] 은행거래 업데이트 실패:', item.transaction.id, err);
-          })
-        );
-        await Promise.allSettled(updatePromises);
-
-        // 규칙 사용 횟수 증가 (병렬 처리)
-        const ruleIds = validExpenseItems.filter(item => item.match?.id).map(item => item.match!.id);
-        if (ruleIds.length > 0) {
-          await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
+        for (const item of validExpenseItems) {
+          try {
+            await updateBankTransaction(item.transaction.id, {
+              matched_status: 'matched',
+              matched_type: 'expense_detail',
+              matched_ids: item.record.id,
+            });
+            successfulItems.push(item);
+            // API 속도 제한 방지를 위한 딜레이 (100ms)
+            if (validExpenseItems.indexOf(item) < validExpenseItems.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          } catch (err) {
+            statusUpdateFailCount++;
+            console.error('[match/confirm] 지출 은행거래 상태 업데이트 실패:', item.transaction.id, err);
+          }
         }
 
-        expenseCount = expenseRecords.length;
+        // 상태 업데이트 성공한 항목만 지출부에 추가
+        if (successfulItems.length > 0) {
+          const expenseRecords = successfulItems.map(item => item.record);
+          await addExpenseRecords(expenseRecords);
+          expenseCount = expenseRecords.length;
+          console.log('[match/confirm] 지출 레코드 저장 완료:', expenseCount, '건');
+
+          // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
+          const ruleIds = successfulItems.filter(item => item.match?.id).map(item => item.match!.id);
+          if (ruleIds.length > 0) {
+            await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
+          }
+        }
+
+        if (statusUpdateFailCount > 0) {
+          console.warn('[match/confirm] 지출 은행거래 상태 업데이트 실패:', statusUpdateFailCount, '건');
+          if (successfulItems.length === 0) {
+            expenseSuccess = false;
+            expenseError = `은행원장 상태 업데이트 실패 ${statusUpdateFailCount}건`;
+          }
+        }
       }
     } catch (error) {
       expenseSuccess = false;
@@ -189,19 +229,34 @@ export async function POST(request: NextRequest) {
         return true;
       });
 
-      // 병렬 처리
+      // 순차 처리 (API 속도 제한 방지)
       if (newSuppressed.length > 0) {
-        const suppressPromises = newSuppressed.map(tx =>
-          updateBankTransaction(tx.id, {
-            matched_status: 'suppressed',
-            suppressed: true,
-            suppressed_reason: tx.suppressed_reason || '자동 말소',
-          }).catch(err => {
+        let suppressFailCount = 0;
+
+        for (const tx of newSuppressed) {
+          try {
+            await updateBankTransaction(tx.id, {
+              matched_status: 'suppressed',
+              suppressed: true,
+              suppressed_reason: tx.suppressed_reason || '자동 말소',
+            });
+            suppressedCount++;
+            // API 속도 제한 방지를 위한 딜레이 (100ms)
+            if (newSuppressed.indexOf(tx) < newSuppressed.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          } catch (err) {
+            suppressFailCount++;
             console.error('[match/confirm] 말소 처리 실패:', tx.id, err);
-          })
-        );
-        await Promise.allSettled(suppressPromises);
-        suppressedCount = newSuppressed.length;
+          }
+        }
+
+        if (suppressFailCount > 0) {
+          console.warn('[match/confirm] 말소 처리 실패:', suppressFailCount, '건');
+          if (suppressedCount === 0) {
+            suppressedSuccess = false;
+          }
+        }
       }
     } catch (error) {
       suppressedSuccess = false;

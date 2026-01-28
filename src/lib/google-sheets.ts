@@ -655,6 +655,16 @@ export async function updateBankTransaction(
   const headers = rows[0];
   const currentRow = rows[rowIndex];
 
+  // 헤더 검증: matched_status 컬럼 위치 확인
+  const matchedStatusIdx = headers.indexOf('matched_status');
+  if (matchedStatusIdx === -1) {
+    console.error('[updateBankTransaction] matched_status 헤더를 찾을 수 없음! 헤더:', headers);
+    throw new Error('matched_status column not found in headers');
+  }
+
+  const currentStatus = currentRow[matchedStatusIdx] || 'unknown';
+  console.log('[updateBankTransaction] ID:', id, '현재상태:', currentStatus, '→', updates.matched_status, '(row:', rowIndex + 1, ', col:', matchedStatusIdx + 1, ')');
+
   // currentRow가 headers보다 짧을 수 있으므로 undefined 대신 빈 문자열 사용
   const updatedRow = headers.map((header, idx) => {
     if (header in updates) {
@@ -666,13 +676,16 @@ export async function updateBankTransaction(
     return currentRow[idx] ?? '';
   });
 
-  console.log('[updateBankTransaction] Updating row', rowIndex + 1, 'for ID:', id, 'matched_status:', updates.matched_status);
+  // 업데이트할 값 확인
+  console.log('[updateBankTransaction] updatedRow[matched_status]:', updatedRow[matchedStatusIdx]);
 
   await updateSheet(
     FINANCE_CONFIG.sheets.bank,
     `A${rowIndex + 1}:Q${rowIndex + 1}`,
     [updatedRow as (string | number | boolean)[]]
   );
+
+  console.log('[updateBankTransaction] 완료:', id);
 }
 
 // ============================================

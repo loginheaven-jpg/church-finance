@@ -137,6 +137,9 @@ export async function POST(request: NextRequest) {
 
   // 지출 레코드 저장 (독립적 처리)
   if (expense && expense.length > 0) {
+    console.log('[match/confirm] 지출 수신:', expense.length, '건');
+    console.log('[match/confirm] 지출 ID 목록:', expense.map(e => e.transaction?.id).join(', '));
+
     try {
       // undefined record 필터링, 유효성 검사, 중복 반영 방지 (서버 상태 기준)
       const validExpenseItems = expense.filter(item => {
@@ -156,6 +159,8 @@ export async function POST(request: NextRequest) {
         }
         return true;
       });
+
+      console.log('[match/confirm] 필터 후 유효 지출:', validExpenseItems.length, '건');
 
       if (validExpenseItems.length > 0) {
         console.log('[match/confirm] 지출 처리 시작:', validExpenseItems.length, '건');

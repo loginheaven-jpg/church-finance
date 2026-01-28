@@ -3,6 +3,7 @@ import {
   addIncomeRecords,
   addExpenseRecords,
   updateBankTransaction,
+  getBankTransactions,
 } from '@/lib/google-sheets';
 import { incrementRuleUsage } from '@/lib/matching-engine';
 import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
@@ -39,6 +40,17 @@ export async function POST(request: NextRequest) {
     suppressedCount: suppressed?.length || 0,
   });
 
+  // 중복 반영 방지: 서버에서 실제 은행원장 상태 조회
+  let bankStatusMap = new Map<string, string>();
+  try {
+    const bankTransactions = await getBankTransactions();
+    bankStatusMap = new Map(bankTransactions.map(tx => [tx.id, tx.matched_status || 'pending']));
+    console.log('[match/confirm] 은행원장 상태 조회 완료:', bankStatusMap.size, '건');
+  } catch (error) {
+    console.error('[match/confirm] 은행원장 상태 조회 실패:', error);
+    // 조회 실패 시 계속 진행 (클라이언트 상태 기준으로 처리)
+  }
+
   let incomeCount = 0;
   let expenseCount = 0;
   let suppressedCount = 0;
@@ -51,10 +63,11 @@ export async function POST(request: NextRequest) {
   // 수입 레코드 저장 (독립적 처리)
   if (income && income.length > 0) {
     try {
-      // 중복 반영 방지: 이미 matched 상태인 거래 필터링
+      // 중복 반영 방지: 서버의 실제 은행원장 상태 기준으로 필터링
       const newIncomeItems = income.filter(item => {
-        if (item.transaction.matched_status === 'matched') {
-          console.warn('[match/confirm] 이미 반영된 수입 거래 스킵:', item.transaction.id);
+        const serverStatus = bankStatusMap.get(item.transaction.id) || item.transaction.matched_status;
+        if (serverStatus === 'matched' || serverStatus === 'suppressed') {
+          console.warn('[match/confirm] 이미 반영된 수입 거래 스킵:', item.transaction.id, '상태:', serverStatus);
           return false;
         }
         return true;
@@ -103,11 +116,12 @@ export async function POST(request: NextRequest) {
   // 지출 레코드 저장 (독립적 처리)
   if (expense && expense.length > 0) {
     try {
-      // undefined record 필터링, 유효성 검사, 중복 반영 방지
+      // undefined record 필터링, 유효성 검사, 중복 반영 방지 (서버 상태 기준)
       const validExpenseItems = expense.filter(item => {
-        // 중복 반영 방지: 이미 matched 상태인 거래 스킵
-        if (item.transaction.matched_status === 'matched') {
-          console.warn('[match/confirm] 이미 반영된 지출 거래 스킵:', item.transaction.id);
+        // 중복 반영 방지: 서버의 실제 은행원장 상태 기준으로 필터링
+        const serverStatus = bankStatusMap.get(item.transaction.id) || item.transaction.matched_status;
+        if (serverStatus === 'matched' || serverStatus === 'suppressed') {
+          console.warn('[match/confirm] 이미 반영된 지출 거래 스킵:', item.transaction.id, '상태:', serverStatus);
           return false;
         }
         if (!item.record) {
@@ -159,17 +173,22 @@ export async function POST(request: NextRequest) {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  // 말소 처리 (독립적 처리)
+  // 말소 처리 (독립적 처리, 서버 상태 기준으로 중복 방지)
   if (suppressed && suppressed.length > 0) {
     try {
       for (const tx of suppressed) {
+        const serverStatus = bankStatusMap.get(tx.id) || tx.matched_status;
+        if (serverStatus === 'suppressed' || serverStatus === 'matched') {
+          console.warn('[match/confirm] 이미 처리된 말소 거래 스킵:', tx.id, '상태:', serverStatus);
+          continue;
+        }
         await updateBankTransaction(tx.id, {
           matched_status: 'suppressed',
           suppressed: true,
           suppressed_reason: tx.suppressed_reason || '자동 말소',
         });
+        suppressedCount++;
       }
-      suppressedCount = suppressed.length;
     } catch (error) {
       suppressedSuccess = false;
       console.error('[match/confirm] 말소 처리 실패:', error);

@@ -34,14 +34,15 @@ interface IncomeMatchingRule {
 
 const INCOME_MATCHING_RULES: IncomeMatchingRule[] = [
   { priority: 1, keywords: ['건축', '성전', '봉헌'], code: 501, name: '건축헌금' },
-  { priority: 2, keywords: ['십일조', '십일'], code: 12, name: '십일조헌금' },
-  { priority: 3, keywords: ['구제'], excludeKeywords: ['선교'], code: 22, name: '구제헌금' },
-  { priority: 4, keywords: ['선교'], code: 21, name: '선교헌금' },
-  { priority: 5, keywords: ['성탄', '신년'], code: 14, name: '특별헌금' },
-  { priority: 6, keywords: ['감사'], code: 13, name: '감사헌금' },
-  { priority: 7, keywords: ['큐티', '찬조', '지정', '후원'], code: 24, name: '지정헌금' },
-  { priority: 8, keywords: ['커피', '카페'], excludeKeywords: ['주일'], code: 32, name: '기타잡수입' },
-  { priority: 9, keywords: ['주일'], code: 11, name: '주일헌금' },
+  { priority: 2, keywords: ['이자'], code: 31, name: '이자수입' },
+  { priority: 3, keywords: ['십일조', '십일'], code: 12, name: '십일조헌금' },
+  { priority: 4, keywords: ['구제'], excludeKeywords: ['선교'], code: 22, name: '구제헌금' },
+  { priority: 5, keywords: ['선교'], code: 21, name: '선교헌금' },
+  { priority: 6, keywords: ['성탄', '신년'], code: 14, name: '특별헌금' },
+  { priority: 7, keywords: ['감사'], code: 13, name: '감사헌금' },
+  { priority: 8, keywords: ['큐티', '찬조', '지정', '후원'], code: 24, name: '지정헌금' },
+  { priority: 9, keywords: ['커피', '카페'], excludeKeywords: ['주일'], code: 32, name: '기타잡수입' },
+  { priority: 10, keywords: ['주일'], code: 11, name: '주일헌금' },
 ];
 
 // 미리보기용 매칭 결과 생성 (저장하지 않음)
@@ -154,8 +155,8 @@ export async function POST(request: NextRequest) {
       const matchedRule = findBestMatchingRule(tx, rules);
 
       if (tx.deposit > 0) {
-        // 수입 거래: 우선순위 기반 키워드 매칭 (memo + detail)
-        const offeringResult = determineIncomeOfferingCode(tx.memo, tx.detail, tx.deposit);
+        // 수입 거래: 우선순위 기반 키워드 매칭 (description + memo + detail)
+        const offeringResult = determineIncomeOfferingCode(tx.memo, tx.detail, tx.deposit, tx.description);
         const income = createIncomeFromBankTransactionWithCode(
           tx,
           offeringResult.code,
@@ -413,15 +414,16 @@ function getDefaultIncomeCode(amount: number): { code: number; name: string } {
 
 /**
  * 수입부 offering_code 결정 (우선순위 기반 키워드 매칭)
- * - memo + detail 필드 모두 검토
+ * - description + memo + detail 필드 모두 검토
  * - 키워드 매칭 실패 시 금액 기반 기본 분류
  */
 function determineIncomeOfferingCode(
   memo: string | undefined,
   detail: string | undefined,
-  amount: number
+  amount: number,
+  description?: string
 ): { code: number; name: string; matchedBy: 'keyword' | 'default' } {
-  const searchText = `${memo || ''} ${detail || ''}`.toLowerCase();
+  const searchText = `${description || ''} ${memo || ''} ${detail || ''}`.toLowerCase();
 
   for (const rule of INCOME_MATCHING_RULES) {
     const hasKeyword = rule.keywords.some(kw => searchText.includes(kw));

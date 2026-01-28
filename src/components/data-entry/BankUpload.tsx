@@ -331,6 +331,12 @@ export function BankUpload() {
         setStep('matched');
         setActiveTab('income');
         toast.success(result.message);
+        // 2단계 완료 후 안내 팝업
+        setTimeout(() => {
+          toast.info('헌금자 및 지출처와 계정코드를 확인하신 후\n수입부, 지출부에 각각 반영하십시오.', {
+            duration: 5000,
+          });
+        }, 500);
       } else {
         toast.error(result.error || '매칭 중 오류가 발생했습니다');
       }
@@ -1273,32 +1279,36 @@ export function BankUpload() {
                     </div>
                   )}
 
-                  {/* 3단계: 정식 반영 버튼 (수입부/지출부 분리) */}
+                  {/* 3단계: 정식 반영 버튼 (탭에 따라 해당 버튼만 활성화) */}
                   <div className="flex gap-2">
-                    <Button
-                      onClick={handleConfirmIncome}
-                      disabled={confirmingIncome || matchedIncomeCount === 0}
-                      className="flex-1 bg-green-600 hover:bg-green-700"
-                    >
-                      {confirmingIncome ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                      )}
-                      수입부 반영 ({matchedIncomeCount}건{suppressedIncomeCount > 0 ? `, 말소 ${suppressedIncomeCount}` : ''})
-                    </Button>
-                    <Button
-                      onClick={handleConfirmExpense}
-                      disabled={confirmingExpense || (matchedExpenseCount + needsReviewCount) === 0}
-                      className="flex-1 bg-red-600 hover:bg-red-700"
-                    >
-                      {confirmingExpense ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                      )}
-                      지출부 반영 ({matchedExpenseCount + needsReviewCount}건{suppressedExpenseCount > 0 ? `, 말소 ${suppressedExpenseCount}` : ''})
-                    </Button>
+                    {activeTab === 'income' && (
+                      <Button
+                        onClick={handleConfirmIncome}
+                        disabled={confirmingIncome || matchedIncomeCount === 0}
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                      >
+                        {confirmingIncome ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                        )}
+                        수입부 반영 ({matchedIncomeCount}건{suppressedIncomeCount > 0 ? `, 말소 ${suppressedIncomeCount}` : ''})
+                      </Button>
+                    )}
+                    {activeTab === 'expense' && (
+                      <Button
+                        onClick={handleConfirmExpense}
+                        disabled={confirmingExpense || (matchedExpenseCount + needsReviewCount) === 0}
+                        className="flex-1 bg-red-600 hover:bg-red-700"
+                      >
+                        {confirmingExpense ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                        )}
+                        지출부 반영 ({matchedExpenseCount + needsReviewCount}건{suppressedExpenseCount > 0 ? `, 말소 ${suppressedExpenseCount}` : ''})
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}

@@ -19,6 +19,12 @@ import type { CashOffering, SyncResult } from '@/types';
 
 interface PreviewData extends CashOffering {
   representative: string;
+  isDuplicate?: boolean;
+}
+
+// 중복 체크용 키 생성
+function getDuplicateKey(date: string, donorName: string, amount: number): string {
+  return `${date}|${donorName}|${amount}`;
 }
 
 export function CashOfferingSync() {
@@ -36,6 +42,7 @@ export function CashOfferingSync() {
   const [donorMap, setDonorMap] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [existingKeys, setExistingKeys] = useState<Set<string>>(new Set());
 
   // 헌금함 데이터 갱신 (Apps Script 호출)
   const handleRefresh = async () => {
@@ -86,19 +93,36 @@ export function CashOfferingSync() {
       if (result.data.length === 0) {
         toast.info('해당 기간에 현금헌금이 없습니다');
         setData([]);
+        setExistingKeys(new Set());
         return;
       }
 
-      // 데이터에 representative 추가
-      const previewData: PreviewData[] = result.data.map((item: CashOffering) => ({
-        ...item,
-        representative: result.donorMap[item.donor_name] || item.donor_name,
-      }));
+      // 기존 데이터 키 Set 생성
+      const existingKeySet = new Set<string>(result.existingKeys || []);
+      setExistingKeys(existingKeySet);
+
+      // 데이터에 representative 및 중복 여부 추가
+      const previewData: PreviewData[] = result.data.map((item: CashOffering) => {
+        const key = getDuplicateKey(item.date, item.donor_name, item.amount);
+        return {
+          ...item,
+          representative: result.donorMap[item.donor_name] || item.donor_name,
+          isDuplicate: existingKeySet.has(key),
+        };
+      });
+
+      const duplicateCount = previewData.filter(d => d.isDuplicate).length;
+      const newCount = previewData.length - duplicateCount;
 
       setData(previewData);
       setDonorMap(result.donorMap);
       setHasChanges(false);
-      toast.success(`${previewData.length}건의 현금헌금을 불러왔습니다`);
+
+      if (duplicateCount > 0) {
+        toast.success(`${previewData.length}건 중 ${newCount}건 신규, ${duplicateCount}건 이미 반영됨`);
+      } else {
+        toast.success(`${previewData.length}건의 현금헌금을 불러왔습니다`);
+      }
     } catch (error) {
       console.error('데이터 조회 오류:', error);
       toast.error('데이터 조회 중 오류가 발생했습니다');
@@ -123,24 +147,27 @@ export function CashOfferingSync() {
     setHasChanges(true);
   };
 
-  // 수입부에 반영
+  // 수입부에 반영 (중복 제외)
   const handleSync = async () => {
-    if (data.length === 0) {
-      toast.error('반영할 데이터가 없습니다');
+    // 중복 제외한 신규 데이터만 필터링
+    const newData = data.filter(item => !item.isDuplicate);
+
+    if (newData.length === 0) {
+      toast.error('반영할 신규 데이터가 없습니다');
       return;
     }
 
     setSyncing(true);
 
     try {
-      // 수정된 데이터와 donorMap을 함께 전송
+      // 신규 데이터만 전송
       const res = await fetch('/api/sync/cash-offering', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           startDate,
           endDate,
-          previewData: data, // 수정된 데이터 전송
+          previewData: newData, // 중복 제외된 신규 데이터만 전송
         }),
       });
 
@@ -149,6 +176,7 @@ export function CashOfferingSync() {
       if (result.success) {
         setSyncResult(result);
         setData([]); // 데이터 초기화
+        setExistingKeys(new Set());
         setHasChanges(false);
         toast.success(`${result.processed}건의 현금헌금을 수입부에 반영했습니다`);
       } else {
@@ -179,6 +207,11 @@ export function CashOfferingSync() {
   // 총액 계산
   const totalAmount = data.reduce((sum, item) => sum + item.amount, 0);
   const sundaySummary = getSundaySummary();
+
+  // 신규/중복 개수
+  const duplicateCount = data.filter(d => d.isDuplicate).length;
+  const newCount = data.length - duplicateCount;
+  const newAmount = data.filter(d => !d.isDuplicate).reduce((sum, item) => sum + item.amount, 0);
 
   return (
     <Card>
@@ -268,6 +301,11 @@ export function CashOfferingSync() {
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <FileSpreadsheet className="h-5 w-5" />
                   현금헌금 목록 ({data.length}건)
+                  {duplicateCount > 0 && (
+                    <span className="text-sm font-normal text-slate-500">
+                      - 신규 {newCount}건, <span className="text-amber-600">이미반영 {duplicateCount}건</span>
+                    </span>
+                  )}
                 </CardTitle>
               </div>
             </CardHeader>
@@ -275,7 +313,7 @@ export function CashOfferingSync() {
               {/* 수입부에 반영 버튼 */}
               <Button
                 onClick={handleSync}
-                disabled={syncing}
+                disabled={syncing || newCount === 0}
                 className="w-full"
               >
                 {syncing ? (
@@ -283,7 +321,9 @@ export function CashOfferingSync() {
                 ) : (
                   <Upload className="h-4 w-4 mr-2" />
                 )}
-                수입부에 반영
+                {newCount > 0
+                  ? `신규 ${newCount}건 수입부에 반영 (${newAmount.toLocaleString()}원)`
+                  : '반영할 신규 데이터 없음'}
               </Button>
               {/* 주일별 합계 */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -320,8 +360,17 @@ export function CashOfferingSync() {
                   </TableHeader>
                   <TableBody>
                     {data.map((item, index) => (
-                      <TableRow key={`${item.date}-${index}`}>
-                        <TableCell className="font-medium text-base">{index + 1}</TableCell>
+                      <TableRow
+                        key={`${item.date}-${index}`}
+                        className={item.isDuplicate ? 'bg-slate-100 opacity-60' : ''}
+                      >
+                        <TableCell className="font-medium text-base">
+                          {item.isDuplicate ? (
+                            <span className="text-amber-600" title="이미 반영됨">✓</span>
+                          ) : (
+                            index + 1
+                          )}
+                        </TableCell>
                         <TableCell className="text-base">{item.date}</TableCell>
                         <TableCell className="text-base">{item.source}</TableCell>
                         <TableCell>
@@ -329,6 +378,7 @@ export function CashOfferingSync() {
                             value={item.donor_name}
                             onChange={(e) => handleCellChange(index, 'donor_name', e.target.value)}
                             className="h-7 text-base w-20"
+                            disabled={item.isDuplicate}
                           />
                         </TableCell>
                         <TableCell className="pr-1">
@@ -336,6 +386,7 @@ export function CashOfferingSync() {
                             value={item.representative}
                             onChange={(e) => handleCellChange(index, 'representative', e.target.value)}
                             className="h-7 text-base w-24"
+                            disabled={item.isDuplicate}
                           />
                         </TableCell>
                         <TableCell className="text-right pl-1">
@@ -344,6 +395,7 @@ export function CashOfferingSync() {
                             value={item.amount}
                             onChange={(e) => handleCellChange(index, 'amount', parseInt(e.target.value) || 0)}
                             className="h-7 text-base text-right w-24"
+                            disabled={item.isDuplicate}
                           />
                         </TableCell>
                         <TableCell className="text-base">{item.code}</TableCell>
@@ -352,17 +404,20 @@ export function CashOfferingSync() {
                             value={item.note}
                             onChange={(e) => handleCellChange(index, 'note', e.target.value)}
                             className="h-7 text-base w-36"
+                            disabled={item.isDuplicate}
                           />
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveRow(index)}
-                            className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                          >
-                            &times;
-                          </Button>
+                          {!item.isDuplicate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveRow(index)}
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                            >
+                              &times;
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

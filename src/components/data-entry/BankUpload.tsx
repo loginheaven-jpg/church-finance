@@ -73,6 +73,16 @@ interface UnifiedExpenseItem {
   suggestions?: MatchingRule[];
 }
 
+// 중복 체크용 복합키 생성
+function getDuplicateKey(
+  transactionDate: string,
+  deposit: number,
+  withdrawal: number,
+  balance: number
+): string {
+  return `${transactionDate}|${deposit}|${withdrawal}|${balance}`;
+}
+
 export function BankUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -88,6 +98,8 @@ export function BankUpload() {
   const [activeTab, setActiveTab] = useState<TabType>('income');
   const [unifiedIncome, setUnifiedIncome] = useState<UnifiedIncomeItem[]>([]);
   const [unifiedExpense, setUnifiedExpense] = useState<UnifiedExpenseItem[]>([]);
+  const [existingKeys, setExistingKeys] = useState<Set<string>>(new Set());
+  const [duplicateIndices, setDuplicateIndices] = useState<Set<number>>(new Set());
 
   // matchResult가 변경되면 통합 리스트 생성
   const buildUnifiedLists = useCallback((result: MatchPreviewResult) => {
@@ -127,6 +139,8 @@ export function BankUpload() {
     setUnifiedIncome([]);
     setUnifiedExpense([]);
     setConfirming(false);
+    setExistingKeys(new Set());
+    setDuplicateIndices(new Set());
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -166,6 +180,16 @@ export function BankUpload() {
     setResult(null);
 
     try {
+      // 1. 먼저 기존 은행원장의 중복 체크 키 조회
+      const dupRes = await fetch('/api/bank/check-duplicates');
+      const dupResult = await dupRes.json();
+      let existingKeySet = new Set<string>();
+      if (dupResult.success && dupResult.existingKeys) {
+        existingKeySet = new Set(dupResult.existingKeys);
+        setExistingKeys(existingKeySet);
+      }
+
+      // 2. 파일 파싱
       const formData = new FormData();
       formData.append('file', file);
 
@@ -177,9 +201,33 @@ export function BankUpload() {
       const result = await res.json();
 
       if (result.success) {
-        setData(result.data);
+        const parsedData = result.data as BankTransaction[];
+
+        // 3. 중복 체크: 각 항목의 복합키가 기존 데이터에 있는지 확인
+        const dupIndices = new Set<number>();
+        parsedData.forEach((tx, index) => {
+          const key = getDuplicateKey(
+            tx.transaction_date,
+            Number(tx.deposit) || 0,
+            Number(tx.withdrawal) || 0,
+            Number(tx.balance) || 0
+          );
+          if (existingKeySet.has(key)) {
+            dupIndices.add(index);
+          }
+        });
+        setDuplicateIndices(dupIndices);
+
+        setData(parsedData);
         setStep('preview');
-        toast.success(`${result.data.length}건의 거래 데이터를 불러왔습니다`);
+
+        const dupCount = dupIndices.size;
+        const newCount = parsedData.length - dupCount;
+        if (dupCount > 0) {
+          toast.success(`${parsedData.length}건 중 ${newCount}건 신규, ${dupCount}건 중복(회색)`);
+        } else {
+          toast.success(`${parsedData.length}건의 거래 데이터를 불러왔습니다`);
+        }
       } else {
         toast.error(result.error || '파일 파싱 중 오류가 발생했습니다');
       }
@@ -207,8 +255,11 @@ export function BankUpload() {
 
   // 은행원장에 반영 (1단계)
   const handleSave = async () => {
-    if (data.length === 0) {
-      toast.error('저장할 데이터가 없습니다');
+    // 중복 제외한 신규 데이터만 필터링
+    const newData = data.filter((_, index) => !duplicateIndices.has(index));
+
+    if (newData.length === 0) {
+      toast.error('저장할 신규 데이터가 없습니다 (모두 중복)');
       return;
     }
 
@@ -218,16 +269,21 @@ export function BankUpload() {
       const res = await fetch('/api/upload/bank/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactions: data }),
+        body: JSON.stringify({ transactions: newData }),
       });
 
       const result = await res.json();
 
       if (result.success) {
         setResult(result);
-        setSavedTransactionIds(data.map(tx => tx.id));
+        setSavedTransactionIds(newData.map(tx => tx.id));
         setStep('saved');
-        toast.success(result.message);
+        const dupCount = duplicateIndices.size;
+        if (dupCount > 0) {
+          toast.success(`${result.message} (${dupCount}건 중복 제외)`);
+        } else {
+          toast.success(result.message);
+        }
       } else {
         toast.error(result.error || '저장 중 오류가 발생했습니다');
       }
@@ -1131,6 +1187,18 @@ export function BankUpload() {
                 </div>
               )}
 
+              {/* 중복 경고 메시지 */}
+              {step !== 'matched' && step !== 'confirmed' && duplicateIndices.size > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-amber-600" />
+                  <span className="text-sm text-amber-700">
+                    <span className="font-medium">{duplicateIndices.size}건</span>의 중복 데이터가 감지되었습니다.
+                    중복 항목은 <span className="text-slate-500">회색</span>으로 표시되며 저장에서 제외됩니다.
+                    (신규: <span className="font-medium text-green-600">{data.length - duplicateIndices.size}건</span>)
+                  </span>
+                </div>
+              )}
+
               {/* 기준일별 합계 (step이 matched 이전일 때만 표시) */}
               {step !== 'matched' && step !== 'confirmed' && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -1163,6 +1231,7 @@ export function BankUpload() {
                     <TableHeader className="sticky top-0 bg-white">
                       <TableRow>
                         <TableHead className="w-[50px]">No</TableHead>
+                        <TableHead className="w-[50px]">상태</TableHead>
                         <TableHead className="min-w-[100px]">거래일</TableHead>
                         <TableHead className="min-w-[100px]">기준일</TableHead>
                         <TableHead className="min-w-[100px] text-right">출금</TableHead>
@@ -1175,9 +1244,18 @@ export function BankUpload() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.map((item, index) => (
-                        <TableRow key={item.id}>
+                      {data.map((item, index) => {
+                        const isDuplicate = duplicateIndices.has(index);
+                        return (
+                        <TableRow key={item.id} className={cn(isDuplicate && 'bg-slate-100 opacity-60')}>
                           <TableCell className="font-medium text-sm">{index + 1}</TableCell>
+                          <TableCell>
+                            {isDuplicate ? (
+                              <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-xs font-medium">중복</span>
+                            ) : (
+                              <span className="text-slate-300 text-xs">-</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-sm">{item.transaction_date}</TableCell>
                           <TableCell className="text-sm text-blue-600">{item.date}</TableCell>
                           <TableCell className="text-right">
@@ -1246,7 +1324,8 @@ export function BankUpload() {
                             )}
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

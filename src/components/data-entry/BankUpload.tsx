@@ -820,8 +820,8 @@ export function BankUpload() {
                             <TableHead className="w-[50px]">코드</TableHead>
                             <TableHead className="w-[80px]">헌금자</TableHead>
                             <TableHead className="w-[80px]">대표자</TableHead>
-                            <TableHead className="w-[90px] text-right">금액</TableHead>
-                            <TableHead className="w-[120px]">비고</TableHead>
+                            <TableHead className="w-[70px] text-right">금액</TableHead>
+                            <TableHead className="w-[160px]">비고</TableHead>
                             <TableHead className="w-[40px]"></TableHead>
                           </TableRow>
                         </TableHeader>
@@ -900,7 +900,7 @@ export function BankUpload() {
                                     type="number"
                                     value={item.record?.amount || 0}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                    className="h-6 text-sm text-right w-24 text-green-600"
+                                    className="h-6 text-sm text-right w-16 text-green-600"
                                   />
                                 )}
                               </TableCell>

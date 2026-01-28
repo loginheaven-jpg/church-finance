@@ -520,11 +520,11 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.representative || ''}
                                 onChange={(e) => handleUnifiedIncomeChange(index, 'representative', e.target.value)}
-                                className="h-6 text-sm w-20"
+                                className="h-6 text-sm w-28"
                               />
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right pr-1">
                             {item.type === 'suppressed' ? (
                               <span className="text-sm text-red-600 font-medium">+{item.transaction.deposit.toLocaleString()}</span>
                             ) : (

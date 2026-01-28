@@ -321,20 +321,38 @@ function findRepresentative(donorName: string, donors: DonorInfo[]): string {
 const OFFERING_KEYWORDS = ['십일', '주일', '감사', '선교', '구제', '건축', '성전', '특별'];
 
 // detail에서 헌금자명 추출
-// - "김길동십일조" → "김길동" (앞 3자리)
-// - "십일조최병희" → "최병희" (뒤 3자리)
+// 우선순위:
+// 1. 괄호 안의 내용: "감사(김윤희)" → "김윤희"
+// 2. 키워드로 시작하면 뒤에서 추출: "십일조최병희" → "최병희"
+// 3. 기본: 앞 3자리: "김길동십일조" → "김길동"
 function extractDonorName(detail: string | undefined): string {
-  if (!detail || detail.length < 3) return detail || '';
+  if (!detail || detail.length < 2) return detail || '';
 
-  // 헌금 키워드로 시작하면 뒤 3자리가 이름
-  const startsWithKeyword = OFFERING_KEYWORDS.some(kw => detail.startsWith(kw));
-  if (startsWithKeyword) {
-    // 뒤 3자리 추출 (최소 3자 이상일 때)
-    return detail.slice(-3);
+  // 1. 괄호 안의 내용 추출 (우선순위 최상)
+  const bracketMatch = detail.match(/[(\[（]([^)\]）]+)[)\]）]/);
+  if (bracketMatch && bracketMatch[1]) {
+    // 괄호 안 내용에서 기호 제거 후 반환
+    return bracketMatch[1].replace(/[^가-힣a-zA-Z0-9]/g, '');
   }
 
-  // 기본: 앞 3자리가 이름
-  return detail.substring(0, 3);
+  // 2. 헌금 키워드로 시작하면 뒤에서 이름 추출
+  const startsWithKeyword = OFFERING_KEYWORDS.some(kw => detail.startsWith(kw));
+  if (startsWithKeyword) {
+    // 뒤에서 한글 이름만 추출 (기호 제외)
+    const cleaned = detail.replace(/[^가-힣]/g, '');
+    // 키워드 부분 제거 후 남은 부분
+    for (const kw of OFFERING_KEYWORDS) {
+      if (cleaned.startsWith(kw)) {
+        const name = cleaned.slice(kw.length);
+        return name || cleaned.slice(-3);
+      }
+    }
+    return cleaned.slice(-3) || detail.slice(-3);
+  }
+
+  // 3. 기본: 앞 3자리 (기호 제외)
+  const cleaned = detail.replace(/[^가-힣a-zA-Z0-9]/g, '');
+  return cleaned.substring(0, 3) || detail.substring(0, 3);
 }
 
 // 수입 레코드 생성

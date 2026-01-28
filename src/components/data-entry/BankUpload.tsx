@@ -485,18 +485,37 @@ export function BankUpload() {
       const result = await res.json();
       console.log('[handleConfirm] API 응답:', result);
 
-      if (result.success) {
+      // 부분 성공 처리: 성공한 항목은 즉시 리스트에서 제거
+      if (result.incomeSuccess) {
+        setUnifiedIncome(prev => prev.filter(item => item.type === 'suppressed'));
+      }
+      if (result.expenseSuccess) {
+        setUnifiedExpense(prev => prev.filter(item => item.type === 'suppressed'));
+      }
+      // 말소 처리 성공 시 말소 항목도 제거
+      if (result.suppressedSuccess && result.suppressedCount > 0) {
+        setUnifiedIncome(prev => prev.filter(item => item.type !== 'suppressed'));
+        setUnifiedExpense(prev => prev.filter(item => item.type !== 'suppressed'));
+      }
+
+      // 모두 성공했거나 처리할 데이터가 없으면 완료
+      const allSuccess = result.incomeSuccess !== false && result.expenseSuccess !== false && result.suppressedSuccess !== false;
+
+      if (allSuccess && result.success) {
         setStep('confirmed');
-        setUnifiedIncome([]);  // 중복 반영 방지를 위해 즉시 초기화
-        setUnifiedExpense([]); // 중복 반영 방지를 위해 즉시 초기화
-        // 성공 시 confirming을 true로 유지하여 중복 클릭 방지
+        setUnifiedIncome([]);
+        setUnifiedExpense([]);
         toast.success(result.message);
         setTimeout(() => {
           resetAll();
         }, 3000);
+      } else if (result.success) {
+        // 부분 성공: 성공한 항목 메시지 표시, 남은 항목 재시도 가능
+        toast.warning(result.message);
+        setConfirming(false);
       } else {
         toast.error(result.error || '반영 중 오류가 발생했습니다');
-        setConfirming(false);  // 실패 시에만 버튼 다시 활성화
+        setConfirming(false);
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -505,7 +524,7 @@ export function BankUpload() {
         toast.error('반영 중 오류가 발생했습니다');
       }
       console.error('[handleConfirm] 에러:', error);
-      setConfirming(false);  // 에러 시에만 버튼 다시 활성화
+      setConfirming(false);
     }
   };
 

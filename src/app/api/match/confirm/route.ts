@@ -19,39 +19,38 @@ interface MatchedExpenseItem {
   match: MatchingRule | null;
 }
 
-// 배치 확정 API
+// 배치 확정 API - 수입/지출을 독립적으로 처리하여 부분 성공 허용
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const {
-      income,
-      expense,
-      suppressed,
-    } = body as {
-      income: MatchedIncomeItem[];
-      expense: MatchedExpenseItem[];
-      suppressed: BankTransaction[];
-    };
+  const body = await request.json();
+  const {
+    income,
+    expense,
+    suppressed,
+  } = body as {
+    income: MatchedIncomeItem[];
+    expense: MatchedExpenseItem[];
+    suppressed: BankTransaction[];
+  };
 
-    // 디버깅: 수신된 데이터 확인
-    console.log('[match/confirm] 수신 데이터:', {
-      incomeCount: income?.length || 0,
-      expenseCount: expense?.length || 0,
-      suppressedCount: suppressed?.length || 0,
-      expenseRecords: expense?.map(e => ({
-        id: e.record?.id,
-        vendor: e.record?.vendor,
-        amount: e.record?.amount,
-        account_code: e.record?.account_code
-      }))
-    });
+  // 디버깅: 수신된 데이터 확인
+  console.log('[match/confirm] 수신 데이터:', {
+    incomeCount: income?.length || 0,
+    expenseCount: expense?.length || 0,
+    suppressedCount: suppressed?.length || 0,
+  });
 
-    let incomeCount = 0;
-    let expenseCount = 0;
-    let suppressedCount = 0;
+  let incomeCount = 0;
+  let expenseCount = 0;
+  let suppressedCount = 0;
+  let incomeSuccess = true;
+  let expenseSuccess = true;
+  let suppressedSuccess = true;
+  let incomeError = '';
+  let expenseError = '';
 
-    // 수입 레코드 저장
-    if (income && income.length > 0) {
+  // 수입 레코드 저장 (독립적 처리)
+  if (income && income.length > 0) {
+    try {
       const incomeRecords = income.map(item => item.record);
       await addIncomeRecords(incomeRecords);
 
@@ -73,10 +72,17 @@ export async function POST(request: NextRequest) {
       }
 
       incomeCount = incomeRecords.length;
+      console.log('[match/confirm] 수입 레코드 저장 완료:', incomeCount, '건');
+    } catch (error) {
+      incomeSuccess = false;
+      incomeError = error instanceof Error ? error.message : String(error);
+      console.error('[match/confirm] 수입 레코드 저장 실패:', incomeError);
     }
+  }
 
-    // 지출 레코드 저장
-    if (expense && expense.length > 0) {
+  // 지출 레코드 저장 (독립적 처리)
+  if (expense && expense.length > 0) {
+    try {
       // undefined record 필터링 및 유효성 검사
       const validExpenseItems = expense.filter(item => {
         if (!item.record) {
@@ -93,15 +99,9 @@ export async function POST(request: NextRequest) {
       if (validExpenseItems.length > 0) {
         const expenseRecords = validExpenseItems.map(item => item.record);
         console.log('[match/confirm] 지출 레코드 저장 시작:', expenseRecords.length, '건');
-        console.log('[match/confirm] 첫 번째 레코드 샘플:', JSON.stringify(expenseRecords[0], null, 2));
 
-        try {
-          await addExpenseRecords(expenseRecords);
-          console.log('[match/confirm] 지출 레코드 저장 완료');
-        } catch (expenseError) {
-          console.error('[match/confirm] 지출 레코드 저장 실패:', expenseError);
-          throw expenseError;
-        }
+        await addExpenseRecords(expenseRecords);
+        console.log('[match/confirm] 지출 레코드 저장 완료');
 
         // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가
         for (const item of validExpenseItems) {
@@ -121,15 +121,17 @@ export async function POST(request: NextRequest) {
         }
 
         expenseCount = expenseRecords.length;
-      } else {
-        console.log('[match/confirm] 유효한 지출 레코드 없음');
       }
-    } else {
-      console.log('[match/confirm] 지출 데이터 없음 - expense:', expense);
+    } catch (error) {
+      expenseSuccess = false;
+      expenseError = error instanceof Error ? error.message : String(error);
+      console.error('[match/confirm] 지출 레코드 저장 실패:', expenseError);
     }
+  }
 
-    // 말소 처리
-    if (suppressed && suppressed.length > 0) {
+  // 말소 처리 (독립적 처리)
+  if (suppressed && suppressed.length > 0) {
+    try {
       for (const tx of suppressed) {
         await updateBankTransaction(tx.id, {
           matched_status: 'suppressed',
@@ -137,25 +139,39 @@ export async function POST(request: NextRequest) {
           suppressed_reason: tx.suppressed_reason || '자동 말소',
         });
       }
-
       suppressedCount = suppressed.length;
+    } catch (error) {
+      suppressedSuccess = false;
+      console.error('[match/confirm] 말소 처리 실패:', error);
     }
-
-    return NextResponse.json({
-      success: true,
-      incomeCount,
-      expenseCount,
-      suppressedCount,
-      message: `수입 ${incomeCount}건, 지출 ${expenseCount}건, 말소 ${suppressedCount}건 반영 완료`,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : '';
-    console.error('Match confirm error:', errorMessage);
-    console.error('Stack:', errorStack);
-    return NextResponse.json(
-      { success: false, error: `반영 중 오류: ${errorMessage}` },
-      { status: 500 }
-    );
   }
+
+  // 부분 성공 메시지 생성
+  const messages: string[] = [];
+  if (incomeCount > 0) messages.push(`수입 ${incomeCount}건`);
+  if (expenseCount > 0) messages.push(`지출 ${expenseCount}건`);
+  if (suppressedCount > 0) messages.push(`말소 ${suppressedCount}건`);
+
+  const errors: string[] = [];
+  if (!incomeSuccess) errors.push(`수입 실패: ${incomeError}`);
+  if (!expenseSuccess) errors.push(`지출 실패: ${expenseError}`);
+  if (!suppressedSuccess) errors.push('말소 실패');
+
+  // 하나라도 성공했으면 success: true (부분 성공 허용)
+  const hasAnySuccess = incomeCount > 0 || expenseCount > 0 || suppressedCount > 0;
+  const hasAnyFailure = !incomeSuccess || !expenseSuccess || !suppressedSuccess;
+
+  return NextResponse.json({
+    success: hasAnySuccess,
+    incomeCount,
+    expenseCount,
+    suppressedCount,
+    incomeSuccess,
+    expenseSuccess,
+    suppressedSuccess,
+    message: messages.length > 0
+      ? `${messages.join(', ')} 반영 완료${hasAnyFailure ? ` (일부 실패: ${errors.join(', ')})` : ''}`
+      : '반영할 데이터가 없습니다',
+    error: hasAnyFailure && !hasAnySuccess ? errors.join(', ') : undefined,
+  });
 }

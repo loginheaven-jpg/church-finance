@@ -80,6 +80,11 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Google Sheets API 속도 제한 방지를 위한 딜레이
+  if (income && income.length > 0 && expense && expense.length > 0) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
   // 지출 레코드 저장 (독립적 처리)
   if (expense && expense.length > 0) {
     try {
@@ -127,6 +132,11 @@ export async function POST(request: NextRequest) {
       expenseError = error instanceof Error ? error.message : String(error);
       console.error('[match/confirm] 지출 레코드 저장 실패:', expenseError);
     }
+  }
+
+  // Google Sheets API 속도 제한 방지를 위한 딜레이
+  if ((income?.length > 0 || expense?.length > 0) && suppressed && suppressed.length > 0) {
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   // 말소 처리 (독립적 처리)

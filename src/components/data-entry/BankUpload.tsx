@@ -444,7 +444,7 @@ export function BankUpload() {
       });
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90초 (Google Sheets API 다중 호출 고려)
 
       const res = await fetch('/api/match/confirm', {
         method: 'POST',
@@ -551,7 +551,7 @@ export function BankUpload() {
       });
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90초 (Google Sheets API 다중 호출 고려)
 
       const res = await fetch('/api/match/confirm', {
         method: 'POST',

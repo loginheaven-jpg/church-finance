@@ -81,21 +81,22 @@ export async function POST(request: NextRequest) {
         const incomeRecords = newIncomeItems.map(item => item.record);
         await addIncomeRecords(incomeRecords);
 
-        // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가 (실패해도 계속 진행)
-        for (const item of newIncomeItems) {
-          try {
-            await updateBankTransaction(item.transaction.id, {
-              matched_status: 'matched',
-              matched_type: 'income_detail',
-              matched_ids: item.record.id,
-            });
+        // 은행 거래 상태 업데이트 (병렬 처리로 속도 개선)
+        const updatePromises = newIncomeItems.map(item =>
+          updateBankTransaction(item.transaction.id, {
+            matched_status: 'matched',
+            matched_type: 'income_detail',
+            matched_ids: item.record.id,
+          }).catch(err => {
+            console.warn('[match/confirm] 수입 은행거래 업데이트 실패 (무시):', item.transaction.id, err);
+          })
+        );
+        await Promise.allSettled(updatePromises);
 
-            if (item.match?.id) {
-              await incrementRuleUsage(item.match.id);
-            }
-          } catch (updateError) {
-            console.warn('[match/confirm] 수입 은행거래 업데이트 실패 (무시):', item.transaction.id, updateError);
-          }
+        // 규칙 사용 횟수 증가 (병렬 처리)
+        const ruleIds = newIncomeItems.filter(item => item.match?.id).map(item => item.match!.id);
+        if (ruleIds.length > 0) {
+          await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
         }
 
         incomeCount = incomeRecords.length;
@@ -142,21 +143,22 @@ export async function POST(request: NextRequest) {
         await addExpenseRecords(expenseRecords);
         console.log('[match/confirm] 지출 레코드 저장 완료');
 
-        // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가
-        for (const item of validExpenseItems) {
-          try {
-            await updateBankTransaction(item.transaction.id, {
-              matched_status: 'matched',
-              matched_type: 'expense_detail',
-              matched_ids: item.record.id,
-            });
+        // 은행 거래 상태 업데이트 (병렬 처리로 속도 개선)
+        const updatePromises = validExpenseItems.map(item =>
+          updateBankTransaction(item.transaction.id, {
+            matched_status: 'matched',
+            matched_type: 'expense_detail',
+            matched_ids: item.record.id,
+          }).catch(err => {
+            console.error('[match/confirm] 은행거래 업데이트 실패:', item.transaction.id, err);
+          })
+        );
+        await Promise.allSettled(updatePromises);
 
-            if (item.match?.id) {
-              await incrementRuleUsage(item.match.id);
-            }
-          } catch (updateError) {
-            console.error('[match/confirm] 은행거래 업데이트 실패:', item.transaction.id, updateError);
-          }
+        // 규칙 사용 횟수 증가 (병렬 처리)
+        const ruleIds = validExpenseItems.filter(item => item.match?.id).map(item => item.match!.id);
+        if (ruleIds.length > 0) {
+          await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
         }
 
         expenseCount = expenseRecords.length;
@@ -173,21 +175,32 @@ export async function POST(request: NextRequest) {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  // 말소 처리 (독립적 처리, 서버 상태 기준으로 중복 방지)
+  // 말소 처리 (병렬 처리, 서버 상태 기준으로 중복 방지)
   if (suppressed && suppressed.length > 0) {
     try {
-      for (const tx of suppressed) {
+      // 중복 필터링
+      const newSuppressed = suppressed.filter(tx => {
         const serverStatus = bankStatusMap.get(tx.id) || tx.matched_status;
         if (serverStatus === 'suppressed' || serverStatus === 'matched') {
           console.warn('[match/confirm] 이미 처리된 말소 거래 스킵:', tx.id, '상태:', serverStatus);
-          continue;
+          return false;
         }
-        await updateBankTransaction(tx.id, {
-          matched_status: 'suppressed',
-          suppressed: true,
-          suppressed_reason: tx.suppressed_reason || '자동 말소',
-        });
-        suppressedCount++;
+        return true;
+      });
+
+      // 병렬 처리
+      if (newSuppressed.length > 0) {
+        const suppressPromises = newSuppressed.map(tx =>
+          updateBankTransaction(tx.id, {
+            matched_status: 'suppressed',
+            suppressed: true,
+            suppressed_reason: tx.suppressed_reason || '자동 말소',
+          }).catch(err => {
+            console.error('[match/confirm] 말소 처리 실패:', tx.id, err);
+          })
+        );
+        await Promise.allSettled(suppressPromises);
+        suppressedCount = newSuppressed.length;
       }
     } catch (error) {
       suppressedSuccess = false;

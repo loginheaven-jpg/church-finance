@@ -13,6 +13,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Loader2, CheckCircle2, RefreshCw, Upload, FileSpreadsheet, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CashOffering, SyncResult } from '@/types';
@@ -43,6 +53,7 @@ export function CashOfferingSync() {
   const [hasChanges, setHasChanges] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [existingKeys, setExistingKeys] = useState<Set<string>>(new Set());
+  const [showFetchDialog, setShowFetchDialog] = useState(false);
 
   // 헌금함 데이터 갱신 (Apps Script 호출)
   const handleRefresh = async () => {
@@ -55,6 +66,7 @@ export function CashOfferingSync() {
 
       if (result.success) {
         toast.success('헌금함 데이터가 갱신되었습니다');
+        setShowFetchDialog(true); // 갱신 성공 시 데이터 가져오기 확인 팝업
       } else {
         toast.error(result.error || '헌금함 갱신 실패');
       }
@@ -267,7 +279,7 @@ export function CashOfferingSync() {
             ) : (
               <>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                구글시트에서 가져오기
+                데이터 가져오기
               </>
             )}
           </Button>
@@ -432,10 +444,31 @@ export function CashOfferingSync() {
         {data.length === 0 && !loading && !syncResult && (
           <div className="text-center py-8 text-slate-500">
             <FileSpreadsheet className="h-12 w-12 mx-auto mb-3 text-slate-300" />
-            <p>&apos;구글시트에서 가져오기&apos; 버튼을 클릭하여<br />현금헌금 데이터를 불러오세요</p>
+            <p>&apos;데이터 가져오기&apos; 버튼을 클릭하여<br />현금헌금 데이터를 불러오세요</p>
           </div>
         )}
       </CardContent>
+
+      {/* 데이터 가져오기 확인 팝업 */}
+      <AlertDialog open={showFetchDialog} onOpenChange={setShowFetchDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>데이터를 가져올까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              헌금함 데이터가 갱신되었습니다. 지금 바로 데이터를 가져오시겠습니까?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>나중에</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setShowFetchDialog(false);
+              handleLoadData();
+            }}>
+              가져오기
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

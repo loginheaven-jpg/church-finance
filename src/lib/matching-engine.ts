@@ -408,7 +408,7 @@ function createIncomeFromBankTransactionWithCode(
     donor_name: tx.detail || name,
     representative: tx.detail || name,
     amount: tx.deposit,
-    note: `${tx.description} | ${tx.detail} (기본분류)`,
+    note: `${tx.description} | ${tx.detail}`,
     input_method: '은행원장',
     created_at: getKSTDateTime(),
     created_by: 'auto_matcher',

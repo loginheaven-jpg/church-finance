@@ -440,7 +440,7 @@ export function FinanceReflection() {
             <div className="flex-1 min-h-0">
               {/* 수입부 탭 */}
               {activeTab === 'income' && (
-                <div className="rounded-md border h-full overflow-auto">
+                <div className="rounded-md border h-full overflow-auto relative">
                   <Table>
                     <TableHeader className="sticky top-0 bg-white z-10">
                       <TableRow>
@@ -451,9 +451,9 @@ export function FinanceReflection() {
                         <TableHead className="w-[70px]">입금경로</TableHead>
                         <TableHead className="w-[60px]">코드</TableHead>
                         <TableHead className="w-[80px]">헌금자</TableHead>
-                        <TableHead className="w-[100px]">대표자</TableHead>
-                        <TableHead className="w-[100px] text-right">금액</TableHead>
-                        <TableHead className="w-[200px]">비고</TableHead>
+                        <TableHead className="w-[80px]">대표자</TableHead>
+                        <TableHead className="w-[90px] text-right">금액</TableHead>
+                        <TableHead className="w-[280px]">비고</TableHead>
                         <TableHead className="w-[40px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -520,7 +520,7 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.representative || ''}
                                 onChange={(e) => handleUnifiedIncomeChange(index, 'representative', e.target.value)}
-                                className="h-6 text-sm w-32"
+                                className="h-6 text-sm w-20"
                               />
                             )}
                           </TableCell>
@@ -532,7 +532,7 @@ export function FinanceReflection() {
                                 type="number"
                                 value={item.record?.amount || 0}
                                 onChange={(e) => handleUnifiedIncomeChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                className="h-6 text-sm text-right w-28 text-green-600"
+                                className="h-6 text-sm text-right w-24 text-green-600"
                               />
                             )}
                           </TableCell>
@@ -543,7 +543,7 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.note || ''}
                                 onChange={(e) => handleUnifiedIncomeChange(index, 'note', e.target.value)}
-                                className="h-6 text-sm w-48"
+                                className="h-6 text-sm w-64"
                               />
                             )}
                           </TableCell>
@@ -571,7 +571,7 @@ export function FinanceReflection() {
 
               {/* 지출부 탭 */}
               {activeTab === 'expense' && (
-                <div className="rounded-md border h-full overflow-auto">
+                <div className="rounded-md border h-full overflow-auto relative">
                   <Table>
                     <TableHeader className="sticky top-0 bg-white z-10">
                       <TableRow>
@@ -584,7 +584,7 @@ export function FinanceReflection() {
                         <TableHead className="w-[120px]">적요</TableHead>
                         <TableHead className="w-[90px] text-right">금액</TableHead>
                         <TableHead className="w-[60px]">계정</TableHead>
-                        <TableHead className="w-[120px]">비고</TableHead>
+                        <TableHead className="w-[200px]">비고</TableHead>
                         <TableHead className="w-[40px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -672,14 +672,14 @@ export function FinanceReflection() {
                                 type="number"
                                 value={item.record?.amount || item.transaction.withdrawal}
                                 onChange={(e) => handleUnifiedExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                className="h-6 text-sm text-right w-28 text-amber-700 bg-amber-50"
+                                className="h-6 text-sm text-right w-24 text-amber-700 bg-amber-50"
                               />
                             ) : (
                               <Input
                                 type="number"
                                 value={item.record?.amount || 0}
                                 onChange={(e) => handleUnifiedExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
-                                className="h-6 text-sm text-right w-28 text-red-600"
+                                className="h-6 text-sm text-right w-24 text-red-600"
                               />
                             )}
                           </TableCell>
@@ -711,7 +711,7 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.note || ''}
                                 onChange={(e) => handleUnifiedExpenseChange(index, 'note', e.target.value)}
-                                className="h-6 text-sm w-28"
+                                className="h-6 text-sm w-48"
                               />
                             )}
                           </TableCell>

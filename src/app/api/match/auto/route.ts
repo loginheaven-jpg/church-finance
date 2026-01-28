@@ -317,9 +317,23 @@ function findRepresentative(donorName: string, donors: DonorInfo[]): string {
   return donor?.representative || donorName;
 }
 
-// detail에서 헌금자명 추출 (좌측 3자리)
+// 헌금 키워드 (이 키워드로 시작하면 뒤에서 이름 추출)
+const OFFERING_KEYWORDS = ['십일', '주일', '감사', '선교', '구제', '건축', '성전', '특별'];
+
+// detail에서 헌금자명 추출
+// - "김길동십일조" → "김길동" (앞 3자리)
+// - "십일조최병희" → "최병희" (뒤 3자리)
 function extractDonorName(detail: string | undefined): string {
-  if (!detail) return '';
+  if (!detail || detail.length < 3) return detail || '';
+
+  // 헌금 키워드로 시작하면 뒤 3자리가 이름
+  const startsWithKeyword = OFFERING_KEYWORDS.some(kw => detail.startsWith(kw));
+  if (startsWithKeyword) {
+    // 뒤 3자리 추출 (최소 3자 이상일 때)
+    return detail.slice(-3);
+  }
+
+  // 기본: 앞 3자리가 이름
   return detail.substring(0, 3);
 }
 

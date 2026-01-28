@@ -647,17 +647,26 @@ export async function updateBankTransaction(
   const rows = await readSheet(FINANCE_CONFIG.sheets.bank);
   const rowIndex = rows.findIndex(row => row[0] === id);
 
-  if (rowIndex === -1) throw new Error(`Bank transaction ${id} not found`);
+  if (rowIndex === -1) {
+    console.error('[updateBankTransaction] ID not found:', id, 'Total rows:', rows.length);
+    throw new Error(`Bank transaction ${id} not found`);
+  }
 
   const headers = rows[0];
   const currentRow = rows[rowIndex];
 
+  // currentRow가 headers보다 짧을 수 있으므로 undefined 대신 빈 문자열 사용
   const updatedRow = headers.map((header, idx) => {
     if (header in updates) {
-      return (updates as Record<string, unknown>)[header];
+      const value = (updates as Record<string, unknown>)[header];
+      // undefined나 null이면 빈 문자열로 변환
+      return value ?? '';
     }
-    return currentRow[idx];
+    // currentRow[idx]가 undefined면 빈 문자열 반환
+    return currentRow[idx] ?? '';
   });
+
+  console.log('[updateBankTransaction] Updating row', rowIndex + 1, 'for ID:', id, 'matched_status:', updates.matched_status);
 
   await updateSheet(
     FINANCE_CONFIG.sheets.bank,

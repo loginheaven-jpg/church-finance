@@ -12,6 +12,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -79,6 +88,12 @@ export function FinanceReflection() {
   const [unifiedIncome, setUnifiedIncome] = useState<UnifiedIncomeItem[]>([]);
   const [unifiedExpense, setUnifiedExpense] = useState<UnifiedExpenseItem[]>([]);
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [reflectionResult, setReflectionResult] = useState<{
+    type: 'income' | 'expense';
+    count: number;
+    suppressedCount: number;
+    amount: number;
+  } | null>(null);
 
   // 통합 리스트 생성
   const buildUnifiedLists = useCallback((result: MatchPreviewResult) => {
@@ -238,11 +253,14 @@ export function FinanceReflection() {
       const result = await res.json();
 
       if (result.incomeSuccess) {
+        const totalAmount = incomeToSave.reduce((sum, item) => sum + (item.record?.amount || 0), 0);
+        setReflectionResult({
+          type: 'income',
+          count: result.incomeCount,
+          suppressedCount: result.suppressedCount || 0,
+          amount: totalAmount,
+        });
         setUnifiedIncome([]);
-        toast.success(`수입 ${result.incomeCount}건 반영 완료`);
-      }
-      if (result.suppressedSuccess && result.suppressedCount > 0) {
-        toast.success(`말소 ${result.suppressedCount}건 처리 완료`);
       }
       if (!result.incomeSuccess) {
         toast.error(result.error || '수입 반영 중 오류가 발생했습니다');
@@ -308,11 +326,14 @@ export function FinanceReflection() {
       const result = await res.json();
 
       if (result.expenseSuccess) {
+        const totalAmount = expenseToSave.reduce((sum, item) => sum + (item.record?.amount || 0), 0);
+        setReflectionResult({
+          type: 'expense',
+          count: result.expenseCount,
+          suppressedCount: result.suppressedCount || 0,
+          amount: totalAmount,
+        });
         setUnifiedExpense([]);
-        toast.success(`지출 ${result.expenseCount}건 반영 완료`);
-      }
-      if (result.suppressedSuccess && result.suppressedCount > 0) {
-        toast.success(`말소 ${result.suppressedCount}건 처리 완료`);
       }
       if (!result.expenseSuccess) {
         toast.error(result.error || '지출 반영 중 오류가 발생했습니다');
@@ -780,6 +801,48 @@ export function FinanceReflection() {
           </div>
         )}
       </CardContent>
+
+      {/* 반영 완료 팝업 */}
+      <AlertDialog open={!!reflectionResult} onOpenChange={() => setReflectionResult(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-6 w-6 text-green-600" />
+              {reflectionResult?.type === 'income' ? '수입부' : '지출부'} 반영 완료
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 pt-2">
+                <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">반영 건수</span>
+                    <span className="font-bold text-lg text-slate-900">{reflectionResult?.count}건</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">반영 금액</span>
+                    <span className={`font-bold text-lg ${reflectionResult?.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                      {reflectionResult?.type === 'income' ? '+' : '-'}{reflectionResult?.amount.toLocaleString()}원
+                    </span>
+                  </div>
+                  {(reflectionResult?.suppressedCount || 0) > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600">말소 처리</span>
+                      <span className="font-medium text-slate-700">{reflectionResult?.suppressedCount}건</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-slate-500">
+                  Google Sheets {reflectionResult?.type === 'income' ? '수입부' : '지출부'}에 성공적으로 반영되었습니다.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setReflectionResult(null)}>
+              확인
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

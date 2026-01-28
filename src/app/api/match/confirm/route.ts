@@ -40,8 +40,9 @@ export async function POST(request: NextRequest) {
     suppressedCount: suppressed?.length || 0,
   });
 
-  // 중복 반영 방지: 서버에서 실제 은행원장 상태 조회
+  // 중복 반영 방지: 서버에서 실제 은행원장 상태만 조회 (수입/지출 전체 조회 제거로 성능 개선)
   let bankStatusMap = new Map<string, string>();
+
   try {
     const bankTransactions = await getBankTransactions();
     bankStatusMap = new Map(bankTransactions.map(tx => [tx.id, tx.matched_status || 'pending']));

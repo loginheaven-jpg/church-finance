@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CashOfferingSync } from '@/components/data-entry/CashOfferingSync';
 import { BankUpload } from '@/components/data-entry/BankUpload';
-import { CardUpload } from '@/components/data-entry/CardUpload';
+import { FinanceReflection } from '@/components/data-entry/FinanceReflection';
 
 export default function DataEntryPage() {
   const [activeTab, setActiveTab] = useState('sync');
@@ -17,7 +17,7 @@ export default function DataEntryPage() {
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="sync">현금헌금 동기화</TabsTrigger>
           <TabsTrigger value="bank">은행원장 업로드</TabsTrigger>
-          <TabsTrigger value="card">카드내역 업로드</TabsTrigger>
+          <TabsTrigger value="finance">재정부 반영</TabsTrigger>
         </TabsList>
 
         <TabsContent value="sync" className="mt-6">
@@ -28,8 +28,8 @@ export default function DataEntryPage() {
           <BankUpload />
         </TabsContent>
 
-        <TabsContent value="card" className="mt-6">
-          <CardUpload />
+        <TabsContent value="finance" className="mt-6">
+          <FinanceReflection />
         </TabsContent>
       </Tabs>
     </div>

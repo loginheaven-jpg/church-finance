@@ -88,7 +88,8 @@ export function BankUpload() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [matching, setMatching] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [confirmingIncome, setConfirmingIncome] = useState(false);
+  const [confirmingExpense, setConfirmingExpense] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [data, setData] = useState<BankTransaction[]>([]);
   const [result, setResult] = useState<{ uploaded: number; message: string } | null>(null);
@@ -138,7 +139,8 @@ export function BankUpload() {
     setActiveTab('income');
     setUnifiedIncome([]);
     setUnifiedExpense([]);
-    setConfirming(false);
+    setConfirmingIncome(false);
+    setConfirmingExpense(false);
     setExistingKeys(new Set());
     setDuplicateIndices(new Set());
   }, []);
@@ -405,67 +407,36 @@ export function BankUpload() {
     setUnifiedExpense(prev => prev.filter((_, i) => i !== index));
   };
 
-  // 정식 반영 (3단계)
-  const handleConfirm = async () => {
-    // 중복 클릭 방지 - 이미 confirming 중이거나 step이 matched가 아니면 무시
-    if (confirming || step !== 'matched') {
+  // 수입부 반영 (3단계 - 수입)
+  const handleConfirmIncome = async () => {
+    // 중복 클릭 방지
+    if (confirmingIncome || step !== 'matched') {
       return;
     }
 
-    if (unifiedIncome.length === 0 && unifiedExpense.length === 0) {
-      toast.error('반영할 데이터가 없습니다');
+    // 반영할 수입 항목 확인
+    const incomeToSave = unifiedIncome
+      .filter(item => item.type === 'matched' && item.record)
+      .map(item => ({ transaction: item.transaction, record: item.record!, match: item.match }));
+
+    // 수입 관련 말소 항목
+    const suppressedIncomeToSave = unifiedIncome
+      .filter(item => item.type === 'suppressed')
+      .map(item => item.transaction);
+
+    if (incomeToSave.length === 0 && suppressedIncomeToSave.length === 0) {
+      toast.error('반영할 수입 데이터가 없습니다');
       return;
     }
 
-    setConfirming(true);
+    setConfirmingIncome(true);
 
     try {
-      // 통합 리스트에서 매칭된 항목만 추출
-      const incomeToSave = unifiedIncome
-        .filter(item => item.type === 'matched' && item.record)
-        .map(item => ({ transaction: item.transaction, record: item.record!, match: item.match }));
-
-      // 지출: matched + needsReview 모두 반영 (needsReview는 record 자동 생성)
-      const expenseToSave = unifiedExpense
-        .filter(item => item.type === 'matched' || item.type === 'needsReview')
-        .map(item => {
-          if (item.type === 'matched' && item.record) {
-            return { transaction: item.transaction, record: item.record, match: item.match };
-          }
-          // needsReview → record 자동 생성
-          const now = new Date().toISOString();
-          const newRecord: ExpenseRecord = {
-            id: `EXP-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-            date: item.transaction.date,
-            payment_method: '계좌이체',
-            vendor: item.transaction.memo || item.transaction.detail || '기타',
-            description: item.transaction.description || '',
-            amount: item.transaction.withdrawal,
-            account_code: item.suggestions?.[0]?.target_code || 0,
-            category_code: Math.floor((item.suggestions?.[0]?.target_code || 0) / 10) * 10,
-            note: item.transaction.detail || '',
-            created_at: now,
-            created_by: 'auto_review',
-            transaction_date: item.transaction.transaction_date,
-          };
-          return { transaction: item.transaction, record: newRecord, match: item.suggestions?.[0] || null };
-        });
-
-      // 말소 항목 추출
-      const suppressedToSave = [
-        ...unifiedIncome.filter(item => item.type === 'suppressed').map(item => item.transaction),
-        ...unifiedExpense.filter(item => item.type === 'suppressed').map(item => item.transaction),
-      ];
-
-      // 디버깅: 전송되는 데이터 확인
-      console.log('[handleConfirm] 전송 데이터:', {
+      console.log('[handleConfirmIncome] 전송 데이터:', {
         income: incomeToSave.length,
-        expense: expenseToSave.length,
-        suppressed: suppressedToSave.length,
-        expenseDetails: expenseToSave.map(e => ({ vendor: e.record.vendor, amount: e.record.amount, account_code: e.record.account_code }))
+        suppressed: suppressedIncomeToSave.length,
       });
 
-      // 30초 타임아웃 설정
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -474,8 +445,8 @@ export function BankUpload() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           income: incomeToSave,
-          expense: expenseToSave,
-          suppressed: suppressedToSave,
+          expense: [],
+          suppressed: suppressedIncomeToSave,
         }),
         signal: controller.signal,
       });
@@ -483,48 +454,148 @@ export function BankUpload() {
       clearTimeout(timeoutId);
 
       const result = await res.json();
-      console.log('[handleConfirm] API 응답:', result);
+      console.log('[handleConfirmIncome] API 응답:', result);
 
-      // 부분 성공 처리: 성공한 항목은 즉시 리스트에서 제거
       if (result.incomeSuccess) {
+        // 수입 항목 리스트에서 제거
         setUnifiedIncome(prev => prev.filter(item => item.type === 'suppressed'));
+        toast.success(`수입 ${result.incomeCount}건 반영 완료`);
       }
-      if (result.expenseSuccess) {
-        setUnifiedExpense(prev => prev.filter(item => item.type === 'suppressed'));
-      }
-      // 말소 처리 성공 시 말소 항목도 제거
       if (result.suppressedSuccess && result.suppressedCount > 0) {
+        // 말소 항목도 제거
         setUnifiedIncome(prev => prev.filter(item => item.type !== 'suppressed'));
-        setUnifiedExpense(prev => prev.filter(item => item.type !== 'suppressed'));
+        toast.success(`말소 ${result.suppressedCount}건 처리 완료`);
       }
 
-      // 모두 성공했거나 처리할 데이터가 없으면 완료
-      const allSuccess = result.incomeSuccess !== false && result.expenseSuccess !== false && result.suppressedSuccess !== false;
-
-      if (allSuccess && result.success) {
+      // 수입, 지출 모두 비어있으면 완료
+      const remainingIncome = unifiedIncome.filter(item => item.type === 'matched').length - incomeToSave.length;
+      const remainingExpense = unifiedExpense.filter(item => item.type === 'matched' || item.type === 'needsReview').length;
+      if (remainingIncome === 0 && remainingExpense === 0) {
         setStep('confirmed');
-        setUnifiedIncome([]);
-        setUnifiedExpense([]);
-        toast.success(result.message);
         setTimeout(() => {
           resetAll();
         }, 3000);
-      } else if (result.success) {
-        // 부분 성공: 성공한 항목 메시지 표시, 남은 항목 재시도 가능
-        toast.warning(result.message);
-        setConfirming(false);
-      } else {
-        toast.error(result.error || '반영 중 오류가 발생했습니다');
-        setConfirming(false);
+      }
+
+      if (!result.incomeSuccess) {
+        toast.error(result.error || '수입 반영 중 오류가 발생했습니다');
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         toast.error('요청 시간이 초과되었습니다. 다시 시도해주세요.');
       } else {
-        toast.error('반영 중 오류가 발생했습니다');
+        toast.error('수입 반영 중 오류가 발생했습니다');
       }
-      console.error('[handleConfirm] 에러:', error);
-      setConfirming(false);
+      console.error('[handleConfirmIncome] 에러:', error);
+    } finally {
+      setConfirmingIncome(false);
+    }
+  };
+
+  // 지출부 반영 (3단계 - 지출)
+  const handleConfirmExpense = async () => {
+    // 중복 클릭 방지
+    if (confirmingExpense || step !== 'matched') {
+      return;
+    }
+
+    // 지출: matched + needsReview 모두 반영
+    const expenseToSave = unifiedExpense
+      .filter(item => item.type === 'matched' || item.type === 'needsReview')
+      .map(item => {
+        if (item.type === 'matched' && item.record) {
+          return { transaction: item.transaction, record: item.record, match: item.match };
+        }
+        // needsReview → record 자동 생성
+        const now = new Date().toISOString();
+        const newRecord: ExpenseRecord = {
+          id: `EXP-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+          date: item.transaction.date,
+          payment_method: '계좌이체',
+          vendor: item.transaction.memo || item.transaction.detail || '기타',
+          description: item.transaction.description || '',
+          amount: item.transaction.withdrawal,
+          account_code: item.suggestions?.[0]?.target_code || 0,
+          category_code: Math.floor((item.suggestions?.[0]?.target_code || 0) / 10) * 10,
+          note: item.transaction.detail || '',
+          created_at: now,
+          created_by: 'auto_review',
+          transaction_date: item.transaction.transaction_date,
+        };
+        return { transaction: item.transaction, record: newRecord, match: item.suggestions?.[0] || null };
+      });
+
+    // 지출 관련 말소 항목
+    const suppressedExpenseToSave = unifiedExpense
+      .filter(item => item.type === 'suppressed')
+      .map(item => item.transaction);
+
+    if (expenseToSave.length === 0 && suppressedExpenseToSave.length === 0) {
+      toast.error('반영할 지출 데이터가 없습니다');
+      return;
+    }
+
+    setConfirmingExpense(true);
+
+    try {
+      console.log('[handleConfirmExpense] 전송 데이터:', {
+        expense: expenseToSave.length,
+        suppressed: suppressedExpenseToSave.length,
+        expenseDetails: expenseToSave.map(e => ({ vendor: e.record.vendor, amount: e.record.amount, account_code: e.record.account_code }))
+      });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const res = await fetch('/api/match/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          income: [],
+          expense: expenseToSave,
+          suppressed: suppressedExpenseToSave,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const result = await res.json();
+      console.log('[handleConfirmExpense] API 응답:', result);
+
+      if (result.expenseSuccess) {
+        // 지출 항목 리스트에서 제거
+        setUnifiedExpense(prev => prev.filter(item => item.type === 'suppressed'));
+        toast.success(`지출 ${result.expenseCount}건 반영 완료`);
+      }
+      if (result.suppressedSuccess && result.suppressedCount > 0) {
+        // 말소 항목도 제거
+        setUnifiedExpense(prev => prev.filter(item => item.type !== 'suppressed'));
+        toast.success(`말소 ${result.suppressedCount}건 처리 완료`);
+      }
+
+      // 수입, 지출 모두 비어있으면 완료
+      const remainingIncome = unifiedIncome.filter(item => item.type === 'matched').length;
+      const remainingExpense = unifiedExpense.filter(item => item.type === 'matched' || item.type === 'needsReview').length - expenseToSave.length;
+      if (remainingIncome === 0 && remainingExpense === 0) {
+        setStep('confirmed');
+        setTimeout(() => {
+          resetAll();
+        }, 3000);
+      }
+
+      if (!result.expenseSuccess) {
+        toast.error(result.error || '지출 반영 중 오류가 발생했습니다');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast.error('요청 시간이 초과되었습니다. 다시 시도해주세요.');
+      } else {
+        toast.error('지출 반영 중 오류가 발생했습니다');
+      }
+      console.error('[handleConfirmExpense] 에러:', error);
+    } finally {
+      setConfirmingExpense(false);
     }
   };
 
@@ -1202,19 +1273,33 @@ export function BankUpload() {
                     </div>
                   )}
 
-                  {/* 3단계: 정식 반영 버튼 */}
-                  <Button
-                    onClick={handleConfirm}
-                    disabled={confirming}
-                    className="w-full bg-green-600 hover:bg-green-700"
-                  >
-                    {confirming ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                    )}
-                    3단계: 정식 반영 (수입 {matchedIncomeCount}건, 지출 {matchedExpenseCount + needsReviewCount}건, 말소 {suppressedIncomeCount + suppressedExpenseCount}건)
-                  </Button>
+                  {/* 3단계: 정식 반영 버튼 (수입부/지출부 분리) */}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleConfirmIncome}
+                      disabled={confirmingIncome || matchedIncomeCount === 0}
+                      className="flex-1 bg-green-600 hover:bg-green-700"
+                    >
+                      {confirmingIncome ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                      )}
+                      수입부 반영 ({matchedIncomeCount}건{suppressedIncomeCount > 0 ? `, 말소 ${suppressedIncomeCount}` : ''})
+                    </Button>
+                    <Button
+                      onClick={handleConfirmExpense}
+                      disabled={confirmingExpense || (matchedExpenseCount + needsReviewCount) === 0}
+                      className="flex-1 bg-red-600 hover:bg-red-700"
+                    >
+                      {confirmingExpense ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                      )}
+                      지출부 반영 ({matchedExpenseCount + needsReviewCount}건{suppressedExpenseCount > 0 ? `, 말소 ${suppressedExpenseCount}` : ''})
+                    </Button>
+                  </div>
                 </div>
               )}
 

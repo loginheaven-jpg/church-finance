@@ -51,28 +51,43 @@ export async function POST(request: NextRequest) {
   // 수입 레코드 저장 (독립적 처리)
   if (income && income.length > 0) {
     try {
-      const incomeRecords = income.map(item => item.record);
-      await addIncomeRecords(incomeRecords);
-
-      // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가 (실패해도 계속 진행)
-      for (const item of income) {
-        try {
-          await updateBankTransaction(item.transaction.id, {
-            matched_status: 'matched',
-            matched_type: 'income_detail',
-            matched_ids: item.record.id,
-          });
-
-          if (item.match?.id) {
-            await incrementRuleUsage(item.match.id);
-          }
-        } catch (updateError) {
-          console.warn('[match/confirm] 수입 은행거래 업데이트 실패 (무시):', item.transaction.id, updateError);
+      // 중복 반영 방지: 이미 matched 상태인 거래 필터링
+      const newIncomeItems = income.filter(item => {
+        if (item.transaction.matched_status === 'matched') {
+          console.warn('[match/confirm] 이미 반영된 수입 거래 스킵:', item.transaction.id);
+          return false;
         }
-      }
+        return true;
+      });
 
-      incomeCount = incomeRecords.length;
-      console.log('[match/confirm] 수입 레코드 저장 완료:', incomeCount, '건');
+      if (newIncomeItems.length === 0) {
+        console.log('[match/confirm] 모든 수입 거래가 이미 반영됨');
+        incomeSuccess = true;
+        incomeCount = 0;
+      } else {
+        const incomeRecords = newIncomeItems.map(item => item.record);
+        await addIncomeRecords(incomeRecords);
+
+        // 은행 거래 상태 업데이트 및 규칙 사용 횟수 증가 (실패해도 계속 진행)
+        for (const item of newIncomeItems) {
+          try {
+            await updateBankTransaction(item.transaction.id, {
+              matched_status: 'matched',
+              matched_type: 'income_detail',
+              matched_ids: item.record.id,
+            });
+
+            if (item.match?.id) {
+              await incrementRuleUsage(item.match.id);
+            }
+          } catch (updateError) {
+            console.warn('[match/confirm] 수입 은행거래 업데이트 실패 (무시):', item.transaction.id, updateError);
+          }
+        }
+
+        incomeCount = incomeRecords.length;
+        console.log('[match/confirm] 수입 레코드 저장 완료:', incomeCount, '건');
+      }
     } catch (error) {
       incomeSuccess = false;
       incomeError = error instanceof Error ? error.message : String(error);
@@ -88,8 +103,13 @@ export async function POST(request: NextRequest) {
   // 지출 레코드 저장 (독립적 처리)
   if (expense && expense.length > 0) {
     try {
-      // undefined record 필터링 및 유효성 검사
+      // undefined record 필터링, 유효성 검사, 중복 반영 방지
       const validExpenseItems = expense.filter(item => {
+        // 중복 반영 방지: 이미 matched 상태인 거래 스킵
+        if (item.transaction.matched_status === 'matched') {
+          console.warn('[match/confirm] 이미 반영된 지출 거래 스킵:', item.transaction.id);
+          return false;
+        }
         if (!item.record) {
           console.warn('[match/confirm] record가 없는 지출 항목 스킵:', item.transaction?.id);
           return false;

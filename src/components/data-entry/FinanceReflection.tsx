@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -332,13 +332,19 @@ export function FinanceReflection() {
   const needsReviewCount = unifiedExpense.filter(item => item.type === 'needsReview').length;
   const suppressedExpenseCount = unifiedExpense.filter(item => item.type === 'suppressed').length;
 
-  // 금액 합계 계산
+  // 금액 합계 계산 (matched + needsReview 모두 포함)
   const incomeTotalAmount = unifiedIncome
     .filter(item => item.type === 'matched' && item.record)
     .reduce((sum, item) => sum + (item.record?.amount || 0), 0);
   const expenseTotalAmount = unifiedExpense
-    .filter(item => item.type === 'matched' && item.record)
-    .reduce((sum, item) => sum + (item.record?.amount || 0), 0);
+    .filter(item => item.type === 'matched' || item.type === 'needsReview')
+    .reduce((sum, item) => {
+      // matched: record.amount, needsReview: transaction.withdrawal
+      if (item.type === 'matched' && item.record) {
+        return sum + item.record.amount;
+      }
+      return sum + item.transaction.withdrawal;
+    }, 0);
 
   return (
     <Card>

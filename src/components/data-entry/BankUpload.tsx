@@ -911,7 +911,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.note || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'note', e.target.value)}
-                                    className="h-6 text-sm w-48"
+                                    className="h-6 text-sm w-56"
                                   />
                                 )}
                               </TableCell>

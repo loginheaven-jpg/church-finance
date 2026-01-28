@@ -255,6 +255,11 @@ export function BankUpload() {
 
   // 은행원장에 반영 (1단계)
   const handleSave = async () => {
+    // 중복 클릭 방지
+    if (saving || step !== 'preview') {
+      return;
+    }
+
     // 중복 제외한 신규 데이터만 필터링
     const newData = data.filter((_, index) => !duplicateIndices.has(index));
 
@@ -297,6 +302,11 @@ export function BankUpload() {
 
   // 원장 매칭 (2단계)
   const handleMatch = async () => {
+    // 중복 클릭 방지
+    if (matching || step !== 'saved') {
+      return;
+    }
+
     if (savedTransactionIds.length === 0) {
       toast.error('매칭할 거래가 없습니다');
       return;
@@ -397,13 +407,13 @@ export function BankUpload() {
 
   // 정식 반영 (3단계)
   const handleConfirm = async () => {
-    if (unifiedIncome.length === 0 && unifiedExpense.length === 0) {
-      toast.error('반영할 데이터가 없습니다');
+    // 중복 클릭 방지 - 이미 confirming 중이거나 step이 matched가 아니면 무시
+    if (confirming || step !== 'matched') {
       return;
     }
 
-    // 중복 클릭 방지 - 이미 confirming 중이면 무시
-    if (confirming) {
+    if (unifiedIncome.length === 0 && unifiedExpense.length === 0) {
+      toast.error('반영할 데이터가 없습니다');
       return;
     }
 

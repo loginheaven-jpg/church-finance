@@ -311,10 +311,10 @@ export function CashOfferingSync() {
                       <TableHead className="min-w-[100px]">날짜</TableHead>
                       <TableHead className="min-w-[80px]">경로</TableHead>
                       <TableHead className="min-w-[80px]">헌금자</TableHead>
-                      <TableHead className="min-w-[80px]">대표자</TableHead>
-                      <TableHead className="min-w-[100px] text-right">금액</TableHead>
-                      <TableHead className="min-w-[80px]">코드</TableHead>
-                      <TableHead className="min-w-[100px]">비고</TableHead>
+                      <TableHead className="min-w-[100px] pr-1">대표자</TableHead>
+                      <TableHead className="min-w-[90px] pl-1 text-right">금액</TableHead>
+                      <TableHead className="min-w-[60px]">코드</TableHead>
+                      <TableHead className="min-w-[150px]">비고</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -331,14 +331,14 @@ export function CashOfferingSync() {
                             className="h-7 text-base w-20"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="pr-1">
                           <Input
                             value={item.representative}
                             onChange={(e) => handleCellChange(index, 'representative', e.target.value)}
-                            className="h-7 text-base w-20"
+                            className="h-7 text-base w-24"
                           />
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right pl-1">
                           <Input
                             type="number"
                             value={item.amount}
@@ -351,7 +351,7 @@ export function CashOfferingSync() {
                           <Input
                             value={item.note}
                             onChange={(e) => handleCellChange(index, 'note', e.target.value)}
-                            className="h-7 text-base w-24"
+                            className="h-7 text-base w-36"
                           />
                         </TableCell>
                         <TableCell>

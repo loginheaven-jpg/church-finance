@@ -9,7 +9,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  LabelList,
+  LineChart,
+  Line,
+  CartesianGrid,
 } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 
@@ -33,6 +35,15 @@ const LABELS = {
   expense: '지출',
 };
 
+// 주차별 세그먼트에 색상 음영 적용 (오래된 주 = 연한색, 최근 주 = 진한색)
+function getShade(baseColor: string, index: number, total: number): string {
+  const opacity = 0.35 + (0.65 * index) / (total - 1 || 1);
+  const r = parseInt(baseColor.slice(1, 3), 16);
+  const g = parseInt(baseColor.slice(3, 5), 16);
+  const b = parseInt(baseColor.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 export function WeeklyChart({ data }: WeeklyChartProps) {
   const formatAmount = (value: number) => {
     if (value >= 100000000) {
@@ -45,6 +56,29 @@ export function WeeklyChart({ data }: WeeklyChartProps) {
       return `${(value / 10000).toFixed(0)}만`;
     }
     return value.toLocaleString();
+  };
+
+  // 누적 가로 바차트용 데이터 변환
+  // [{date, income, expense}, ...] → [{category: '수입', w0: val, w1: val, ...}, ...]
+  const incomeRow: Record<string, string | number> = { category: '수입' };
+  const expenseRow: Record<string, string | number> = { category: '지출' };
+  data.forEach((week, i) => {
+    incomeRow[`w${i}`] = week.income;
+    expenseRow[`w${i}`] = week.expense;
+  });
+  const cumulativeData = [incomeRow, expenseRow];
+  const weekKeys = data.map((_, i) => `w${i}`);
+
+  const totalIncome = data.reduce((sum, w) => sum + w.income, 0);
+  const totalExpense = data.reduce((sum, w) => sum + w.expense, 0);
+
+  // 공통 툴팁 스타일
+  const tooltipStyle = {
+    borderRadius: '12px',
+    border: 'none',
+    boxShadow: '0 4px 20px rgba(44, 62, 80, 0.1)',
+    padding: '12px 16px',
+    backgroundColor: 'white',
   };
 
   return (
@@ -78,36 +112,31 @@ export function WeeklyChart({ data }: WeeklyChartProps) {
           </div>
         </div>
 
-        {/* Chart */}
-        <div className="h-[280px] md:h-[380px]">
+        {/* 1. 꺾은선 그래프 - 수입/지출 추이 */}
+        <div className="h-[180px] md:h-[240px] mb-6">
+          <p className="text-[12px] md:text-[13px] text-[#6B7B8C] mb-2 font-medium">주간 추이</p>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={data}
-              margin={{ top: 30, right: 10, left: 10, bottom: 10 }}
-              barCategoryGap="25%"
-            >
+            <LineChart data={data} margin={{ top: 10, right: 15, left: 5, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E8ECF0" />
               <XAxis
                 dataKey="date"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 12, fill: '#6B7B8C' }}
+                tick={{ fontSize: 11, fill: '#6B7B8C' }}
               />
-              <YAxis hide />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: '#6B7B8C' }}
+                tickFormatter={(v) => formatAmount(v)}
+                width={50}
+              />
               <Tooltip
-                cursor={{ fill: 'rgba(201, 169, 98, 0.1)' }}
+                cursor={{ stroke: '#C9A962', strokeDasharray: '3 3' }}
                 content={({ active, payload, label }) => {
                   if (!active || !payload || payload.length === 0) return null;
-
                   return (
-                    <div
-                      style={{
-                        borderRadius: '12px',
-                        border: 'none',
-                        boxShadow: '0 4px 20px rgba(44, 62, 80, 0.1)',
-                        padding: '12px 16px',
-                        backgroundColor: 'white',
-                      }}
-                    >
+                    <div style={tooltipStyle}>
                       <p style={{ fontWeight: 600, marginBottom: '8px', color: '#2C3E50' }}>{label}</p>
                       {payload.map((entry, index) => {
                         const entryLabel = LABELS[entry.dataKey as keyof typeof LABELS] || entry.dataKey;
@@ -121,42 +150,98 @@ export function WeeklyChart({ data }: WeeklyChartProps) {
                   );
                 }}
               />
-
-              <Bar dataKey="income" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                {data.map((_, index) => (
-                  <Cell key={index} fill={COLORS.income} />
-                ))}
-                <LabelList
-                  dataKey="income"
-                  position="top"
-                  fill="#4A9B7F"
-                  fontSize={11}
-                  fontWeight={600}
-                  formatter={(value) => {
-                    const num = Number(value);
-                    return num > 0 ? formatAmount(num) : '';
-                  }}
-                />
-              </Bar>
-
-              <Bar dataKey="expense" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                {data.map((_, index) => (
-                  <Cell key={index} fill={COLORS.expense} />
-                ))}
-                <LabelList
-                  dataKey="expense"
-                  position="top"
-                  fill="#E74C3C"
-                  fontSize={11}
-                  fontWeight={600}
-                  formatter={(value) => {
-                    const num = Number(value);
-                    return num > 0 ? formatAmount(num) : '';
-                  }}
-                />
-              </Bar>
-            </BarChart>
+              <Line
+                type="monotone"
+                dataKey="income"
+                stroke={COLORS.income}
+                strokeWidth={2.5}
+                dot={{ r: 3.5, fill: COLORS.income, strokeWidth: 0 }}
+                activeDot={{ r: 5.5, strokeWidth: 2, stroke: '#fff' }}
+              />
+              <Line
+                type="monotone"
+                dataKey="expense"
+                stroke={COLORS.expense}
+                strokeWidth={2.5}
+                dot={{ r: 3.5, fill: COLORS.expense, strokeWidth: 0 }}
+                activeDot={{ r: 5.5, strokeWidth: 2, stroke: '#fff' }}
+              />
+            </LineChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* 2. 가로 누적 바차트 - 8주 누적 합계 */}
+        <div>
+          <p className="text-[12px] md:text-[13px] text-[#6B7B8C] mb-2 font-medium">8주 누적 합계</p>
+          <div className="h-[100px] md:h-[120px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={cumulativeData}
+                layout="vertical"
+                margin={{ top: 5, right: 60, left: 5, bottom: 5 }}
+              >
+                <XAxis type="number" hide />
+                <YAxis
+                  type="category"
+                  dataKey="category"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 13, fill: '#2C3E50', fontWeight: 600 }}
+                  width={35}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(201, 169, 98, 0.08)' }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const category = payload[0]?.payload?.category;
+                    const total = payload.reduce((sum, p) => sum + (Number(p.value) || 0), 0);
+                    return (
+                      <div style={tooltipStyle}>
+                        <p style={{ fontWeight: 600, marginBottom: '8px', color: '#2C3E50' }}>
+                          {category} 누적: {total.toLocaleString()}원
+                        </p>
+                        {payload.map((entry, index) => {
+                          const weekIdx = parseInt(String(entry.dataKey).replace('w', ''));
+                          const weekLabel = data[weekIdx]?.date || `${weekIdx + 1}주`;
+                          const val = Number(entry.value);
+                          if (val === 0) return null;
+                          return (
+                            <p key={index} style={{ color: entry.color as string, fontSize: '13px', margin: '2px 0' }}>
+                              {weekLabel}: {val.toLocaleString()}원
+                            </p>
+                          );
+                        })}
+                      </div>
+                    );
+                  }}
+                />
+                {weekKeys.map((key, i) => (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    stackId="stack"
+                    radius={i === weekKeys.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
+                  >
+                    {cumulativeData.map((_, rowIdx) => (
+                      <Cell
+                        key={rowIdx}
+                        fill={getShade(
+                          rowIdx === 0 ? COLORS.income : COLORS.expense,
+                          i,
+                          weekKeys.length
+                        )}
+                      />
+                    ))}
+                  </Bar>
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          {/* 누적 합계 표시 */}
+          <div className="flex justify-end gap-4 mt-1 text-[12px] md:text-[13px] font-semibold">
+            <span style={{ color: COLORS.income }}>누적 수입: {formatAmount(totalIncome)}</span>
+            <span style={{ color: COLORS.expense }}>누적 지출: {formatAmount(totalExpense)}</span>
+          </div>
         </div>
       </CardContent>
     </Card>

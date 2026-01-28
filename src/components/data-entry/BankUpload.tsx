@@ -876,9 +876,9 @@ export function BankUpload() {
                             <TableHead className="w-[80px]">입금방법</TableHead>
                             <TableHead className="w-[50px]">코드</TableHead>
                             <TableHead className="w-[80px]">헌금자</TableHead>
-                            <TableHead className="w-[80px]">대표자</TableHead>
+                            <TableHead className="w-[96px]">대표자</TableHead>
                             <TableHead className="w-[70px] text-right">금액</TableHead>
-                            <TableHead className="w-[160px]">비고</TableHead>
+                            <TableHead className="w-[184px]">비고</TableHead>
                             <TableHead className="w-[40px]"></TableHead>
                           </TableRow>
                         </TableHeader>
@@ -945,7 +945,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.representative || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'representative', e.target.value)}
-                                    className="h-6 text-sm w-20"
+                                    className="h-6 text-sm w-24"
                                   />
                                 )}
                               </TableCell>
@@ -968,7 +968,7 @@ export function BankUpload() {
                                   <Input
                                     value={item.record?.note || ''}
                                     onChange={(e) => handleUnifiedIncomeChange(index, 'note', e.target.value)}
-                                    className="h-6 text-sm w-56"
+                                    className="h-6 text-sm w-64"
                                   />
                                 )}
                               </TableCell>

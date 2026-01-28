@@ -116,7 +116,7 @@ export async function updateSheet(
 ): Promise<void> {
   const sheets = getGoogleSheetsClient();
 
-  await sheets.spreadsheets.values.update({
+  const response = await sheets.spreadsheets.values.update({
     spreadsheetId: FINANCE_CONFIG.spreadsheetId,
     range: `${sheetName}!${range}`,
     valueInputOption: 'USER_ENTERED',
@@ -124,6 +124,16 @@ export async function updateSheet(
       values: data,
     },
   });
+
+  // 응답 검증: 업데이트된 셀 수 확인
+  const expectedCells = data.reduce((sum, row) => sum + row.length, 0);
+  const actualCells = response.data.updatedCells || 0;
+
+  console.log('[updateSheet]', sheetName, range, '- 예상:', expectedCells, '셀, 실제:', actualCells, '셀');
+
+  if (actualCells === 0) {
+    console.error('[updateSheet] 경고: 업데이트된 셀 없음!', sheetName, range);
+  }
 }
 
 // 시트 데이터 클리어 (헤더 유지, 데이터만 삭제)
@@ -684,6 +694,18 @@ export async function updateBankTransaction(
     `A${rowIndex + 1}:Q${rowIndex + 1}`,
     [updatedRow as (string | number | boolean)[]]
   );
+
+  // 업데이트 검증: 실제로 값이 변경되었는지 확인
+  const verifyRows = await readSheet(FINANCE_CONFIG.sheets.bank, `A${rowIndex + 1}:Q${rowIndex + 1}`);
+  if (verifyRows && verifyRows[0]) {
+    const verifyStatus = verifyRows[0][matchedStatusIdx];
+    console.log('[updateBankTransaction] 검증:', id, '- 저장된 상태:', verifyStatus);
+    if (verifyStatus !== updates.matched_status) {
+      console.error('[updateBankTransaction] 불일치! 요청:', updates.matched_status, '저장됨:', verifyStatus);
+    }
+  } else {
+    console.warn('[updateBankTransaction] 검증 실패: 행 읽기 불가');
+  }
 
   console.log('[updateBankTransaction] 완료:', id);
 }

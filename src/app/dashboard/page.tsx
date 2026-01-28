@@ -162,7 +162,11 @@ function DashboardContent() {
       )}
 
       {/* 8-Week Chart */}
-      <WeeklyChart data={weeklyData} />
+      <WeeklyChart
+        data={weeklyData}
+        yearlyIncome={stats?.yearlyIncome}
+        yearlyExpense={stats?.yearlyExpense}
+      />
 
       {/* Budget Execution Rate Card */}
       <BudgetExecutionCard

@@ -23,6 +23,8 @@ interface WeekData {
 
 interface WeeklyChartProps {
   data: WeekData[];
+  yearlyIncome?: number;
+  yearlyExpense?: number;
 }
 
 const COLORS = {
@@ -44,7 +46,7 @@ function getShade(baseColor: string, index: number, total: number): string {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
-export function WeeklyChart({ data }: WeeklyChartProps) {
+export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartProps) {
   const formatAmount = (value: number) => {
     if (value >= 100000000) {
       return `${(value / 100000000).toFixed(1)}억`;
@@ -198,7 +200,7 @@ export function WeeklyChart({ data }: WeeklyChartProps) {
                     return (
                       <div style={tooltipStyle}>
                         <p style={{ fontWeight: 600, marginBottom: '8px', color: '#2C3E50' }}>
-                          {category} 누적: {total.toLocaleString()}원
+                          {category} 8주 누적: {total.toLocaleString()}원
                         </p>
                         {payload.map((entry, index) => {
                           const weekIdx = parseInt(String(entry.dataKey).replace('w', ''));
@@ -237,11 +239,18 @@ export function WeeklyChart({ data }: WeeklyChartProps) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {/* 누적 합계 표시 */}
+          {/* 8주 누적 합계 */}
           <div className="flex justify-end gap-4 mt-1 text-[12px] md:text-[13px] font-semibold">
-            <span style={{ color: COLORS.income }}>누적 수입: {formatAmount(totalIncome)}</span>
-            <span style={{ color: COLORS.expense }}>누적 지출: {formatAmount(totalExpense)}</span>
+            <span style={{ color: COLORS.income }}>8주 누적 수입: {formatAmount(totalIncome)}</span>
+            <span style={{ color: COLORS.expense }}>8주 누적 지출: {formatAmount(totalExpense)}</span>
           </div>
+          {/* 연간 누적 합계 */}
+          {(yearlyIncome !== undefined || yearlyExpense !== undefined) && (
+            <div className="flex justify-end gap-4 mt-1 text-[12px] md:text-[13px] font-semibold">
+              <span style={{ color: COLORS.income }}>연간 수입: {formatAmount(yearlyIncome || 0)}</span>
+              <span style={{ color: COLORS.expense }}>연간 지출: {formatAmount(yearlyExpense || 0)}</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

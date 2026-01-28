@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, CheckCircle2, RefreshCw, Upload, FileSpreadsheet } from 'lucide-react';
+import { Loader2, CheckCircle2, RefreshCw, Upload, FileSpreadsheet, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CashOffering, SyncResult } from '@/types';
 
@@ -31,10 +31,33 @@ export function CashOfferingSync() {
   });
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<PreviewData[]>([]);
   const [donorMap, setDonorMap] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+
+  // 헌금함 데이터 갱신 (Apps Script 호출)
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/sync/cash-offering/refresh', {
+        method: 'POST',
+      });
+      const result = await res.json();
+
+      if (result.success) {
+        toast.success('헌금함 데이터가 갱신되었습니다');
+      } else {
+        toast.error(result.error || '헌금함 갱신 실패');
+      }
+    } catch (error) {
+      console.error('헌금함 갱신 오류:', error);
+      toast.error('헌금함 갱신 중 오류가 발생했습니다');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // 데이터 불러오기 (미리보기)
   const handleLoadData = async () => {
@@ -188,19 +211,34 @@ export function CashOfferingSync() {
           </div>
         </div>
 
-        <Button onClick={handleLoadData} disabled={loading} className="w-full" variant="outline">
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              불러오는 중...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              구글시트에서 가져오기
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleRefresh} disabled={refreshing || loading} variant="outline" className="flex-1">
+            {refreshing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                갱신 중...
+              </>
+            ) : (
+              <>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                헌금함 갱신
+              </>
+            )}
+          </Button>
+          <Button onClick={handleLoadData} disabled={loading || refreshing} className="flex-1" variant="outline">
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                불러오는 중...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                구글시트에서 가져오기
+              </>
+            )}
+          </Button>
+        </div>
 
         {/* 동기화 완료 결과 */}
         {syncResult && (

@@ -347,14 +347,14 @@ export function FinanceReflection() {
     }, 0);
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="h-[calc(100vh-180px)] flex flex-col">
+      <CardHeader className="shrink-0 pb-4">
         <CardTitle>재정부 반영</CardTitle>
         <CardDescription>
           은행원장의 미반영 항목을 수입부/지출부에 반영합니다.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex-1 flex flex-col overflow-hidden p-4 pt-0">
         {/* 데이터 불러오기 버튼 */}
         <Button
           onClick={loadPendingTransactions}
@@ -389,232 +389,357 @@ export function FinanceReflection() {
         {/* 매칭 결과 - 탭 UI */}
         {matchResult && (matchedIncomeCount > 0 || matchedExpenseCount > 0 || needsReviewCount > 0 ||
           suppressedIncomeCount > 0 || suppressedExpenseCount > 0) && (
-          <div className="space-y-4">
-            {/* 합계 정보 */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="text-sm font-medium text-blue-700 mb-2">반영 대상 합계</div>
-              <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-600">수입:</span>
-                  <span className="text-green-600 font-bold">+{incomeTotalAmount.toLocaleString()}원</span>
-                  <span className="text-slate-500 text-sm">({matchedIncomeCount}건)</span>
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* 고정 상단: 합계 정보 + 탭 버튼 */}
+            <div className="shrink-0 space-y-3 mb-3">
+              {/* 합계 정보 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="text-sm font-medium text-blue-700 mb-2">반영 대상 합계</div>
+                <div className="flex flex-wrap gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-600">수입:</span>
+                    <span className="text-green-600 font-bold">+{incomeTotalAmount.toLocaleString()}원</span>
+                    <span className="text-slate-500 text-sm">({matchedIncomeCount}건)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-600">지출:</span>
+                    <span className="text-red-600 font-bold">-{expenseTotalAmount.toLocaleString()}원</span>
+                    <span className="text-slate-500 text-sm">({matchedExpenseCount + needsReviewCount}건)</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-600">지출:</span>
-                  <span className="text-red-600 font-bold">-{expenseTotalAmount.toLocaleString()}원</span>
-                  <span className="text-slate-500 text-sm">({matchedExpenseCount + needsReviewCount}건)</span>
-                </div>
+              </div>
+
+              {/* 탭 버튼 */}
+              <div className="flex gap-2 border-b border-slate-200">
+                <button
+                  onClick={() => setActiveTab('income')}
+                  className={cn(
+                    'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
+                    activeTab === 'income'
+                      ? 'border-green-600 text-green-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  )}
+                >
+                  수입부 ({matchedIncomeCount}건{suppressedIncomeCount > 0 ? ` + 말소 ${suppressedIncomeCount}` : ''})
+                </button>
+                <button
+                  onClick={() => setActiveTab('expense')}
+                  className={cn(
+                    'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
+                    activeTab === 'expense'
+                      ? 'border-red-600 text-red-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  )}
+                >
+                  지출부 ({matchedExpenseCount + needsReviewCount}건{suppressedExpenseCount > 0 ? ` + 말소 ${suppressedExpenseCount}` : ''})
+                </button>
               </div>
             </div>
 
-            {/* 탭 버튼 */}
-            <div className="flex gap-2 border-b border-slate-200">
-              <button
-                onClick={() => setActiveTab('income')}
-                className={cn(
-                  'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
-                  activeTab === 'income'
-                    ? 'border-green-600 text-green-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
-                )}
-              >
-                수입부 ({matchedIncomeCount}건{suppressedIncomeCount > 0 ? ` + 말소 ${suppressedIncomeCount}` : ''})
-              </button>
-              <button
-                onClick={() => setActiveTab('expense')}
-                className={cn(
-                  'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
-                  activeTab === 'expense'
-                    ? 'border-red-600 text-red-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
-                )}
-              >
-                지출부 ({matchedExpenseCount + needsReviewCount}건{suppressedExpenseCount > 0 ? ` + 말소 ${suppressedExpenseCount}` : ''})
-              </button>
+            {/* 스크롤 영역: 테이블 */}
+            <div className="flex-1 overflow-hidden">
+              {/* 수입부 탭 */}
+              {activeTab === 'income' && (
+                <div className="rounded-md border max-h-full overflow-auto">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-white z-10">
+                      <TableRow>
+                        <TableHead className="w-[40px]">No</TableHead>
+                        <TableHead className="w-[50px]">상태</TableHead>
+                        <TableHead className="w-[90px]">기준일</TableHead>
+                        <TableHead className="w-[80px]">이체일</TableHead>
+                        <TableHead className="w-[70px]">입금경로</TableHead>
+                        <TableHead className="w-[60px]">코드</TableHead>
+                        <TableHead className="w-[80px]">헌금자</TableHead>
+                        <TableHead className="w-[100px]">대표자</TableHead>
+                        <TableHead className="w-[100px] text-right">금액</TableHead>
+                        <TableHead className="w-[200px]">비고</TableHead>
+                        <TableHead className="w-[40px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {unifiedIncome.map((item, index) => (
+                        <TableRow
+                          key={`income-${index}`}
+                          className={cn(
+                            item.type === 'suppressed' && 'bg-red-50'
+                          )}
+                        >
+                          <TableCell className="text-sm">{index + 1}</TableCell>
+                          <TableCell>
+                            {item.type === 'suppressed' ? (
+                              <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-sm font-medium">말소</span>
+                            ) : (
+                              <span className="text-slate-300 text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className={cn('text-sm', item.type === 'suppressed' ? 'text-red-600' : 'text-blue-600')}>
+                            {item.type === 'suppressed' ? item.transaction.date : item.record?.date}
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-500">
+                            {item.type === 'suppressed' ? item.transaction.transaction_date : item.record?.transaction_date}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {item.type === 'suppressed' ? (
+                              <span className="text-red-500">-</span>
+                            ) : (
+                              <Input
+                                value={item.record?.source || '계좌이체'}
+                                onChange={(e) => handleUnifiedIncomeChange(index, 'source', e.target.value)}
+                                className="h-6 text-sm w-20"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {item.type === 'suppressed' ? (
+                              <span className="text-red-500">-</span>
+                            ) : (
+                              <Input
+                                type="number"
+                                value={item.record?.offering_code || 0}
+                                onChange={(e) => handleUnifiedIncomeChange(index, 'offering_code', parseInt(e.target.value) || 0)}
+                                className="h-6 text-sm w-16 text-center"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.type === 'suppressed' ? (
+                              <span className="text-sm text-red-600">{item.transaction.memo || item.transaction.detail || '-'}</span>
+                            ) : (
+                              <Input
+                                value={item.record?.donor_name || ''}
+                                onChange={(e) => handleUnifiedIncomeChange(index, 'donor_name', e.target.value)}
+                                className="h-6 text-sm w-20"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.type === 'suppressed' ? (
+                              <span className="text-sm text-red-500">-</span>
+                            ) : (
+                              <Input
+                                value={item.record?.representative || ''}
+                                onChange={(e) => handleUnifiedIncomeChange(index, 'representative', e.target.value)}
+                                className="h-6 text-sm w-32"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {item.type === 'suppressed' ? (
+                              <span className="text-sm text-red-600 font-medium">+{item.transaction.deposit.toLocaleString()}</span>
+                            ) : (
+                              <Input
+                                type="number"
+                                value={item.record?.amount || 0}
+                                onChange={(e) => handleUnifiedIncomeChange(index, 'amount', parseInt(e.target.value) || 0)}
+                                className="h-6 text-sm text-right w-28 text-green-600"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.type === 'suppressed' ? (
+                              <span className="text-sm text-red-500">{item.transaction.suppressed_reason}</span>
+                            ) : (
+                              <Input
+                                value={item.record?.note || ''}
+                                onChange={(e) => handleUnifiedIncomeChange(index, 'note', e.target.value)}
+                                className="h-6 text-sm w-48"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.type !== 'suppressed' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveUnifiedIncome(index)}
+                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {unifiedIncome.length === 0 && (
+                    <div className="p-4 text-center text-slate-500 text-sm">수입 항목이 없습니다</div>
+                  )}
+                </div>
+              )}
+
+              {/* 지출부 탭 */}
+              {activeTab === 'expense' && (
+                <div className="rounded-md border max-h-full overflow-auto">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-white z-10">
+                      <TableRow>
+                        <TableHead className="w-[40px]">No</TableHead>
+                        <TableHead className="w-[50px]">상태</TableHead>
+                        <TableHead className="w-[90px]">기준일</TableHead>
+                        <TableHead className="w-[80px]">이체일</TableHead>
+                        <TableHead className="w-[70px]">결제방법</TableHead>
+                        <TableHead className="w-[100px]">거래처</TableHead>
+                        <TableHead className="w-[120px]">적요</TableHead>
+                        <TableHead className="w-[90px] text-right">금액</TableHead>
+                        <TableHead className="w-[60px]">계정</TableHead>
+                        <TableHead className="w-[120px]">비고</TableHead>
+                        <TableHead className="w-[40px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {unifiedExpense.map((item, index) => (
+                        <TableRow
+                          key={`expense-${index}`}
+                          className={cn(
+                            item.type === 'suppressed' && 'bg-red-50',
+                            item.type === 'needsReview' && 'bg-amber-50'
+                          )}
+                        >
+                          <TableCell className="text-sm">{index + 1}</TableCell>
+                          <TableCell>
+                            {item.type === 'suppressed' ? (
+                              <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-sm font-medium">말소</span>
+                            ) : item.type === 'needsReview' ? (
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-sm font-medium">검토</span>
+                            ) : (
+                              <span className="text-slate-300 text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className={cn(
+                            'text-sm',
+                            item.type === 'suppressed' ? 'text-red-600' :
+                            item.type === 'needsReview' ? 'text-amber-600' : 'text-blue-600'
+                          )}>
+                            {item.type === 'matched' ? item.record?.date : item.transaction.date}
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-500">
+                            {item.type === 'matched' ? item.record?.transaction_date : item.transaction.transaction_date}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {item.type === 'suppressed' ? (
+                              <span className="text-red-500">-</span>
+                            ) : item.type === 'needsReview' ? (
+                              <span className="text-amber-600">계좌이체</span>
+                            ) : (
+                              <Input
+                                value={item.record?.payment_method || '계좌이체'}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'payment_method', e.target.value)}
+                                className="h-6 text-sm w-20"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.type === 'suppressed' ? (
+                              <span className="text-sm text-red-600">{item.transaction.memo || item.transaction.detail || '-'}</span>
+                            ) : item.type === 'needsReview' ? (
+                              <Input
+                                value={item.record?.vendor || item.transaction.memo || item.transaction.detail || ''}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'vendor', e.target.value)}
+                                className="h-6 text-sm w-24 bg-amber-50"
+                              />
+                            ) : (
+                              <Input
+                                value={item.record?.vendor || ''}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'vendor', e.target.value)}
+                                className="h-6 text-sm w-24"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.type === 'suppressed' ? (
+                              <span className="text-sm text-red-500">{item.transaction.suppressed_reason}</span>
+                            ) : item.type === 'needsReview' ? (
+                              <Input
+                                value={item.record?.description || item.transaction.description || ''}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'description', e.target.value)}
+                                className="h-6 text-sm w-28 bg-amber-50"
+                              />
+                            ) : (
+                              <Input
+                                value={item.record?.description || ''}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'description', e.target.value)}
+                                className="h-6 text-sm w-28"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {item.type === 'suppressed' ? (
+                              <span className="text-sm text-red-600 font-medium">{item.transaction.withdrawal.toLocaleString()}</span>
+                            ) : item.type === 'needsReview' ? (
+                              <Input
+                                type="number"
+                                value={item.record?.amount || item.transaction.withdrawal}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
+                                className="h-6 text-sm text-right w-28 text-amber-700 bg-amber-50"
+                              />
+                            ) : (
+                              <Input
+                                type="number"
+                                value={item.record?.amount || 0}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'amount', parseInt(e.target.value) || 0)}
+                                className="h-6 text-sm text-right w-28 text-red-600"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {item.type === 'suppressed' ? (
+                              <span className="text-red-500">-</span>
+                            ) : item.type === 'needsReview' ? (
+                              <Input
+                                type="number"
+                                value={item.record?.account_code || item.suggestions?.[0]?.target_code || 0}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'account_code', parseInt(e.target.value) || 0)}
+                                className="h-6 text-sm w-16 text-center bg-amber-50"
+                              />
+                            ) : (
+                              <Input
+                                type="number"
+                                value={item.record?.account_code || 0}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'account_code', parseInt(e.target.value) || 0)}
+                                className="h-6 text-sm w-16 text-center"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.type === 'suppressed' ? (
+                              <span className="text-sm text-red-500">{item.transaction.description}</span>
+                            ) : item.type === 'needsReview' ? (
+                              <span className="text-sm text-amber-600">{item.transaction.detail || '-'}</span>
+                            ) : (
+                              <Input
+                                value={item.record?.note || ''}
+                                onChange={(e) => handleUnifiedExpenseChange(index, 'note', e.target.value)}
+                                className="h-6 text-sm w-28"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.type === 'matched' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveUnifiedExpense(index)}
+                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {unifiedExpense.length === 0 && (
+                    <div className="p-4 text-center text-slate-500 text-sm">지출 항목이 없습니다</div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* 수입부 탭 */}
-            {activeTab === 'income' && (
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead className="w-[60px]">상태</TableHead>
-                      <TableHead className="w-[100px]">기준일</TableHead>
-                      <TableHead className="w-[100px]">헌금자</TableHead>
-                      <TableHead className="w-[80px]">코드</TableHead>
-                      <TableHead className="text-right">금액</TableHead>
-                      <TableHead className="w-[200px]">적요</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {unifiedIncome.map((item, index) => (
-                      <TableRow
-                        key={`income-${index}`}
-                        className={cn(
-                          item.type === 'suppressed' && 'bg-slate-100 text-slate-500'
-                        )}
-                      >
-                        <TableCell>
-                          {item.type === 'suppressed' ? (
-                            <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-xs">말소</span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs">수입</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{item.transaction.date}</TableCell>
-                        <TableCell>
-                          {item.type === 'matched' && item.record ? (
-                            <Input
-                              value={item.record.donor_name}
-                              onChange={(e) => handleUnifiedIncomeChange(index, 'donor_name', e.target.value)}
-                              className="h-7 text-sm w-20"
-                            />
-                          ) : (
-                            item.transaction.detail?.substring(0, 3) || '-'
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {item.type === 'matched' && item.record ? (
-                            <Input
-                              type="number"
-                              value={item.record.offering_code}
-                              onChange={(e) => handleUnifiedIncomeChange(index, 'offering_code', parseInt(e.target.value) || 0)}
-                              className="h-7 text-sm w-16"
-                            />
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-green-600">
-                          +{item.transaction.deposit.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-slate-600 text-sm truncate max-w-[200px]">
-                          {item.type === 'suppressed'
-                            ? item.transaction.suppressed_reason
-                            : `${item.transaction.description} | ${item.transaction.detail}`}
-                        </TableCell>
-                        <TableCell>
-                          {item.type !== 'suppressed' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveUnifiedIncome(index)}
-                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {unifiedIncome.length === 0 && (
-                  <div className="p-4 text-center text-slate-500 text-sm">수입 항목이 없습니다</div>
-                )}
-              </div>
-            )}
-
-            {/* 지출부 탭 */}
-            {activeTab === 'expense' && (
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead className="w-[60px]">상태</TableHead>
-                      <TableHead className="w-[100px]">기준일</TableHead>
-                      <TableHead className="w-[120px]">거래처</TableHead>
-                      <TableHead className="w-[80px]">코드</TableHead>
-                      <TableHead className="text-right">금액</TableHead>
-                      <TableHead className="w-[200px]">적요</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {unifiedExpense.map((item, index) => (
-                      <TableRow
-                        key={`expense-${index}`}
-                        className={cn(
-                          item.type === 'suppressed' && 'bg-slate-100 text-slate-500',
-                          item.type === 'needsReview' && 'bg-amber-50'
-                        )}
-                      >
-                        <TableCell>
-                          {item.type === 'suppressed' ? (
-                            <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-xs">말소</span>
-                          ) : item.type === 'needsReview' ? (
-                            <span className="px-1.5 py-0.5 bg-amber-200 text-amber-700 rounded text-xs">검토</span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs">지출</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{item.transaction.date}</TableCell>
-                        <TableCell>
-                          {item.type === 'matched' && item.record ? (
-                            <Input
-                              value={item.record.vendor}
-                              onChange={(e) => handleUnifiedExpenseChange(index, 'vendor', e.target.value)}
-                              className="h-7 text-sm w-24"
-                            />
-                          ) : item.type === 'needsReview' ? (
-                            <Input
-                              defaultValue={item.transaction.memo || item.transaction.detail || ''}
-                              onChange={(e) => handleUnifiedExpenseChange(index, 'vendor', e.target.value)}
-                              className="h-7 text-sm w-24 bg-amber-50"
-                            />
-                          ) : (
-                            item.transaction.memo || '-'
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {item.type === 'matched' && item.record ? (
-                            <Input
-                              type="number"
-                              value={item.record.account_code}
-                              onChange={(e) => handleUnifiedExpenseChange(index, 'account_code', parseInt(e.target.value) || 0)}
-                              className="h-7 text-sm w-16"
-                            />
-                          ) : item.type === 'needsReview' ? (
-                            <Input
-                              type="number"
-                              defaultValue={item.suggestions?.[0]?.target_code || 0}
-                              onChange={(e) => handleUnifiedExpenseChange(index, 'account_code', parseInt(e.target.value) || 0)}
-                              className="h-7 text-sm w-16 bg-amber-50"
-                            />
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-red-600">
-                          -{item.transaction.withdrawal.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-slate-600 text-sm truncate max-w-[200px]">
-                          {item.type === 'suppressed'
-                            ? item.transaction.suppressed_reason
-                            : item.transaction.detail}
-                        </TableCell>
-                        <TableCell>
-                          {item.type !== 'suppressed' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveUnifiedExpense(index)}
-                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {unifiedExpense.length === 0 && (
-                  <div className="p-4 text-center text-slate-500 text-sm">지출 항목이 없습니다</div>
-                )}
-              </div>
-            )}
-
-            {/* 반영 버튼 */}
-            <div className="flex gap-2">
+            {/* 반영 버튼 - 하단 고정 */}
+            <div className="shrink-0 pt-3 flex gap-2">
               {activeTab === 'income' && (
                 <Button
                   onClick={handleConfirmIncome}

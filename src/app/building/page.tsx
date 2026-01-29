@@ -552,10 +552,23 @@ export default function BuildingPage() {
         {/* 상환 시뮬레이션 */}
         <Card className="bg-gradient-to-br from-blue-50 to-slate-50">
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Calculator className="h-5 w-5 text-blue-600" />
-              상환 시뮬레이션
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Calculator className="h-5 w-5 text-blue-600" />
+                상환 시뮬레이션
+              </CardTitle>
+              {session && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPledgeModalOpen(true)}
+                  className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                >
+                  <HandHeart className="h-4 w-4 mr-1" />
+                  성전봉헌 작정
+                </Button>
+              )}
+            </div>
             <CardDescription>
               연간 상환 금액을 조절하여 완납 시점 및 총 이자를 확인하세요 (이자율: {data.simulation.interestRate}%)
             </CardDescription>

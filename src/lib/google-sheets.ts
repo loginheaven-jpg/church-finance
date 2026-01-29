@@ -2402,10 +2402,12 @@ export async function initializePledgeSheets(): Promise<void> {
 
 /**
  * 작정헌금 목록 조회
+ * representative로 조회하면 해당 대표자의 모든 가족 작정을 반환
  */
 export async function getPledges(filters?: {
   year?: number;
   donor_name?: string;
+  representative?: string;
   offering_type?: OfferingType;
   status?: PledgeStatus;
 }): Promise<Pledge[]> {
@@ -2415,7 +2417,11 @@ export async function getPledges(filters?: {
     if (filters.year) {
       data = data.filter(p => p.year === filters.year);
     }
-    if (filters.donor_name) {
+    if (filters.representative) {
+      // representative 기준 조회 (가족 단위)
+      data = data.filter(p => p.representative === filters.representative);
+    } else if (filters.donor_name) {
+      // donor_name 기준 조회 (개인)
       data = data.filter(p => p.donor_name === filters.donor_name);
     }
     if (filters.offering_type) {
@@ -2490,6 +2496,7 @@ export async function createPledge(pledge: Omit<Pledge, 'id' | 'fulfilled_amount
 
 /**
  * 작정 누계 재계산 (수입부 데이터 기준)
+ * 가족 단위: representative가 같은 모든 가족 구성원의 헌금을 합산
  */
 export async function recalculatePledgeFulfillment(pledgeId: string): Promise<{ fulfilled_amount: number; fulfilled_count: number }> {
   // 1. 작정 정보 조회
@@ -2503,23 +2510,36 @@ export async function recalculatePledgeFulfillment(pledgeId: string): Promise<{ 
   const endDate = `${pledge.year}-12-31`;
   const allIncomeRecords = await getIncomeRecords(startDate, endDate);
 
-  // 3. 해당 헌금자, 해당 코드의 수입만 필터링
+  // 3. representative 기준으로 가족 구성원 찾기
+  const representative = pledge.representative || pledge.donor_name;
+
+  // 가족 구성원의 donor_name 목록 수집 (수입부에서 같은 representative를 가진 모든 헌금자)
+  const familyMemberNames = new Set<string>();
+  familyMemberNames.add(representative); // 대표자 포함
+  familyMemberNames.add(pledge.donor_name); // 작정자 포함
+
+  // 수입부에서 같은 representative를 가진 모든 헌금자 추가
+  allIncomeRecords.forEach(record => {
+    if (record.representative === representative) {
+      familyMemberNames.add(record.donor_name);
+    }
+  });
+
+  // 4. 가족 구성원 전체의 해당 코드 수입 필터링
   const matchingRecords = allIncomeRecords.filter(record =>
-    record.donor_name === pledge.donor_name &&
+    familyMemberNames.has(record.donor_name) &&
     record.offering_code === pledge.offering_code
   );
 
-  // 4. 누계 계산
+  // 5. 누계 계산
   const fulfilled_amount = matchingRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
   const fulfilled_count = matchingRecords.length;
 
-  // 5. 작정 업데이트
-  if (fulfilled_amount > 0 || fulfilled_count > 0) {
-    await updatePledge(pledgeId, {
-      fulfilled_amount,
-      fulfilled_count,
-    });
-  }
+  // 6. 작정 업데이트
+  await updatePledge(pledgeId, {
+    fulfilled_amount,
+    fulfilled_count,
+  });
 
   return { fulfilled_amount, fulfilled_count };
 }

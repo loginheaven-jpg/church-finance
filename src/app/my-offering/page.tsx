@@ -149,12 +149,15 @@ export default function MyOfferingPage() {
     fetchData();
   }, [year, mode]);
 
-  // Pledge v2 데이터 로드
+  // Pledge v2 데이터 로드 (representative 기준 - 가족 단위)
   useEffect(() => {
     const fetchPledgesV2 = async () => {
-      if (!data?.userName) return;
+      if (!data?.familyGroup?.representative) return;
       try {
-        const res = await fetch(`/api/pledges?year=${year}&donor_name=${encodeURIComponent(data.userName)}`);
+        // representative 기준으로 조회 + recalculate로 누계 갱신
+        const res = await fetch(
+          `/api/pledges?year=${year}&representative=${encodeURIComponent(data.familyGroup.representative)}&recalculate=true`
+        );
         if (res.ok) {
           const result = await res.json();
           setPledgesV2(result.pledges || []);
@@ -165,13 +168,15 @@ export default function MyOfferingPage() {
     };
 
     fetchPledgesV2();
-  }, [year, data?.userName]);
+  }, [year, data?.familyGroup?.representative]);
 
   // Pledge 데이터 새로고침
   const refreshPledges = async () => {
-    if (!data?.userName) return;
+    if (!data?.familyGroup?.representative) return;
     try {
-      const res = await fetch(`/api/pledges?year=${year}&donor_name=${encodeURIComponent(data.userName)}`);
+      const res = await fetch(
+        `/api/pledges?year=${year}&representative=${encodeURIComponent(data.familyGroup.representative)}&recalculate=true`
+      );
       if (res.ok) {
         const result = await res.json();
         setPledgesV2(result.pledges || []);

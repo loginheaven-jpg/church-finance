@@ -15,6 +15,7 @@ import {
   Plus,
   ChevronDown,
   ChevronUp,
+  Loader2,
 } from 'lucide-react';
 import type { Pledge, OfferingType, PledgeMilestone, MilestoneType, MILESTONE_INFO } from '@/types';
 import { PledgeModal } from './PledgeModal';
@@ -37,6 +38,12 @@ const MILESTONE_INFO_LOCAL: Record<string, { emoji: string; message: string }> =
   all_types: { emoji: '💎', message: '온전한 헌신' },
 };
 
+// 헌금 누계 정보
+interface OfferingCumulative {
+  code: number;
+  amount: number;
+}
+
 interface PledgeStatusCardProps {
   pledges: Pledge[];
   milestones?: PledgeMilestone[];
@@ -44,7 +51,16 @@ interface PledgeStatusCardProps {
   representative?: string;
   year: number;
   onRefresh?: () => void;
+  loading?: boolean;
+  cumulatives?: OfferingCumulative[];
 }
+
+// 헌금코드 → 작정타입 매핑
+const CODE_TO_TYPE: Record<number, OfferingType> = {
+  501: 'building',
+  21: 'mission',
+  11: 'weekly',
+};
 
 const OFFERING_ICONS: Record<OfferingType, React.ReactNode> = {
   building: <Building2 className="h-5 w-5" />,
@@ -77,12 +93,23 @@ export function PledgeStatusCard({
   representative,
   year,
   onRefresh,
+  loading = false,
+  cumulatives = [],
 }: PledgeStatusCardProps) {
   const [showNewPledgeModal, setShowNewPledgeModal] = useState(false);
   const [editingPledge, setEditingPledge] = useState<Pledge | null>(null);
   const [expandedPledge, setExpandedPledge] = useState<string | null>(null);
 
   const activePledges = pledges.filter(p => p.status === 'active');
+
+  // 미작정 헌금 유형 찾기 (building, mission만 - weekly는 제외)
+  const pledgedTypes = new Set(activePledges.map(p => p.offering_type));
+  const unpledgedTypes = (['building', 'mission'] as OfferingType[]).filter(
+    type => !pledgedTypes.has(type)
+  );
+
+  // 헌금코드별 누계 맵
+  const cumulativeMap = new Map(cumulatives.map(c => [c.code, c.amount]));
 
   const formatAmount = (amount: number) => {
     if (amount >= 100000000) {
@@ -125,6 +152,7 @@ export function PledgeStatusCard({
           <CardTitle className="flex items-center gap-2 text-lg">
             <Trophy className="h-5 w-5 text-amber-500" />
             {year}년 작정헌금 현황
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
           </CardTitle>
           <Button
             variant="outline"
@@ -171,6 +199,9 @@ export function PledgeStatusCard({
                         </span>
                         <span className={`font-semibold ${colors.text}`}>
                           {OFFERING_LABELS[pledge.offering_type]}
+                        </span>
+                        <span className="text-sm text-slate-500">
+                          {pledge.donor_name}
                         </span>
                       </div>
                       <div className="flex items-center gap-1">
@@ -286,6 +317,44 @@ export function PledgeStatusCard({
                         })}
                       </div>
                     )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 미작정 헌금 누계 */}
+          {unpledgedTypes.length > 0 && (
+            <div className="space-y-2">
+              {unpledgedTypes.map((type) => {
+                const colors = OFFERING_COLORS[type];
+                const code = type === 'building' ? 501 : 21;
+                const cumulative = cumulativeMap.get(code) || 0;
+
+                return (
+                  <div
+                    key={type}
+                    className={`p-4 rounded-lg border ${colors.bg} border-slate-200 opacity-70`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={colors.text}>
+                        {OFFERING_ICONS[type]}
+                      </span>
+                      <span className={`font-semibold ${colors.text}`}>
+                        {OFFERING_LABELS[type]}
+                      </span>
+                    </div>
+                    <div className="text-sm text-slate-500 mb-1">
+                      작정: 제출하지 않음
+                    </div>
+                    <div className="text-sm">
+                      <span className="font-medium text-slate-600">
+                        누계: {formatAmount(cumulative)}원
+                      </span>
+                      <span className="text-slate-400">
+                        {' '}(-%)
+                      </span>
+                    </div>
                   </div>
                 );
               })}

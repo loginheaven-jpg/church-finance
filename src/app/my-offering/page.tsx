@@ -125,6 +125,7 @@ export default function MyOfferingPage() {
   // Pledge v2 상태
   const [pledgesV2, setPledgesV2] = useState<Pledge[]>([]);
   const [milestonesV2, setMilestonesV2] = useState<PledgeMilestone[]>([]);
+  const [pledgesLoading, setPledgesLoading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -153,6 +154,7 @@ export default function MyOfferingPage() {
   useEffect(() => {
     const fetchPledgesV2 = async () => {
       if (!data?.familyGroup?.representative) return;
+      setPledgesLoading(true);
       try {
         // representative 기준으로 조회 + recalculate로 누계 갱신
         const res = await fetch(
@@ -164,6 +166,8 @@ export default function MyOfferingPage() {
         }
       } catch (err) {
         console.error('Pledge v2 조회 오류:', err);
+      } finally {
+        setPledgesLoading(false);
       }
     };
 
@@ -173,6 +177,7 @@ export default function MyOfferingPage() {
   // Pledge 데이터 새로고침
   const refreshPledges = async () => {
     if (!data?.familyGroup?.representative) return;
+    setPledgesLoading(true);
     try {
       const res = await fetch(
         `/api/pledges?year=${year}&representative=${encodeURIComponent(data.familyGroup.representative)}&recalculate=true`
@@ -183,6 +188,8 @@ export default function MyOfferingPage() {
       }
     } catch (err) {
       console.error('Pledge 새로고침 오류:', err);
+    } finally {
+      setPledgesLoading(false);
     }
   };
 
@@ -598,6 +605,8 @@ export default function MyOfferingPage() {
           representative={data.familyGroup.representative}
           year={year}
           onRefresh={refreshPledges}
+          loading={pledgesLoading}
+          cumulatives={data.summaryByType.map(s => ({ code: s.code, amount: s.amount }))}
         />
       </div>
 

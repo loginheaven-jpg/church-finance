@@ -4,6 +4,7 @@ import {
   createPledge,
   initializePledgeSheets,
   getChurchPledgeStats,
+  recalculateAllPledgesFulfillment,
 } from '@/lib/google-sheets';
 import type {
   OfferingType,
@@ -162,6 +163,39 @@ export async function POST(request: NextRequest) {
     console.error('Pledges POST error:', error);
     return NextResponse.json(
       { success: false, error: '작정헌금 생성 중 오류가 발생했습니다' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * 작정 누계 재계산
+ * PUT /api/pledges?recalculate=true&year=2026
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const recalculate = searchParams.get('recalculate') === 'true';
+    const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : undefined;
+
+    if (!recalculate) {
+      return NextResponse.json(
+        { success: false, error: 'recalculate=true 파라미터가 필요합니다' },
+        { status: 400 }
+      );
+    }
+
+    const updatedCount = await recalculateAllPledgesFulfillment(year);
+
+    return NextResponse.json({
+      success: true,
+      updatedCount,
+      message: `${updatedCount}개의 작정 누계가 재계산되었습니다`,
+    });
+  } catch (error) {
+    console.error('Pledges PUT error:', error);
+    return NextResponse.json(
+      { success: false, error: '작정 누계 재계산 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }

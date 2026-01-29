@@ -2313,7 +2313,64 @@ export async function createPledge(pledge: Omit<Pledge, 'id' | 'fulfilled_amount
   ];
 
   await appendToSheet(FINANCE_CONFIG.sheets.pledges, [row]);
+
+  // 기존 수입 데이터로 누계 재계산
+  await recalculatePledgeFulfillment(id);
+
   return id;
+}
+
+/**
+ * 작정 누계 재계산 (수입부 데이터 기준)
+ */
+export async function recalculatePledgeFulfillment(pledgeId: string): Promise<{ fulfilled_amount: number; fulfilled_count: number }> {
+  // 1. 작정 정보 조회
+  const pledge = await getPledgeById(pledgeId);
+  if (!pledge) {
+    return { fulfilled_amount: 0, fulfilled_count: 0 };
+  }
+
+  // 2. 해당 연도의 수입 기록 조회
+  const startDate = `${pledge.year}-01-01`;
+  const endDate = `${pledge.year}-12-31`;
+  const allIncomeRecords = await getIncomeRecords(startDate, endDate);
+
+  // 3. 해당 헌금자, 해당 코드의 수입만 필터링
+  const matchingRecords = allIncomeRecords.filter(record =>
+    record.donor_name === pledge.donor_name &&
+    record.offering_code === pledge.offering_code
+  );
+
+  // 4. 누계 계산
+  const fulfilled_amount = matchingRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
+  const fulfilled_count = matchingRecords.length;
+
+  // 5. 작정 업데이트
+  if (fulfilled_amount > 0 || fulfilled_count > 0) {
+    await updatePledge(pledgeId, {
+      fulfilled_amount,
+      fulfilled_count,
+    });
+  }
+
+  return { fulfilled_amount, fulfilled_count };
+}
+
+/**
+ * 모든 작정의 누계 재계산
+ */
+export async function recalculateAllPledgesFulfillment(year?: number): Promise<number> {
+  const pledges = await getPledges({ year, status: 'active' });
+  let updatedCount = 0;
+
+  for (const pledge of pledges) {
+    const result = await recalculatePledgeFulfillment(pledge.id);
+    if (result.fulfilled_amount > 0) {
+      updatedCount++;
+    }
+  }
+
+  return updatedCount;
 }
 
 /**

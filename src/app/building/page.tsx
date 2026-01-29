@@ -309,7 +309,7 @@ export default function BuildingPage() {
     대출잔액: h.loanBalance / 100000000,
   }));
 
-  // 5년 실적 차트 데이터 (2021~2025, 스택형 바 2개)
+  // 5년 헌금 현황 차트 데이터 (2021~2025, 스택형 바 2개)
   // 사용자 제공 데이터 (단위: 백만원)
   const fiveYearData = [
     { year: '2021', 건축헌금: 79.1, 원금상환: 195.0, 이자지출: 42.7 },
@@ -505,14 +505,14 @@ export default function BuildingPage() {
         </CardContent>
       </Card>
 
-      {/* 5년 실적 분석 + 상환 시뮬레이션 */}
+      {/* 5년 헌금 현황 + 상환 시뮬레이션 */}
       <div className="grid md:grid-cols-2 gap-6">
-        {/* 5년 실적 분석 (스택형 바 차트) */}
+        {/* 5년 헌금 현황 (스택형 바 차트) */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingDown className="h-5 w-5" />
-              5개년 실적 분석 (2021-2025)
+              5개년 헌금 현황 (2021-2025)
             </CardTitle>
             <CardDescription>
               건축헌금/일반예산 vs 원금상환/이자지출

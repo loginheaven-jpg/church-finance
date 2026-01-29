@@ -205,10 +205,10 @@ export function PledgeStatusCard({
                       </span>
                     </div>
 
-                    {/* 실적 */}
+                    {/* 누계 */}
                     <div className="text-sm mb-2">
                       <span className="font-medium">
-                        실적: {formatAmount(pledge.fulfilled_amount)}원
+                        누계: {formatAmount(pledge.fulfilled_amount)}원
                       </span>
                       <span className="text-slate-400">
                         {' '}({percentage.toFixed(1)}%)

@@ -108,13 +108,15 @@ const yearlyDonationFallback: Record<number, number> = {
   2025: 55055000,
 };
 
-// 연도별 (원금상환, 이자지출) 분리 데이터
+// 연도별 (원금상환, 이자지출) 분리 데이터 - 지출부에서 조회한 실제 값
 const yearlyRepaymentData: Record<number, { principal: number; interest: number }> = {
-  2020: { principal: 60000000, interest: 43000000 },
-  2021: { principal: 80000000, interest: 60000000 },
-  2022: { principal: 50000000, interest: 55000000 },
-  2023: { principal: 50000000, interest: 55000000 },
-  2024: { principal: 40000000, interest: 50000000 },
+  2018: { principal: 10000000, interest: 60107995 },
+  2019: { principal: 110000000, interest: 70400786 },
+  2020: { principal: 150000000, interest: 51653410 },
+  2021: { principal: 195000000, interest: 42733390 },
+  2022: { principal: 150000000, interest: 53134445 },
+  2023: { principal: 45000000, interest: 73766285 },
+  2024: { principal: 50000000, interest: 71342488 },
   2025: { principal: 50000000, interest: 61035133 },
 };
 

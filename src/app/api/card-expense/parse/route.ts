@@ -5,6 +5,7 @@ import {
   findNhCardExpenseRecord,
   generateId,
   saveCardExpenseTemp,
+  initCardExpenseTempSheet,
   getKSTDateTime,
 } from '@/lib/google-sheets';
 import type { CardOwner, CardExpenseItem, CardExpenseParseResponse, CardExpenseTempRecord } from '@/types';
@@ -188,11 +189,19 @@ export async function POST(request: NextRequest) {
     }));
 
     try {
+      // 시트가 없으면 생성 (헤더 포함)
+      await initCardExpenseTempSheet();
       await saveCardExpenseTemp(tempRecords);
       console.log(`Saved ${tempRecords.length} records to temp sheet`);
     } catch (saveError) {
       console.error('Failed to save to temp sheet:', saveError);
-      // 저장 실패해도 파싱 결과는 반환 (기존 동작 유지)
+      return NextResponse.json<CardExpenseParseResponse>({
+        success: false,
+        transactions: [],
+        matchingRecord: null,
+        totalAmount: 0,
+        error: '임시 데이터 저장에 실패했습니다. 시트 설정을 확인하세요.',
+      });
     }
 
     return NextResponse.json<CardExpenseParseResponse>({

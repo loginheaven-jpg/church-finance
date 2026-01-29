@@ -3004,22 +3004,42 @@ export async function updateCardExpenseTempStatus(
 }
 
 /**
- * 카드내역 임시데이터 시트 초기화 (헤더 포함 재생성)
+ * 카드내역 임시데이터 시트 초기화 (시트 생성 및 헤더 설정)
  */
 export async function initCardExpenseTempSheet(): Promise<void> {
   const sheetName = FINANCE_CONFIG.sheets.cardExpenseTemp;
   const sheets = getGoogleSheetsClient();
 
-  // 시트 전체 클리어
+  // 1. 시트 생성 시도 (없으면 생성)
+  try {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      requestBody: {
+        requests: [{
+          addSheet: { properties: { title: sheetName } }
+        }]
+      }
+    });
+  } catch {
+    // 시트가 이미 존재하면 무시
+  }
+
+  // 2. 기존 데이터 클리어
   try {
     await sheets.spreadsheets.values.clear({
       spreadsheetId: FINANCE_CONFIG.spreadsheetId,
       range: `${sheetName}!A:M`,
     });
   } catch {
-    // 시트가 없으면 무시
+    // 클리어 실패 무시
   }
 
-  // 헤더 추가
-  await appendToSheet(sheetName, [CARD_EXPENSE_TEMP_HEADERS]);
+  // 3. 헤더 설정
+  const lastCol = String.fromCharCode(65 + CARD_EXPENSE_TEMP_HEADERS.length - 1);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!A1:${lastCol}1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [CARD_EXPENSE_TEMP_HEADERS] }
+  });
 }

@@ -102,12 +102,13 @@ export async function GET(request: NextRequest) {
 
     // 디버그 모드 응답
     if (debug) {
-      // transaction_date + time 정렬
+      // transaction_date + time 정렬 (시간을 HH:MM:SS로 정규화)
+      const normalizeTime = (time: string | undefined) => (time || '00:00:00').padStart(8, '0');
       const debugSortedBank = bankTransactions
         .filter(t => t.balance > 0)
         .sort((a, b) => {
-          const aDateTime = `${a.transaction_date} ${a.time || '00:00:00'}`;
-          const bDateTime = `${b.transaction_date} ${b.time || '00:00:00'}`;
+          const aDateTime = `${a.transaction_date} ${normalizeTime(a.time)}`;
+          const bDateTime = `${b.transaction_date} ${normalizeTime(b.time)}`;
           return bDateTime.localeCompare(aDateTime);
         });
 
@@ -325,11 +326,13 @@ export async function GET(request: NextRequest) {
 
     // 은행원장의 마지막 잔액 (super_admin 검증용)
     // transaction_date + time 을 합쳐서 가장 늦은 시간의 balance 선택
+    // 시간 정규화: "9:16:58" → "09:16:58" (H:MM:SS → HH:MM:SS)
+    const normalizeTime = (time: string | undefined) => (time || '00:00:00').padStart(8, '0');
     const sortedBank = bankTransactions
       .filter(t => t.balance > 0)
       .sort((a, b) => {
-        const aDateTime = `${a.transaction_date} ${a.time || '00:00:00'}`;
-        const bDateTime = `${b.transaction_date} ${b.time || '00:00:00'}`;
+        const aDateTime = `${a.transaction_date} ${normalizeTime(a.time)}`;
+        const bDateTime = `${b.transaction_date} ${normalizeTime(b.time)}`;
         return bDateTime.localeCompare(aDateTime); // 내림차순 (가장 최신 먼저)
       });
     const lastBankBalance = sortedBank[0]?.balance || 0;

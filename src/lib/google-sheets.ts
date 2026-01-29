@@ -77,7 +77,7 @@ const FINANCE_CONFIG = {
     pledges: '작정헌금v2',
     pledgeHistory: '작정이력',
     pledgeMilestones: '작정마일스톤',
-    buildingMaster: '건축현황마스터',
+    buildingMaster: '건축원장',
     yearlyBudget: '연도별예산',
     businessInfo: '사업자정보',
     expenseClaim: '지출청구',

@@ -309,26 +309,38 @@ export default function BuildingPage() {
     대출잔액: h.loanBalance / 100000000,
   }));
 
-  // 5년 헌금 현황 차트 데이터 (2021~2025, 스택형 바 2개)
-  // 사용자 제공 데이터 (단위: 백만원)
-  const fiveYearData = [
-    { year: '2021', 건축헌금: 79.1, 원금상환: 195.0, 이자지출: 42.7 },
-    { year: '2022', 건축헌금: 100.0, 원금상환: 150.0, 이자지출: 53.1 },
-    { year: '2023', 건축헌금: 74.2, 원금상환: 45.2, 이자지출: 73.6 },
-    { year: '2024', 건축헌금: 63.7, 원금상환: 50.0, 이자지출: 71.3 },
-    { year: '2025', 건축헌금: 55.1, 원금상환: 50.0, 이자지출: 61.0 },
-  ];
-  const recentChartData = fiveYearData.map(y => ({
-    year: y.year,
+  // 5년 헌금 현황 차트 데이터 (API에서 가져온 data.recent.years 사용)
+  const recentYears = data.recent.years;
+  const recentChartData = recentYears.map(y => ({
+    year: String(y.year),
     // 건축헌금 바 (스택: 건축헌금 + 일반예산)
-    건축헌금: y.건축헌금 / 100,  // 백만원 → 억
-    일반예산: Math.max(0, (y.원금상환 + y.이자지출 - y.건축헌금)) / 100,
+    건축헌금: y.donation / 100000000,  // 원 → 억
+    일반예산: Math.max(0, (y.principal + y.interest - y.donation)) / 100000000,
     // 건축지출 바 (스택: 원금상환 + 이자지출)
-    원금상환: y.원금상환 / 100,
-    이자지출: y.이자지출 / 100,
+    원금상환: y.principal / 100000000,
+    이자지출: y.interest / 100000000,
     // 합계 (수입=지출 동일)
-    합계: (y.원금상환 + y.이자지출) / 100,
+    합계: (y.principal + y.interest) / 100000000,
   }));
+
+  // 금액 구성 계산 (2012년 이후 데이터)
+  const totalExpenditure = data.summary.principalPaid + data.summary.interestPaid;
+  const principalAmount = data.summary.principalPaid;
+  const interestAmount = data.summary.interestPaid;
+  // 2012년 이후 건축헌금 합계 (history에서 계산)
+  const buildingDonation2012Plus = data.history
+    .filter(h => h.year >= 2012)
+    .reduce((sum, h) => sum + h.yearlyDonation, 0);
+  const generalBudget = Math.max(0, totalExpenditure - buildingDonation2012Plus);
+  // 비율 계산
+  const interestPercent = totalExpenditure > 0 ? (interestAmount / totalExpenditure) * 100 : 0;
+  const principalPercent = totalExpenditure > 0 ? (principalAmount / totalExpenditure) * 100 : 0;
+  const donationPercent = totalExpenditure > 0 ? (buildingDonation2012Plus / totalExpenditure) * 100 : 0;
+  const generalPercent = totalExpenditure > 0 ? (generalBudget / totalExpenditure) * 100 : 0;
+  // 현재 연도
+  const currentYear = new Date().getFullYear();
+  // 마지막 히스토리 연도 확인
+  const lastHistoryYear = data.history.length > 0 ? data.history[data.history.length - 1].year : currentYear;
 
   return (
     <div className={cn(
@@ -414,7 +426,7 @@ export default function BuildingPage() {
           <CardHeader className="pb-0 pt-2 shrink-0">
             <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
               <CreditCard className="h-4 w-4 text-blue-500" />
-              건축지출 (2012~2025)
+              건축지출 (2012~{lastHistoryYear})
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col justify-center flex-1 pt-0">
@@ -467,7 +479,7 @@ export default function BuildingPage() {
       {/* 금액 구성 (가로 누적 막대) */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg">금액 구성 (2012~2025)</CardTitle>
+          <CardTitle className="text-lg">금액 구성 (2012~{lastHistoryYear})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-6 mx-auto" style={{ width: '90%' }}>
@@ -475,14 +487,14 @@ export default function BuildingPage() {
             <div>
               <div className="flex justify-between text-xl mb-2">
                 <span className="font-semibold">지출</span>
-                <span className="text-muted-foreground font-medium">18.3억</span>
+                <span className="text-muted-foreground font-medium">{formatCurrency(totalExpenditure)}</span>
               </div>
               <div className="flex h-[120px] rounded-lg overflow-hidden">
-                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: '56.3%', backgroundColor: '#ea580c' }}>
-                  이자 10.3억
+                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: `${interestPercent}%`, backgroundColor: '#ea580c' }}>
+                  이자 {formatCurrency(interestAmount)}
                 </div>
-                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: '43.7%', backgroundColor: '#f97316' }}>
-                  원금 8억
+                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: `${principalPercent}%`, backgroundColor: '#f97316' }}>
+                  원금 {formatCurrency(principalAmount)}
                 </div>
               </div>
             </div>
@@ -490,14 +502,14 @@ export default function BuildingPage() {
             <div>
               <div className="flex justify-between text-xl mb-2">
                 <span className="font-semibold">수입</span>
-                <span className="text-muted-foreground font-medium">18.3억</span>
+                <span className="text-muted-foreground font-medium">{formatCurrency(totalExpenditure)}</span>
               </div>
               <div className="flex h-[120px] rounded-lg overflow-hidden">
-                <div className="bg-green-500 flex items-center justify-center text-white text-3xl font-bold" style={{ width: '66.7%' }}>
-                  건축헌금 12.2억
+                <div className="bg-green-500 flex items-center justify-center text-white text-3xl font-bold" style={{ width: `${donationPercent}%` }}>
+                  건축헌금 {formatCurrency(buildingDonation2012Plus)}
                 </div>
-                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: '33.3%', backgroundColor: '#166534' }}>
-                  일반예산 6.1억
+                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: `${generalPercent}%`, backgroundColor: '#166534' }}>
+                  일반예산 {formatCurrency(generalBudget)}
                 </div>
               </div>
             </div>
@@ -512,7 +524,7 @@ export default function BuildingPage() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingDown className="h-5 w-5" />
-              5개년 헌금 현황 (2021-2025)
+              {recentYears.length}개년 헌금 현황 ({recentYears[0]?.year}-{recentYears[recentYears.length - 1]?.year})
             </CardTitle>
             <CardDescription>
               건축헌금/일반예산 vs 원금상환/이자지출

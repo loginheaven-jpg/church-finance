@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
       getUnmatchedCardTransactions(),
       getBankTransactions(),
       getBudget(currentYear),
-      getCarryoverBalance(currentYear), // 해당 연도 시작 이월잔액 (= 전년도 말 잔액)
+      getCarryoverBalance(currentYear - 1), // 전년도 말 잔액 = 해당 연도 시작 이월금
       getIncomeCodes(),
       getExpenseCodes(),
     ]);

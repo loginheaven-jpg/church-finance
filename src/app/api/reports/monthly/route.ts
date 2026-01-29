@@ -17,11 +17,10 @@ async function getCalculatedCarryover(targetYear: number): Promise<number> {
     return 0; // 기준 연도 이전 데이터는 0 반환
   }
 
-  // 이전 연도의 이월금 + 이전 연도의 수입 - 지출로 계산
-  // targetYear의 이월금 = (targetYear-1)의 이월금 + (targetYear-1)의 수입 - (targetYear-1)의 지출
+  // targetYear 말 잔액 = (targetYear-1) 말 잔액 + targetYear의 수입 - targetYear의 지출
   const prevYearCarryover = await getCalculatedCarryover(targetYear - 1);
-  const prevStartDate = `${targetYear - 1}-01-01`;
-  const prevEndDate = `${targetYear - 1}-12-31`;
+  const prevStartDate = `${targetYear}-01-01`;
+  const prevEndDate = `${targetYear}-12-31`;
 
   const [prevIncomeRecords, prevExpenseRecords] = await Promise.all([
     getIncomeRecords(prevStartDate, prevEndDate),
@@ -49,7 +48,7 @@ export async function GET(request: NextRequest) {
     const [incomeRecords, expenseRecords, calculatedCarryover] = await Promise.all([
       getIncomeRecords(startDate, endDate),
       getExpenseRecords(startDate, endDate),
-      getCalculatedCarryover(year), // 해당 연도 시작 이월잔액 (= 전년도 말 잔액)
+      getCalculatedCarryover(year - 1), // 전년도 말 잔액 = 해당 연도 시작 이월금
     ]);
 
     if (debug) {

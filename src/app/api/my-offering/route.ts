@@ -264,6 +264,53 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // === 최근 8주 주간 데이터 ===
+    const now = new Date();
+    const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const dayOfWeek = kst.getDay();
+    const thisMonday = new Date(kst);
+    thisMonday.setDate(kst.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    const thisSunday = new Date(thisMonday);
+    thisSunday.setDate(thisMonday.getDate() + 6);
+
+    const eightWeeksAgoMonday = new Date(thisMonday);
+    eightWeeksAgoMonday.setDate(thisMonday.getDate() - 7 * 7);
+
+    const weeklyStart = eightWeeksAgoMonday.toISOString().split('T')[0];
+    const weeklyEnd = thisSunday.toISOString().split('T')[0];
+
+    // 8주 범위가 연도를 넘는 경우 별도 조회
+    let weeklyRecords: typeof incomeRecords;
+    if (weeklyStart >= startDate && weeklyEnd <= endDate) {
+      // 현재 조회 연도 범위 안에 있으면 기존 데이터 재사용
+      weeklyRecords = incomeRecords;
+    } else {
+      weeklyRecords = await getIncomeRecords(weeklyStart, weeklyEnd);
+    }
+    const weeklyOfferings = weeklyRecords.filter(record =>
+      targetNames.includes(record.donor_name) &&
+      record.date >= weeklyStart && record.date <= weeklyEnd
+    );
+
+    const weeklyData: Array<{ date: string; amount: number }> = [];
+    for (let i = 0; i < 8; i++) {
+      const wMonday = new Date(eightWeeksAgoMonday);
+      wMonday.setDate(eightWeeksAgoMonday.getDate() + i * 7);
+      const wSunday = new Date(wMonday);
+      wSunday.setDate(wMonday.getDate() + 6);
+      const wStart = wMonday.toISOString().split('T')[0];
+      const wEnd = wSunday.toISOString().split('T')[0];
+
+      const weekAmount = weeklyOfferings
+        .filter(r => r.date >= wStart && r.date <= wEnd)
+        .reduce((sum, r) => sum + r.amount, 0);
+
+      weeklyData.push({
+        date: `${wSunday.getMonth() + 1}/${wSunday.getDate()}`,
+        amount: weekAmount,
+      });
+    }
+
     // === 작정헌금 현황 ===
     const pledgeDonations = await getPledgeDonations(yearNum);
     // 가족 구성원의 작정 조회 (donor_name 또는 representative가 가족 멤버에 포함)
@@ -318,6 +365,7 @@ export async function GET(request: NextRequest) {
       familyGroup,
       yearlyHistory,
       pledgeStatus,
+      weeklyData,
     });
   } catch (error) {
     console.error('My offering API error:', error);

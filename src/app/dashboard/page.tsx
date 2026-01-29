@@ -66,7 +66,7 @@ function DashboardContent() {
   const [selectedCard, setSelectedCard] = useState<'income' | 'expense' | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const { data: stats, isLoading, refetch } = useQuery<DashboardStats>({
+  const { data: stats, isLoading, isFetching, refetch } = useQuery<DashboardStats>({
     queryKey: [...queryKeys.unmatchedTransactions, weekOffset],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -119,6 +119,7 @@ function DashboardContent() {
         weekOffset={weekOffset}
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}
+        isFetching={isFetching}
       />
 
       {/* Stats Cards */}

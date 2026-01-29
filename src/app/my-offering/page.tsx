@@ -86,6 +86,7 @@ interface MyOfferingData {
   familyGroup: FamilyGroup;
   yearlyHistory?: YearlyHistory[];
   pledgeStatus: PledgeStatus[];
+  weeklyData?: Array<{ date: string; amount: number }>;
 }
 
 const COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -108,8 +109,8 @@ export default function MyOfferingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 차트 뷰 상태 (월별 / 연도별)
-  const [chartView, setChartView] = useState<'monthly' | 'yearly'>('monthly');
+  // 차트 뷰 상태 (주별 / 월별 / 연도별)
+  const [chartView, setChartView] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
 
   // 상세 내역 필터 (헌금종류)
   const [recordFilter, setRecordFilter] = useState<string>('all');
@@ -366,8 +367,18 @@ export default function MyOfferingPage() {
             <TrendingUp className="h-5 w-5" />
             헌금 추이
           </CardTitle>
-          {/* 월별/연도별 토글 */}
+          {/* 주별/월별/연도별 토글 */}
           <div className="flex rounded-lg border overflow-hidden">
+            <button
+              onClick={() => setChartView('weekly')}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                chartView === 'weekly'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              주별
+            </button>
             <button
               onClick={() => setChartView('monthly')}
               className={`px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -392,7 +403,36 @@ export default function MyOfferingPage() {
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
-            {chartView === 'monthly' ? (
+            {chartView === 'weekly' ? (
+              // 주별 차트 (최근 8주)
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data?.weeklyData || []} margin={{ top: 20, right: 10, left: 5, bottom: 5 }}>
+                  <XAxis dataKey="date" />
+                  <YAxis
+                    tickFormatter={(value) => formatAmount(value)}
+                    width={60}
+                  />
+                  <Tooltip
+                    formatter={(value) => [`${Number(value || 0).toLocaleString()}원`, '헌금액']}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="amount"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                  >
+                    <LabelList
+                      dataKey="amount"
+                      position="top"
+                      formatter={(value: unknown) => (typeof value === 'number' && value > 0) ? formatAmount(value) : ''}
+                      style={{ fontSize: '10px', fill: '#22c55e' }}
+                    />
+                  </Line>
+                </LineChart>
+              </ResponsiveContainer>
+            ) : chartView === 'monthly' ? (
               // 월별 차트 (2년 비교)
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={monthlyChartData}>

@@ -14,6 +14,7 @@ interface DashboardHeaderProps {
   weekOffset?: number;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  isFetching?: boolean;
 }
 
 export function DashboardHeader({
@@ -21,10 +22,12 @@ export function DashboardHeader({
   weekOffset = 0,
   onRefresh,
   isRefreshing = false,
+  isFetching = false,
 }: DashboardHeaderProps) {
   const router = useRouter();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const isLoadingData = isPending || isFetching;
 
   const buildUrl = (weekParam: number | null) => {
     const params = new URLSearchParams();
@@ -94,7 +97,7 @@ export function DashboardHeader({
             variant="outline"
             size="sm"
             onClick={handlePrevWeek}
-            disabled={isPending}
+            disabled={isLoadingData}
             className="h-8 px-2 md:px-2.5 rounded-r-none border-r-0 bg-[#F8F6F3] border-[#E8E4DE] hover:bg-[#F0EDE8] hover:border-[#C9A962] disabled:opacity-50"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -104,9 +107,9 @@ export function DashboardHeader({
             <PopoverTrigger asChild>
               <button
                 className="flex items-center gap-1.5 md:gap-2 px-2 md:px-4 h-8 border border-[#E8E4DE] bg-white hover:bg-[#F8F6F3] transition-colors cursor-pointer disabled:cursor-wait disabled:opacity-70"
-                disabled={isPending}
+                disabled={isLoadingData}
               >
-                {isPending ? (
+                {isLoadingData ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin text-[#C9A962]" />
                     <span className="text-[12px] md:text-sm font-semibold text-[#6B7B8C]">로딩...</span>
@@ -134,7 +137,7 @@ export function DashboardHeader({
             variant="outline"
             size="sm"
             onClick={handleNextWeek}
-            disabled={isCurrentWeek || isPending}
+            disabled={isCurrentWeek || isLoadingData}
             className="h-8 px-2 md:px-2.5 rounded-l-none border-l-0 bg-[#F8F6F3] border-[#E8E4DE] hover:bg-[#F0EDE8] hover:border-[#C9A962] disabled:opacity-30"
           >
             <ChevronRight className="h-4 w-4" />

@@ -39,10 +39,10 @@ const OFFERING_TYPES: { value: OfferingType; label: string; icon: React.ReactNod
   { value: 'weekly', label: '주정', icon: <Calendar className="h-5 w-5" />, description: '주일 헌금' },
 ];
 
-const PLEDGE_PERIODS: { value: PledgePeriod; label: string; multiplier: number }[] = [
-  { value: 'weekly', label: '주정 (매주)', multiplier: 52 },
-  { value: 'monthly', label: '월정 (매월)', multiplier: 12 },
-  { value: 'yearly', label: '연간 (1회)', multiplier: 1 },
+const PLEDGE_PERIODS: { value: PledgePeriod; label: string; multiplier: number; amountLabel: string }[] = [
+  { value: 'weekly', label: '주정 (매주)', multiplier: 52, amountLabel: '주별 작정금액' },
+  { value: 'monthly', label: '월정 (매월)', multiplier: 12, amountLabel: '월별 작정금액' },
+  { value: 'yearly', label: '연간', multiplier: 1, amountLabel: '연간 작정금액' },
 ];
 
 export function PledgeModal({
@@ -166,7 +166,7 @@ export function PledgeModal({
     }
   };
 
-  const periodLabel = PLEDGE_PERIODS.find(p => p.value === pledgePeriod)?.label.split(' ')[0] || '';
+  const amountLabel = PLEDGE_PERIODS.find(p => p.value === pledgePeriod)?.amountLabel || '작정금액';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -229,9 +229,7 @@ export function PledgeModal({
 
           {/* 작정 금액 */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">
-              {periodLabel} 작정 금액
-            </Label>
+            <Label className="text-sm font-medium">{amountLabel}</Label>
             <div className="relative">
               <Input
                 type="text"
@@ -242,21 +240,6 @@ export function PledgeModal({
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">원</span>
             </div>
-
-            {/* 연간 환산 */}
-            {yearlyAmount > 0 && (
-              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-sm text-green-700">
-                  <span className="font-medium">연간 환산:</span>{' '}
-                  <span className="font-bold">{formatAmount(yearlyAmount)}원</span>
-                </p>
-                {offeringType === 'building' && yearlyAmount >= 1000000 && (
-                  <p className="text-xs text-green-600 mt-1">
-                    이 금액으로 대출 이자 약 {Math.floor(yearlyAmount / 5000000)}개월분을 갚을 수 있습니다!
-                  </p>
-                )}
-              </div>
-            )}
           </div>
 
           {/* 작정 기간 */}
@@ -311,6 +294,21 @@ export function PledgeModal({
               </Select>
             </div>
           </div>
+
+          {/* 총 작정금액 */}
+          {yearlyAmount > 0 && (
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-sm text-green-700 font-medium">총 작정금액 (연간)</p>
+              <p className="text-2xl font-bold text-green-700 mt-1">
+                {formatAmount(yearlyAmount)}원
+              </p>
+              {offeringType === 'building' && yearlyAmount >= 1000000 && (
+                <p className="text-xs text-green-600 mt-2">
+                  이 금액으로 대출 이자 약 {Math.floor(yearlyAmount / 5000000)}개월분을 갚을 수 있습니다!
+                </p>
+              )}
+            </div>
+          )}
 
           {/* 메모 */}
           <div className="space-y-2">

@@ -2545,15 +2545,57 @@ export async function recalculatePledgeFulfillment(pledgeId: string): Promise<{ 
 }
 
 /**
- * 모든 작정의 누계 재계산
+ * 모든 작정의 누계 재계산 (성능 최적화 버전)
+ * - 수입부 데이터를 1회만 읽음 (기존: 작정 개수만큼 읽음)
+ * - 배치로 모든 작정의 누계 계산
  */
 export async function recalculateAllPledgesFulfillment(year?: number): Promise<number> {
-  const pledges = await getPledges({ year, status: 'active' });
+  const targetYear = year || new Date().getFullYear();
+  const pledges = await getPledges({ year: targetYear, status: 'active' });
+
+  if (pledges.length === 0) return 0;
+
+  // 1. 해당 연도의 수입 기록을 1회만 조회
+  const startDate = `${targetYear}-01-01`;
+  const endDate = `${targetYear}-12-31`;
+  const allIncomeRecords = await getIncomeRecords(startDate, endDate);
+
   let updatedCount = 0;
 
+  // 2. 각 작정에 대해 누계 계산 (추가 API 호출 없이 메모리에서 처리)
   for (const pledge of pledges) {
-    const result = await recalculatePledgeFulfillment(pledge.id);
-    if (result.fulfilled_amount > 0) {
+    // representative 기준으로 가족 구성원 찾기
+    const representative = pledge.representative || pledge.donor_name;
+
+    // 가족 구성원의 donor_name 목록 수집
+    const familyMemberNames = new Set<string>();
+    familyMemberNames.add(representative);
+    familyMemberNames.add(pledge.donor_name);
+
+    // 수입부에서 같은 representative를 가진 모든 헌금자 추가
+    allIncomeRecords.forEach(record => {
+      if (record.representative === representative) {
+        familyMemberNames.add(record.donor_name);
+      }
+    });
+
+    // 가족 구성원 전체의 해당 코드 수입 필터링
+    const matchingRecords = allIncomeRecords.filter(record =>
+      familyMemberNames.has(record.donor_name) &&
+      record.offering_code === pledge.offering_code
+    );
+
+    // 누계 계산
+    const fulfilled_amount = matchingRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const fulfilled_count = matchingRecords.length;
+
+    // 작정 업데이트
+    await updatePledge(pledge.id, {
+      fulfilled_amount,
+      fulfilled_count,
+    });
+
+    if (fulfilled_amount > 0) {
       updatedCount++;
     }
   }

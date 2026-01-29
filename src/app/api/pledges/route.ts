@@ -54,10 +54,9 @@ export async function GET(request: NextRequest) {
     });
 
     // 조회 시 누계 재계산 옵션 (recalculate=true)
-    if (recalculate && pledges.length > 0) {
-      for (const pledge of pledges) {
-        await recalculateAllPledgesFulfillment(pledge.year);
-      }
+    if (recalculate && pledges.length > 0 && year) {
+      // 해당 연도만 1회 재계산 (기존: 각 pledge마다 전체 재계산 - O(n²) 문제)
+      await recalculateAllPledgesFulfillment(year);
       // 재계산 후 다시 조회
       const updatedPledges = await getPledges({
         year,

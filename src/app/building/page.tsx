@@ -33,7 +33,17 @@ import {
   TrendingDown,
   DollarSign,
   HandHeart,
+  CalendarCheck,
+  X,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { PledgeModal } from '@/components/pledge';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
@@ -180,6 +190,67 @@ export default function BuildingPage() {
   const [flippedCards, setFlippedCards] = useState<{card1: boolean, card2: boolean}>({card1: false, card2: false});
   const [pledgeModalOpen, setPledgeModalOpen] = useState(false);
   const session = useFinanceSession();
+
+  // 연마감 관련 상태
+  const [annualClosingNeeded, setAnnualClosingNeeded] = useState(false);
+  const [annualClosingPreview, setAnnualClosingPreview] = useState<{
+    targetYear: number;
+    donation: number;
+    interest: number;
+    principal: number;
+    currentLoanBalance: number;
+    newLoanBalance: number;
+  } | null>(null);
+  const [showClosingDialog, setShowClosingDialog] = useState(false);
+  const [closingInProgress, setClosingInProgress] = useState(false);
+  const [closingDismissed, setClosingDismissed] = useState(false);
+
+  // 연마감 상태 확인 (super_admin만)
+  useEffect(() => {
+    const checkAnnualClosing = async () => {
+      if (session?.finance_role !== 'super_admin') return;
+
+      try {
+        const res = await fetch('/api/building/annual-closing');
+        const result = await res.json();
+        if (result.success && result.needsClosing) {
+          setAnnualClosingNeeded(true);
+          setAnnualClosingPreview(result.preview);
+        }
+      } catch (error) {
+        console.error('Failed to check annual closing:', error);
+      }
+    };
+    checkAnnualClosing();
+  }, [session?.finance_role]);
+
+  // 연마감 실행
+  const handleAnnualClosing = async () => {
+    if (!annualClosingPreview) return;
+
+    setClosingInProgress(true);
+    try {
+      const res = await fetch('/api/building/annual-closing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetYear: annualClosingPreview.targetYear }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        setAnnualClosingNeeded(false);
+        setShowClosingDialog(false);
+        // 페이지 데이터 새로고침
+        window.location.reload();
+      } else {
+        alert('연마감 처리 중 오류: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Annual closing error:', error);
+      alert('연마감 처리 중 오류가 발생했습니다.');
+    } finally {
+      setClosingInProgress(false);
+    }
+  };
 
   // 데이터 로드
   useEffect(() => {
@@ -367,6 +438,38 @@ export default function BuildingPage() {
           </Button>
         </div>
       </div>
+
+      {/* 연마감 알림 (super_admin, 12/31~1/5) */}
+      {annualClosingNeeded && !closingDismissed && (
+        <Alert className="bg-amber-50 border-amber-300">
+          <CalendarCheck className="h-5 w-5 text-amber-600" />
+          <AlertTitle className="text-amber-800 font-semibold flex items-center justify-between">
+            <span>성전건축헌금 연마감 필요</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => setClosingDismissed(true)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </AlertTitle>
+          <AlertDescription className="text-amber-700">
+            {annualClosingPreview?.targetYear}년도 성전건축헌금 연마감이 필요합니다.
+            마감을 완료하면 스냅샷이 갱신되어 새해 데이터가 정확히 반영됩니다.
+            <div className="mt-3">
+              <Button
+                size="sm"
+                onClick={() => setShowClosingDialog(true)}
+                className="bg-amber-600 hover:bg-amber-700"
+              >
+                <CalendarCheck className="h-4 w-4 mr-2" />
+                연마감 실행
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* 상단 3개 카드 (클릭 토글) */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -731,6 +834,98 @@ export default function BuildingPage() {
           }}
         />
       )}
+
+      {/* 연마감 확인 다이얼로그 */}
+      <Dialog open={showClosingDialog} onOpenChange={setShowClosingDialog}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <CalendarCheck className="h-5 w-5 text-amber-600" />
+              {annualClosingPreview?.targetYear}년 연마감 확인
+            </DialogTitle>
+            <DialogDescription>
+              아래 내용을 확인 후 연마감을 실행해주세요.
+            </DialogDescription>
+          </DialogHeader>
+
+          {annualClosingPreview && (
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-slate-50 rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">대상 연도</span>
+                  <span className="font-bold">{annualClosingPreview.targetYear}년</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">건축헌금 합계</span>
+                  <span className="font-bold text-green-600">
+                    {formatFullCurrency(annualClosingPreview.donation)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">이자 지출</span>
+                  <span className="font-bold text-red-600">
+                    {formatFullCurrency(annualClosingPreview.interest)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">원금 상환</span>
+                  <span className="font-bold text-blue-600">
+                    {formatFullCurrency(annualClosingPreview.principal)}
+                  </span>
+                </div>
+                <hr className="my-2" />
+                <div className="flex justify-between">
+                  <span className="text-slate-600">현재 대출 잔액</span>
+                  <span className="font-bold">
+                    {formatFullCurrency(annualClosingPreview.currentLoanBalance)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">마감 후 대출 잔액</span>
+                  <span className="font-bold text-amber-600">
+                    {formatFullCurrency(annualClosingPreview.newLoanBalance)}
+                  </span>
+                </div>
+              </div>
+
+              <Alert className="bg-amber-50 border-amber-200">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-700 text-sm">
+                  연마감을 실행하면 {annualClosingPreview.targetYear}년 데이터가 스냅샷으로 저장됩니다.
+                  이 작업은 되돌릴 수 없으니 신중하게 진행해주세요.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowClosingDialog(false)}
+              disabled={closingInProgress}
+            >
+              취소
+            </Button>
+            <Button
+              onClick={handleAnnualClosing}
+              disabled={closingInProgress}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              {closingInProgress ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  처리 중...
+                </>
+              ) : (
+                <>
+                  <CalendarCheck className="mr-2 h-4 w-4" />
+                  연마감 실행
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

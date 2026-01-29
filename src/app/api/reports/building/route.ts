@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   getIncomeRecords,
   getExpenseRecords,
-  getBuildingSummary,
-  getBuildingYearlyDonations,
+  getBuildingMaster,
 } from '@/lib/google-sheets';
 
 // 기본 이자율 4.7% (연)
@@ -191,104 +190,129 @@ function generateScenarios(loanBalance: number, cumulativeInterest: number, annu
 export async function GET(request: NextRequest) {
   try {
     const currentYear = new Date().getFullYear();
-    const interestRate = DEFAULT_INTEREST_RATE; // 4.7%
 
-    // 1. Google Sheets에서 건축 요약 데이터 읽기
-    const [sheetSummary, sheetDonations] = await Promise.all([
-      getBuildingSummary(),
-      getBuildingYearlyDonations(),
-    ]);
+    // 1. 건축현황마스터에서 스냅샷 데이터 읽기
+    const master = await getBuildingMaster();
+    const interestRate = master.interestRate;
 
-    // 2. 금년 실제 데이터 조회 (수입부/지출부)
-    const [incomeRecords, expenseRecords] = await Promise.all([
-      getIncomeRecords(`${currentYear}-01-01`, `${currentYear}-12-31`),
-      getExpenseRecords(`${currentYear}-01-01`, `${currentYear}-12-31`),
-    ]);
+    // 2. 스냅샷 이후 년도 데이터 조회 (수입부/지출부)
+    let currentYearDonation = 0;
+    let currentYearPrincipal = 0;
+    let currentYearInterest = 0;
+    let currentYearRepayment = 0;
 
-    // 건축헌금 (offering_code 500번대)
-    const currentYearDonation = incomeRecords
-      .filter(r => r.offering_code >= 500 && r.offering_code < 600)
-      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    if (currentYear > master.snapshotYear) {
+      const [incomeRecords, expenseRecords] = await Promise.all([
+        getIncomeRecords(`${currentYear}-01-01`, `${currentYear}-12-31`),
+        getExpenseRecords(`${currentYear}-01-01`, `${currentYear}-12-31`),
+      ]);
 
-    // 원금상환 (account_code 502)
-    const currentYearPrincipal = expenseRecords
-      .filter(r => r.account_code === 502)
-      .reduce((sum, r) => sum + (r.amount || 0), 0);
+      // 건축헌금 (offering_code 501)
+      currentYearDonation = incomeRecords
+        .filter(r => r.offering_code === 501)
+        .reduce((sum, r) => sum + (r.amount || 0), 0);
 
-    // 이자지출 (account_code 501)
-    const currentYearInterest = expenseRecords
-      .filter(r => r.account_code === 501)
-      .reduce((sum, r) => sum + (r.amount || 0), 0);
+      // 원금상환 (account_code 502)
+      currentYearPrincipal = expenseRecords
+        .filter(r => r.account_code === 502)
+        .reduce((sum, r) => sum + (r.amount || 0), 0);
 
-    const currentYearRepayment = currentYearPrincipal + currentYearInterest;
+      // 이자지출 (account_code 501)
+      currentYearInterest = expenseRecords
+        .filter(r => r.account_code === 501)
+        .reduce((sum, r) => sum + (r.amount || 0), 0);
 
-    // 3. 히스토리 데이터 구성 (2012년 이후는 시트 데이터 사용, 없으면 폴백)
-    const historyData: BuildingHistory[] = [...earlyHistoryData];
-
-    // 시트에서 읽은 연도별 헌금을 Map으로 변환 (폴백 적용)
-    const donationByYear = new Map<number, number>();
-    if (sheetDonations.length > 0) {
-      sheetDonations.forEach(d => donationByYear.set(d.year, d.donation));
+      currentYearRepayment = currentYearPrincipal + currentYearInterest;
     }
-    // 폴백 데이터로 보완 (시트에 없는 경우)
-    for (const [year, amount] of Object.entries(yearlyDonationFallback)) {
-      const y = Number(year);
-      if (!donationByYear.has(y) || donationByYear.get(y) === 0) {
-        donationByYear.set(y, amount);
+
+    // 3. 히스토리 데이터 구성 (마스터에서 읽기 + 폴백)
+    const historyData: BuildingHistory[] = [];
+
+    // 마스터 히스토리가 있으면 사용, 없으면 기존 earlyHistoryData 폴백
+    if (master.history.length > 0) {
+      // 누적 계산용 변수
+      let cumulativeDonation = master.cumulativeDonationBefore2011;
+      let cumulativePrincipal = 0;
+      let cumulativeInterest = 0;
+
+      for (const h of master.history) {
+        // 2012년 이전은 누적을 따로 계산
+        if (h.year <= 2011) {
+          historyData.push({
+            year: h.year,
+            yearlyDonation: h.donation,
+            cumulativeDonation: h.year === 2011 ? master.cumulativeDonationBefore2011 : cumulativeDonation,
+            principalPaid: h.principal,
+            interestPaid: h.interest,
+            loanBalance: h.loanBalance,
+            milestone: h.milestone ? {
+              title: h.milestone.split(':')[0] || h.milestone,
+              description: h.milestone.split(':')[1] || '',
+              icon: h.milestone.includes('토지') ? '🏞️' : h.milestone.includes('완공') ? '🏛️' : '📍'
+            } : undefined
+          });
+        } else {
+          // 2012년 이후 누적 계산
+          cumulativeDonation += h.donation;
+          cumulativePrincipal += h.principal;
+          cumulativeInterest += h.interest;
+
+          historyData.push({
+            year: h.year,
+            yearlyDonation: h.donation,
+            cumulativeDonation,
+            principalPaid: cumulativePrincipal,
+            interestPaid: cumulativeInterest,
+            loanBalance: h.loanBalance,
+            milestone: h.year === master.snapshotYear ? {
+              title: '스냅샷',
+              description: `잔액 ${(h.loanBalance / 100000000).toFixed(1)}억`,
+              icon: '📍'
+            } : undefined
+          });
+        }
+      }
+    } else {
+      // 폴백: 기존 earlyHistoryData 사용
+      historyData.push(...earlyHistoryData);
+
+      // 2012~스냅샷연도 히스토리 추가
+      let prevCumulativeDonation = 3200000000; // 2011년 누적
+      for (let year = 2012; year <= master.snapshotYear; year++) {
+        const yearlyDonation = yearlyDonationFallback[year] || 0;
+        prevCumulativeDonation += yearlyDonation;
+
+        const progress = yearlyProgressData[year] || {
+          principalPaid: 0,
+          interestPaid: 0,
+          loanBalance: 2100000000,
+        };
+
+        historyData.push({
+          year,
+          yearlyDonation,
+          cumulativeDonation: prevCumulativeDonation,
+          principalPaid: progress.principalPaid,
+          interestPaid: progress.interestPaid,
+          loanBalance: year === master.snapshotYear ? master.loanBalance : progress.loanBalance,
+          ...(year === master.snapshotYear && {
+            milestone: {
+              title: '스냅샷',
+              description: `잔액 ${(master.loanBalance / 100000000).toFixed(1)}억`,
+              icon: '📍'
+            }
+          })
+        });
       }
     }
 
-    // 시트 요약 데이터 (폴백 적용)
-    const safeSummary = {
-      landCost: sheetSummary.landCost || 1800000000,
-      buildingCost: sheetSummary.buildingCost || 3400000000,
-      totalCost: sheetSummary.totalCost || 5200000000,
-      donationBefore2011: sheetSummary.donationBefore2011 || 3200000000,
-      totalLoan: sheetSummary.totalLoan || 2100000000,
-      donationAfter2012: sheetSummary.donationAfter2012 || 1220000000,
-      currentYearInterest: sheetSummary.currentYearInterest || 61035133,
-      currentYearPrincipal: sheetSummary.currentYearPrincipal || 50000000,
-      cumulativeInterest: sheetSummary.cumulativeInterest || 1026764421,
-      cumulativePrincipal: sheetSummary.cumulativePrincipal || 800000000,
-      loanBalance: sheetSummary.loanBalance || 1300000000,
-    };
-
-    // 2012~2025 히스토리 추가
-    let prevCumulativeDonation = 3200000000; // 2011년 누적
-    for (let year = 2012; year <= 2025; year++) {
-      const yearlyDonation = donationByYear.get(year) || yearlyDonationFallback[year] || 0;
-      prevCumulativeDonation += yearlyDonation;
-
-      const progress = yearlyProgressData[year] || {
-        principalPaid: 0,
-        interestPaid: 0,
-        loanBalance: 2100000000,
-      };
-
-      historyData.push({
-        year,
-        yearlyDonation,
-        cumulativeDonation: prevCumulativeDonation,
-        principalPaid: progress.principalPaid,
-        interestPaid: progress.interestPaid,
-        loanBalance: year === 2025 ? safeSummary.loanBalance : progress.loanBalance,
-        ...(year === 2025 && {
-          milestone: {
-            title: '현재',
-            description: `잔액 ${(safeSummary.loanBalance / 100000000).toFixed(1)}억`,
-            icon: '📍'
-          }
-        })
-      });
-    }
-
-    // 금년 데이터 추가 (2026년 이후)
-    if (currentYear > 2025) {
+    // 금년 데이터 추가 (스냅샷 이후 연도)
+    if (currentYear > master.snapshotYear) {
       const lastYearData = historyData[historyData.length - 1];
       const cumulativeDonation = lastYearData.cumulativeDonation + currentYearDonation;
-      const principalPaid = safeSummary.cumulativePrincipal + currentYearPrincipal;
-      const interestPaidCumulative = safeSummary.cumulativeInterest + currentYearInterest;
-      const loanBalance = safeSummary.loanBalance - currentYearPrincipal;
+      const principalPaid = master.cumulativePrincipal + currentYearPrincipal;
+      const interestPaidCumulative = master.cumulativeInterest + currentYearInterest;
+      const loanBalance = master.loanBalance - currentYearPrincipal;
 
       historyData.push({
         year: currentYear,
@@ -305,10 +329,14 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 4. 최근 5년 데이터 동적 구성 (currentYear-4 ~ currentYear)
+    // 4. 최근 5년 데이터 구성 (마스터 히스토리 + 금년 데이터)
     const recentYears: RecentYear[] = [];
+
+    // 마스터 히스토리에서 최근 4년 가져오기
+    const masterHistoryByYear = new Map(master.history.map(h => [h.year, h]));
+
     for (let year = currentYear - 4; year <= currentYear; year++) {
-      if (year === currentYear) {
+      if (year === currentYear && currentYear > master.snapshotYear) {
         // 금년: 수입부/지출부에서 계산
         recentYears.push({
           year,
@@ -317,17 +345,29 @@ export async function GET(request: NextRequest) {
           principal: currentYearPrincipal,
           interest: currentYearInterest,
         });
-      } else if (year >= 2020 && year <= 2025) {
-        // 과거년도: 폴백 적용된 헌금 + 원금/이자 데이터
-        const donation = donationByYear.get(year) || yearlyDonationFallback[year] || 0;
-        const repayment = yearlyRepaymentData[year] || { principal: 0, interest: 0 };
-        recentYears.push({
-          year,
-          donation,
-          repayment: repayment.principal + repayment.interest,
-          principal: repayment.principal,
-          interest: repayment.interest,
-        });
+      } else {
+        // 과거년도: 마스터 히스토리 또는 폴백 사용
+        const masterData = masterHistoryByYear.get(year);
+        if (masterData) {
+          recentYears.push({
+            year,
+            donation: masterData.donation,
+            repayment: masterData.principal + masterData.interest,
+            principal: masterData.principal,
+            interest: masterData.interest,
+          });
+        } else if (year >= 2020 && year <= 2025) {
+          // 폴백 적용된 헌금 + 원금/이자 데이터
+          const donation = yearlyDonationFallback[year] || 0;
+          const repayment = yearlyRepaymentData[year] || { principal: 0, interest: 0 };
+          recentYears.push({
+            year,
+            donation,
+            repayment: repayment.principal + repayment.interest,
+            principal: repayment.principal,
+            interest: repayment.interest,
+          });
+        }
       }
     }
 
@@ -338,25 +378,25 @@ export async function GET(request: NextRequest) {
     const totalInterest5Years = recentYears.reduce((sum, d) => sum + d.interest, 0);
     const shortage5Years = totalRepayment5Years - totalDonation5Years;
 
-    // 5. 건축 개요 (폴백 적용된 데이터 사용)
-    const totalDonation = safeSummary.donationBefore2011 + safeSummary.donationAfter2012 +
-      (currentYear > 2025 ? currentYearDonation : 0);
-    const totalPrincipalPaid = safeSummary.cumulativePrincipal +
-      (currentYear > 2025 ? currentYearPrincipal : 0);
-    const actualLoanBalance = safeSummary.loanBalance -
-      (currentYear > 2025 ? currentYearPrincipal : 0);
+    // 5. 건축 개요 (마스터 데이터 사용)
+    const totalDonation = master.cumulativeDonationBefore2011 + master.cumulativeDonationAfter2012 +
+      (currentYear > master.snapshotYear ? currentYearDonation : 0);
+    const totalPrincipalPaid = master.cumulativePrincipal +
+      (currentYear > master.snapshotYear ? currentYearPrincipal : 0);
+    const actualLoanBalance = master.loanBalance -
+      (currentYear > master.snapshotYear ? currentYearPrincipal : 0);
 
     const summary = {
-      totalCost: safeSummary.totalCost,
-      landCost: safeSummary.landCost,
-      buildingCost: safeSummary.buildingCost,
+      totalCost: master.totalCost,
+      landCost: master.landCost,
+      buildingCost: master.buildingCost,
       totalDonation,
-      totalLoan: safeSummary.totalLoan,
+      totalLoan: master.initialLoan,
       principalPaid: totalPrincipalPaid,
-      interestPaid: safeSummary.cumulativeInterest + (currentYear > 2025 ? currentYearInterest : 0),
+      interestPaid: master.cumulativeInterest + (currentYear > master.snapshotYear ? currentYearInterest : 0),
       loanBalance: Math.max(0, actualLoanBalance),
-      donationRate: Math.round((totalDonation / safeSummary.totalCost) * 1000) / 10,
-      repaymentRate: Math.round((totalPrincipalPaid / safeSummary.totalLoan) * 1000) / 10,
+      donationRate: Math.round((totalDonation / master.totalCost) * 1000) / 10,
+      repaymentRate: Math.round((totalPrincipalPaid / master.initialLoan) * 1000) / 10,
     };
 
     // 6. 최근 통계

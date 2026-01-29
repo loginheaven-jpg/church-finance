@@ -102,6 +102,16 @@ export async function GET(request: NextRequest) {
 
     // 디버그 모드 응답
     if (debug) {
+      // 은행원장 정렬 (디버그용)
+      const debugSortedBank = bankTransactions
+        .filter(t => t.balance > 0)
+        .sort((a, b) => {
+          if (a.transaction_date === b.transaction_date) {
+            return (b.time || '').localeCompare(a.time || '');
+          }
+          return b.transaction_date.localeCompare(a.transaction_date);
+        });
+
       return NextResponse.json({
         debug: true,
         currentYear,
@@ -116,6 +126,7 @@ export async function GET(request: NextRequest) {
           yearlyIncome: yearlyIncomeRecords.length,
           yearlyExpense: yearlyExpenseRecords.length,
           bankTransactions: bankTransactions.length,
+          bankWithBalance: debugSortedBank.length,
           unmatchedBank: unmatchedBank.length,
           unmatchedCard: unmatchedCard.length,
           budgetItems: budgetData.length,
@@ -123,8 +134,28 @@ export async function GET(request: NextRequest) {
         sampleData: {
           weeklyIncome: weeklyIncomeRecords.slice(0, 2),
           weeklyExpense: weeklyExpenseRecords.slice(0, 2),
-          lastBankTransaction: bankTransactions.slice(-1)[0],
+          // 최신 5개 은행거래 (정렬 후)
+          latestBankTransactions: debugSortedBank.slice(0, 5).map(t => ({
+            id: t.id,
+            date: t.transaction_date,
+            time: t.time,
+            balance: t.balance,
+            deposit: t.deposit,
+            withdrawal: t.withdrawal,
+            description: t.description,
+          })),
           carryoverData,
+        },
+        balanceDebug: {
+          carryoverBalance: carryoverData?.balance || 0,
+          yearlyTotalIncome: yearlyIncomeRecords.reduce((sum, r) => sum + (r.amount || 0), 0),
+          yearlyTotalExpense: yearlyExpenseRecords.reduce((sum, r) => sum + (r.amount || 0), 0),
+          calculatedBalance: (carryoverData?.balance || 0) +
+            yearlyIncomeRecords.reduce((sum, r) => sum + (r.amount || 0), 0) -
+            yearlyExpenseRecords.reduce((sum, r) => sum + (r.amount || 0), 0),
+          lastBankBalance: debugSortedBank[0]?.balance || 0,
+          lastBankDate: debugSortedBank[0]?.transaction_date || null,
+          lastBankId: debugSortedBank[0]?.id || null,
         },
         envCheck: {
           hasEmail: !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,

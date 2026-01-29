@@ -71,8 +71,8 @@ export async function GET(request: NextRequest) {
       getExpenseCodes(),
     ]);
 
-    // 이월잔액 조회 (해당 연도 기준)
-    const carryover = await getCarryoverBalance(year - 1);
+    // 이월잔액 조회 (해당 연도 시작 잔액 = 전년도 말 잔액)
+    const carryover = await getCarryoverBalance(year);
     const yearStartBalance = carryover?.balance || 0;
 
     // 전주까지의 누적 계산 (연초 ~ 전주 토요일)

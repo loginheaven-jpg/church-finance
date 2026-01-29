@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getIncomeRecords, getExpenseRecords, getCarryoverBalance, getBankTransactions } from '@/lib/google-sheets';
+import { getIncomeRecords, getExpenseRecords, getCarryoverBalance } from '@/lib/google-sheets';
 import type { MonthlyReport } from '@/types';
 
 // 이월잔액을 동적으로 계산하는 헬퍼 함수
@@ -18,9 +18,10 @@ async function getCalculatedCarryover(targetYear: number): Promise<number> {
   }
 
   // 이전 연도의 이월금 + 이전 연도의 수입 - 지출로 계산
+  // targetYear의 이월금 = (targetYear-1)의 이월금 + (targetYear-1)의 수입 - (targetYear-1)의 지출
   const prevYearCarryover = await getCalculatedCarryover(targetYear - 1);
-  const prevStartDate = `${targetYear}-01-01`;
-  const prevEndDate = `${targetYear}-12-31`;
+  const prevStartDate = `${targetYear - 1}-01-01`;
+  const prevEndDate = `${targetYear - 1}-12-31`;
 
   const [prevIncomeRecords, prevExpenseRecords] = await Promise.all([
     getIncomeRecords(prevStartDate, prevEndDate),
@@ -45,11 +46,10 @@ export async function GET(request: NextRequest) {
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
 
-    const [incomeRecords, expenseRecords, calculatedCarryover, bankTransactions] = await Promise.all([
+    const [incomeRecords, expenseRecords, calculatedCarryover] = await Promise.all([
       getIncomeRecords(startDate, endDate),
       getExpenseRecords(startDate, endDate),
-      getCalculatedCarryover(year - 1), // 전년도 말 이월잔액 (동적 계산)
-      getBankTransactions(),
+      getCalculatedCarryover(year), // 해당 연도 시작 이월잔액 (= 전년도 말 잔액)
     ]);
 
     if (debug) {
@@ -108,31 +108,14 @@ export async function GET(request: NextRequest) {
     const totalIncome = months.reduce((sum, m) => sum + m.income, 0);
     const totalExpense = months.reduce((sum, m) => sum + m.expense, 0);
 
-    // 현재 KST 시간 기준 현재 연도
+    // 현재 KST 시간 기준 현재 연도 확인
     const now = new Date();
     const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     const currentYear = kst.getFullYear();
     const isCurrentYear = year === currentYear;
 
-    // 현재 잔고 (현재연도) 또는 연말잔고 (과거연도)
-    let endBalance: number;
-    if (isCurrentYear) {
-      // 은행원장의 마지막 잔액
-      const sortedBank = bankTransactions
-        .filter(t => t.balance > 0)
-        .sort((a, b) => {
-          if (a.transaction_date === b.transaction_date) {
-            return (b.time || '').localeCompare(a.time || '');
-          }
-          return b.transaction_date.localeCompare(a.transaction_date);
-        });
-      // 은행 데이터가 없으면 이월금 + 수입 - 지출로 계산
-      const lastBankBalance = sortedBank[0]?.balance;
-      endBalance = lastBankBalance ?? (carryoverBalance + totalIncome - totalExpense);
-    } else {
-      // 과거 연도: 이월금 + 연간수입 - 연간지출
-      endBalance = carryoverBalance + totalIncome - totalExpense;
-    }
+    // 현재 잔고 (또는 연말잔고) = 이월금 + 수입 - 지출
+    const endBalance = carryoverBalance + totalIncome - totalExpense;
 
     const report: MonthlyReport = {
       year,

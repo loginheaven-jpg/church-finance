@@ -27,6 +27,7 @@ import {
   UserCog,
   LogOut,
   User,
+  CalendarCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
@@ -102,6 +103,7 @@ const menuSections: MenuSection[] = [
     label: 'ADMIN',
     minRole: 'super_admin',
     items: [
+      { href: '/admin/annual-closing', label: '연마감', icon: CalendarCheck },
       { href: '/admin/settings', label: '시스템 설정', icon: Settings },
       { href: '/admin/users', label: '사용자 관리', icon: UserCog },
     ],

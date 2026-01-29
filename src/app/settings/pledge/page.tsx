@@ -579,7 +579,7 @@ export default function PledgeManagementPage() {
       {/* 대량 입력 모달 - 화면 폭에 맞게 최대 확장 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent
-          className="max-w-[95vw] sm:max-w-[95vw] w-full max-h-[90vh] overflow-y-auto"
+          className="max-w-4xl sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto"
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -593,14 +593,14 @@ export default function PledgeManagementPage() {
               <Table ref={tableRef}>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead className="min-w-[100px]">헌금종류</TableHead>
-                    <TableHead className="min-w-[120px]">작정자명</TableHead>
-                    <TableHead className="min-w-[140px]">시작일</TableHead>
-                    <TableHead className="min-w-[140px]">종료일</TableHead>
-                    <TableHead className="min-w-[80px]">주기</TableHead>
-                    <TableHead className="min-w-[140px]">주기당 금액</TableHead>
-                    <TableHead className="min-w-[140px] bg-slate-100">연간합계</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
+                    <TableHead className="w-[100px]">헌금종류</TableHead>
+                    <TableHead className="w-[80px]">작정자명</TableHead>
+                    <TableHead className="w-[120px]">시작일</TableHead>
+                    <TableHead className="w-[120px]">종료일</TableHead>
+                    <TableHead className="w-[70px]">주기</TableHead>
+                    <TableHead className="w-[100px]">주기당 금액</TableHead>
+                    <TableHead className="w-[110px] bg-slate-100">연간합계</TableHead>
+                    <TableHead className="w-[40px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

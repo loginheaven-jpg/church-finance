@@ -290,8 +290,10 @@ export async function GET(request: NextRequest) {
     // 이월잔액
     const carryoverBalance = carryoverData?.balance || 0;
 
-    // 현재 잔액 (은행원장의 마지막 잔액)
-    // 은행원장이 없으면 이월금 + 연간수입 - 연간지출로 계산
+    // 현재 잔액 = 이월잔액 + 연간총수입 - 연간총지출 (계산 기반)
+    const balance = carryoverBalance + yearlyTotalIncome - yearlyTotalExpense;
+
+    // 은행원장의 마지막 잔액 (super_admin 검증용)
     const sortedBank = bankTransactions
       .filter(t => t.balance > 0)
       .sort((a, b) => {
@@ -300,8 +302,8 @@ export async function GET(request: NextRequest) {
         }
         return b.transaction_date.localeCompare(a.transaction_date);
       });
-    const lastBankBalance = sortedBank[0]?.balance;
-    const balance = lastBankBalance ?? (carryoverBalance + yearlyIncome - yearlyExpense);
+    const lastBankBalance = sortedBank[0]?.balance || 0;
+    const lastBankDate = sortedBank[0]?.transaction_date || null;
 
     // 미분류 거래 수
     const unmatchedCount = unmatchedBank.length + unmatchedCard.length;
@@ -388,6 +390,9 @@ export async function GET(request: NextRequest) {
       daysInYear,
       currentYear,
       weeklyData,
+      // super_admin 검증용 은행잔액 정보
+      lastBankBalance,
+      lastBankDate,
     };
 
     // 캐시에 저장 (noCache가 아닐 때만)
@@ -429,6 +434,8 @@ export async function GET(request: NextRequest) {
       daysInYear: 365,
       currentYear: new Date().getFullYear(),
       weeklyData: [],
+      lastBankBalance: 0,
+      lastBankDate: null,
     });
   }
 }

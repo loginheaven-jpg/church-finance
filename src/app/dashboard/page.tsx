@@ -8,7 +8,10 @@ import {
   TrendingDown,
   Wallet,
   Loader2,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
+import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries';
 import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails, BudgetExecutionCard } from '@/components/dashboard';
@@ -52,11 +55,16 @@ interface DashboardStats {
   daysPassed?: number;
   daysInYear?: number;
   currentYear?: number;
+  // super_admin 검증용 은행잔액
+  lastBankBalance?: number;
+  lastBankDate?: string | null;
 }
 
 function DashboardContent() {
   const searchParams = useSearchParams();
   const weekOffset = parseInt(searchParams.get('week') || '0');
+  const session = useFinanceSession();
+  const isSuperAdmin = session?.finance_role === 'super_admin';
 
   // 현재 주의 일요일 계산 (월~일 기준, API와 일치)
   const today = new Date();
@@ -147,6 +155,53 @@ function DashboardContent() {
           color="balance"
         />
       </div>
+
+      {/* Super Admin 잔액 검증 카드 */}
+      {isSuperAdmin && !isLoading && stats && (
+        <Card className={`border-0 shadow-soft ${
+          stats.balance === stats.lastBankBalance
+            ? 'bg-green-50'
+            : 'bg-amber-50'
+        }`}>
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              {stats.balance === stats.lastBankBalance ? (
+                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              )}
+              <div className="flex-1">
+                <h3 className="font-semibold text-slate-900 text-sm">잔액 검증 (관리자용)</h3>
+                <div className="mt-2 space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">계산 잔액 (이월+수입-지출):</span>
+                    <span className="font-medium text-blue-600">{formatAmount(stats.balance)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">
+                      은행원장 잔액{stats.lastBankDate ? ` (${stats.lastBankDate})` : ''}:
+                    </span>
+                    <span className="font-medium">{formatAmount(stats.lastBankBalance || 0)}</span>
+                  </div>
+                  {stats.balance !== stats.lastBankBalance && (
+                    <div className="flex justify-between pt-1 border-t border-amber-200">
+                      <span className="text-amber-700 font-medium">차액:</span>
+                      <span className="font-bold text-amber-700">
+                        {formatAmount(Math.abs(stats.balance - (stats.lastBankBalance || 0)))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {stats.balance !== stats.lastBankBalance && (
+                  <p className="text-xs text-amber-700 mt-2">
+                    계산 잔액과 은행 잔액이 일치하지 않습니다. 거래 내역을 확인해주세요.
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Transaction Details (shows when card is clicked) */}
       {selectedCard && (

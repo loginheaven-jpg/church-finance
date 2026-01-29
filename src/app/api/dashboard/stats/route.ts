@@ -102,6 +102,15 @@ export async function GET(request: NextRequest) {
 
     // 디버그 모드 응답
     if (debug) {
+      // transaction_date + time 정렬
+      const debugSortedBank = bankTransactions
+        .filter(t => t.balance > 0)
+        .sort((a, b) => {
+          const aDateTime = `${a.transaction_date} ${a.time || '00:00:00'}`;
+          const bDateTime = `${b.transaction_date} ${b.time || '00:00:00'}`;
+          return bDateTime.localeCompare(aDateTime);
+        });
+
       return NextResponse.json({
         debug: true,
         currentYear,
@@ -123,8 +132,8 @@ export async function GET(request: NextRequest) {
         sampleData: {
           weeklyIncome: weeklyIncomeRecords.slice(0, 2),
           weeklyExpense: weeklyExpenseRecords.slice(0, 2),
-          // 최신 5개 은행거래 (시트 순서 그대로)
-          latestBankTransactions: bankTransactions.slice(0, 5).map(t => ({
+          // 최신 5개 은행거래 (date+time 정렬)
+          latestBankTransactions: debugSortedBank.slice(0, 5).map(t => ({
             id: t.id,
             date: t.transaction_date,
             time: t.time,
@@ -142,9 +151,10 @@ export async function GET(request: NextRequest) {
           calculatedBalance: (carryoverData?.balance || 0) +
             yearlyIncomeRecords.reduce((sum, r) => sum + (r.amount || 0), 0) -
             yearlyExpenseRecords.reduce((sum, r) => sum + (r.amount || 0), 0),
-          lastBankBalance: bankTransactions[0]?.balance || 0,
-          lastBankDate: bankTransactions[0]?.transaction_date || null,
-          lastBankId: bankTransactions[0]?.id || null,
+          lastBankBalance: debugSortedBank[0]?.balance || 0,
+          lastBankDate: debugSortedBank[0]?.transaction_date || null,
+          lastBankTime: debugSortedBank[0]?.time || null,
+          lastBankId: debugSortedBank[0]?.id || null,
         },
         envCheck: {
           hasEmail: !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -314,10 +324,16 @@ export async function GET(request: NextRequest) {
     const balance = carryoverBalance + yearlyTotalIncome - yearlyTotalExpense;
 
     // 은행원장의 마지막 잔액 (super_admin 검증용)
-    // 시트 순서 그대로 사용 (row 2 = 가장 최근 거래)
-    // date/time 정렬은 time 필드가 비어있는 경우가 많아 신뢰도가 낮음
-    const lastBankBalance = bankTransactions[0]?.balance || 0;
-    const lastBankDate = bankTransactions[0]?.transaction_date || null;
+    // transaction_date + time 을 합쳐서 가장 늦은 시간의 balance 선택
+    const sortedBank = bankTransactions
+      .filter(t => t.balance > 0)
+      .sort((a, b) => {
+        const aDateTime = `${a.transaction_date} ${a.time || '00:00:00'}`;
+        const bDateTime = `${b.transaction_date} ${b.time || '00:00:00'}`;
+        return bDateTime.localeCompare(aDateTime); // 내림차순 (가장 최신 먼저)
+      });
+    const lastBankBalance = sortedBank[0]?.balance || 0;
+    const lastBankDate = sortedBank[0]?.transaction_date || null;
 
     // 미분류 거래 수
     const unmatchedCount = unmatchedBank.length + unmatchedCard.length;

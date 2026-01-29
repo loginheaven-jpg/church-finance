@@ -39,6 +39,7 @@ interface MenuItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  minRole?: FinanceRole;  // 항목별 최소 권한 (섹션 권한 오버라이드)
 }
 
 interface MenuSection {
@@ -78,8 +79,8 @@ const menuSections: MenuSection[] = [
       { href: '/reports/monthly', label: '연간 요약', icon: BarChart3 },
       { href: '/reports/comparison', label: '연간 비교', icon: Scale },
       { href: '/reports/budget', label: '예산 집행', icon: Receipt },
-      { href: '/reports/income-analysis', label: '수입 분석', icon: TrendingUp },
-      { href: '/reports/expense-analysis', label: '지출 분석', icon: TrendingDown },
+      { href: '/reports/income-analysis', label: '수입 분석', icon: TrendingUp, minRole: 'deacon' },
+      { href: '/reports/expense-analysis', label: '지출 분석', icon: TrendingDown, minRole: 'deacon' },
       { href: '/reports/custom', label: '커스텀 보고서', icon: FileBarChart },
     ],
   },
@@ -90,7 +91,7 @@ const menuSections: MenuSection[] = [
       { href: '/expense-claim', label: '지출청구', icon: FilePlus },
       { href: '/data-entry', label: '데이터 입력', icon: Upload },
       { href: '/match', label: '거래 매칭', icon: GitCompare },
-      { href: '/card-expense-integration', label: '카드내역 입력', icon: CreditCard },
+      { href: '/card-expense-integration', label: '카드내역 입력', icon: CreditCard, minRole: 'member' },
       { href: '/donors', label: '헌금자 관리', icon: Users },
       { href: '/donors/receipts', label: '기부금 영수증', icon: FileText },
       { href: '/settings/matching-rules', label: '매칭 규칙', icon: Cog },
@@ -128,10 +129,17 @@ interface SidebarProps {
 export function Sidebar({ isOpen = true, onClose, userRole = 'member', userName }: SidebarProps) {
   const pathname = usePathname();
 
-  // 사용자 역할에 따라 메뉴 필터링
-  const filteredSections = menuSections.filter(section =>
-    hasAccess(userRole, section.minRole)
-  );
+  // 사용자 역할에 따라 메뉴 필터링 (항목별 권한 포함)
+  const filteredSections = menuSections
+    .map(section => ({
+      ...section,
+      // 항목별 권한 체크: item.minRole이 있으면 그것을 사용, 없으면 section.minRole 사용
+      items: section.items.filter(item =>
+        hasAccess(userRole, item.minRole || section.minRole)
+      ),
+    }))
+    // 표시할 항목이 있는 섹션만 남김
+    .filter(section => section.items.length > 0);
 
   // 로그아웃 처리
   const handleLogout = async () => {

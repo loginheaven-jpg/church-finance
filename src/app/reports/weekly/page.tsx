@@ -23,6 +23,8 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import type { WeeklyReport } from '@/types';
 import { ExpenseDetailModal } from '@/components/expense-detail-modal';
+import { useFinanceRole } from '@/lib/auth/use-finance-session';
+import { hasRole } from '@/lib/auth/finance-permissions';
 
 // 주어진 날짜의 주일(일요일)을 계산
 function getSundayOfWeek(date: Date): Date {
@@ -39,6 +41,10 @@ export default function WeeklyReportPage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+
+  // 사용자 권한 확인 (제직 이상만 지출 상세 조회 가능)
+  const userRole = useFinanceRole();
+  const canViewExpenseDetail = hasRole(userRole, 'deacon');
 
   // 지출 상세 모달 상태
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
@@ -272,8 +278,8 @@ export default function WeeklyReportPage() {
                       .map((cat) => (
                         <TableRow
                           key={cat.categoryCode}
-                          className="cursor-pointer hover:bg-red-50"
-                          onClick={() => handleCategoryClick(cat.categoryCode, cat.categoryName)}
+                          className={canViewExpenseDetail ? "cursor-pointer hover:bg-red-50" : ""}
+                          onClick={canViewExpenseDetail ? () => handleCategoryClick(cat.categoryCode, cat.categoryName) : undefined}
                         >
                           <TableCell className="font-medium">{cat.categoryName}</TableCell>
                           <TableCell className="text-right">{formatAmount(cat.amount)}</TableCell>
@@ -329,8 +335,8 @@ export default function WeeklyReportPage() {
                     {report.expense.byCode.map((item) => (
                       <div
                         key={item.code}
-                        className="flex justify-between text-sm py-1 border-b border-slate-100 cursor-pointer hover:bg-red-50 rounded px-1"
-                        onClick={() => handleAccountClick(item.code, item.name)}
+                        className={`flex justify-between text-sm py-1 border-b border-slate-100 rounded px-1 ${canViewExpenseDetail ? 'cursor-pointer hover:bg-red-50' : ''}`}
+                        onClick={canViewExpenseDetail ? () => handleAccountClick(item.code, item.name) : undefined}
                       >
                         <span className="text-slate-600">
                           <span className="text-slate-400 mr-2">[{item.code}]</span>
@@ -347,8 +353,8 @@ export default function WeeklyReportPage() {
         </div>
       )}
 
-      {/* 지출 상세 모달 */}
-      {selectedExpense && (
+      {/* 지출 상세 모달 (제직 이상만) */}
+      {canViewExpenseDetail && selectedExpense && (
         <ExpenseDetailModal
           open={expenseModalOpen}
           onOpenChange={setExpenseModalOpen}

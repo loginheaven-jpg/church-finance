@@ -34,6 +34,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ExpenseDetailModal } from '@/components/expense-detail-modal';
 import { useYear } from '@/contexts/YearContext';
+import { useFinanceRole } from '@/lib/auth/use-finance-session';
+import { hasRole } from '@/lib/auth/finance-permissions';
 
 // ============================================================================
 // Types
@@ -181,14 +183,20 @@ function SubCategoryItem({
         {formatCurrency(item.budgeted)}
       </td>
       <td className="py-5 px-4 text-right text-2xl font-medium">
-        <button
-          type="button"
-          onClick={() => onExecutedClick?.(item.account_code, item.account_item)}
-          className="hover:text-blue-600 hover:underline cursor-pointer transition-colors"
-          title={`${formatFullCurrency(item.executed)} - 클릭하여 지출 내역 보기`}
-        >
-          {formatCurrency(item.executed)}
-        </button>
+        {onExecutedClick ? (
+          <button
+            type="button"
+            onClick={() => onExecutedClick(item.account_code, item.account_item)}
+            className="hover:text-blue-600 hover:underline cursor-pointer transition-colors"
+            title={`${formatFullCurrency(item.executed)} - 클릭하여 지출 내역 보기`}
+          >
+            {formatCurrency(item.executed)}
+          </button>
+        ) : (
+          <span title={formatFullCurrency(item.executed)}>
+            {formatCurrency(item.executed)}
+          </span>
+        )}
       </td>
       <td className="py-5 px-4 text-right">
         <Badge variant={(item.syncRate ?? 0) > 100 ? "destructive" : "secondary"} className="w-28 justify-center text-lg py-2">
@@ -311,6 +319,10 @@ export default function BudgetExecutionPage() {
   const { year: selectedYear, setYear: setSelectedYear } = useYear();
   const currentYear = new Date().getFullYear();
   const availableYears = [currentYear - 4, currentYear - 3, currentYear - 2, currentYear - 1, currentYear];
+
+  // 사용자 권한 확인 (제직 이상만 지출 상세 조회 가능)
+  const userRole = useFinanceRole();
+  const canViewExpenseDetail = hasRole(userRole, 'deacon');
 
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState<BudgetReportData | null>(null);
@@ -679,7 +691,7 @@ export default function BudgetExecutionPage() {
                 onToggle={() => handleToggleCategory(category.category_code)}
                 prevYear={reportData.prevYear}
                 currentYear={reportData.year}
-                onExecutedClick={handleExecutedClick}
+                onExecutedClick={canViewExpenseDetail ? handleExecutedClick : undefined}
               />
             </div>
           ))}
@@ -713,8 +725,8 @@ export default function BudgetExecutionPage() {
         </Card>
       )}
 
-      {/* 지출 상세 모달 */}
-      {selectedAccount && (
+      {/* 지출 상세 모달 (제직 이상만) */}
+      {canViewExpenseDetail && selectedAccount && (
         <ExpenseDetailModal
           open={expenseModalOpen}
           onOpenChange={setExpenseModalOpen}

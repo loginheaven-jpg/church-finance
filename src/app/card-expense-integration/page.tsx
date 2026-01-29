@@ -33,7 +33,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, Upload, CreditCard, AlertTriangle, Check, FileSpreadsheet, Save, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
-import { isCardOwnerMatch } from '@/lib/auth/finance-permissions';
+import { isCardOwnerMatch, hasRole } from '@/lib/auth/finance-permissions';
 import type { CardExpenseItem, CardExpenseParseResponse, ExpenseCode } from '@/types';
 
 // localStorage 키
@@ -42,6 +42,7 @@ const STORAGE_KEY = 'card-expense-draft';
 export default function CardExpenseIntegrationPage() {
   const session = useFinanceSession();
   const isSuperAdmin = session?.finance_role === 'super_admin';
+  const isAdmin = session?.finance_role ? hasRole(session.finance_role, 'admin') : false;
 
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -358,14 +359,19 @@ export default function CardExpenseIntegrationPage() {
           </CardTitle>
           <CardDescription>
             NH카드에서 다운로드한 결제내역 엑셀 파일을 업로드하세요
+            {!isAdmin && <span className="text-amber-600 ml-2">(관리자만 업로드 가능)</span>}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div
-            className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-slate-400 transition-colors cursor-pointer"
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onClick={() => document.getElementById('file-input')?.click()}
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              isAdmin
+                ? 'border-slate-300 hover:border-slate-400 cursor-pointer'
+                : 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-60'
+            }`}
+            onDrop={isAdmin ? handleDrop : undefined}
+            onDragOver={isAdmin ? handleDragOver : undefined}
+            onClick={isAdmin ? () => document.getElementById('file-input')?.click() : undefined}
           >
             <input
               id="file-input"
@@ -373,19 +379,20 @@ export default function CardExpenseIntegrationPage() {
               accept=".xlsx,.xls"
               className="hidden"
               onChange={handleFileChange}
+              disabled={!isAdmin}
             />
             <Upload className="h-12 w-12 mx-auto text-slate-400 mb-4" />
             {file ? (
               <p className="text-slate-700 font-medium">{file.name}</p>
             ) : (
               <p className="text-slate-500">
-                클릭하거나 파일을 드래그하여 업로드하세요
+                {isAdmin ? '클릭하거나 파일을 드래그하여 업로드하세요' : '파일 업로드는 관리자만 가능합니다'}
               </p>
             )}
           </div>
 
           <div className="mt-4 flex gap-2">
-            <Button onClick={handleParse} disabled={!file || loading}>
+            <Button onClick={handleParse} disabled={!isAdmin || !file || loading}>
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

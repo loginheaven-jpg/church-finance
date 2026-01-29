@@ -32,8 +32,11 @@ import {
   Calculator,
   TrendingDown,
   DollarSign,
+  HandHeart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PledgeModal } from '@/components/pledge';
+import { useFinanceSession } from '@/lib/auth/use-finance-session';
 
 // ============================================================================
 // Types
@@ -175,6 +178,8 @@ export default function BuildingPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [annualRepayment, setAnnualRepayment] = useState<number>(17000);
   const [flippedCards, setFlippedCards] = useState<{card1: boolean, card2: boolean}>({card1: false, card2: false});
+  const [pledgeModalOpen, setPledgeModalOpen] = useState(false);
+  const session = useFinanceSession();
 
   // 데이터 로드
   useEffect(() => {
@@ -341,13 +346,26 @@ export default function BuildingPage() {
             건축헌금 및 대출 상환 현황
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={toggleFullscreen}>
-          {isFullscreen ? (
-            <><Minimize2 className="h-4 w-4 mr-2" />축소</>
-          ) : (
-            <><Maximize2 className="h-4 w-4 mr-2" />전체화면</>
+        <div className="flex gap-2">
+          {session?.name && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setPledgeModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <HandHeart className="h-4 w-4 mr-2" />
+              성전봉헌 작정하기
+            </Button>
           )}
-        </Button>
+          <Button variant="outline" size="sm" onClick={toggleFullscreen}>
+            {isFullscreen ? (
+              <><Minimize2 className="h-4 w-4 mr-2" />축소</>
+            ) : (
+              <><Maximize2 className="h-4 w-4 mr-2" />전체화면</>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* 상단 3개 카드 (클릭 토글) */}
@@ -700,6 +718,19 @@ export default function BuildingPage() {
           <Timeline events={data.history} />
         </CardContent>
       </Card>
+
+      {/* 작정하기 모달 */}
+      {session?.name && (
+        <PledgeModal
+          open={pledgeModalOpen}
+          onOpenChange={setPledgeModalOpen}
+          donorName={session.name}
+          defaultOfferingType="building"
+          onSuccess={() => {
+            setPledgeModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

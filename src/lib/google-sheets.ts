@@ -15,6 +15,12 @@ import type {
   ManualReceiptHistory,
   CarryoverBalance,
   PledgeDonation,
+  Pledge,
+  PledgeHistory,
+  PledgeMilestone,
+  OfferingType,
+  PledgePeriod,
+  PledgeStatus,
 } from '@/types';
 
 // ============================================
@@ -67,6 +73,9 @@ const FINANCE_CONFIG = {
     manualReceipts: '수작업발급이력',
     carryoverBalance: '이월잔액',
     pledgeDonations: '작정헌금',
+    pledges: '작정헌금v2',
+    pledgeHistory: '작정이력',
+    pledgeMilestones: '작정마일스톤',
     buildingStatus: '2025건축헌금현황',
     yearlyBudget: '연도별예산',
     businessInfo: '사업자정보',
@@ -441,7 +450,7 @@ export async function fetchCashOfferings(
 // 수입부 관련
 // ============================================
 
-export async function addIncomeRecords(records: IncomeRecord[]): Promise<void> {
+export async function addIncomeRecords(records: IncomeRecord[], skipPledgeMatching = false): Promise<void> {
   const rows = records.map(r => [
     r.id,
     r.date, // 기준일 (주일)
@@ -458,6 +467,26 @@ export async function addIncomeRecords(records: IncomeRecord[]): Promise<void> {
   ]);
 
   await appendToSheet(FINANCE_CONFIG.sheets.income, rows);
+
+  // 작정 자동 매칭 (skipPledgeMatching이 false일 때만)
+  if (!skipPledgeMatching) {
+    for (const record of records) {
+      if (record.donor_name && record.offering_code && record.amount > 0) {
+        try {
+          await matchIncomeToPlledge(
+            record.donor_name,
+            record.id,
+            record.offering_code,
+            record.amount,
+            record.date
+          );
+        } catch (err) {
+          console.error(`Pledge matching failed for income ${record.id}:`, err);
+          // 매칭 실패해도 수입 기록은 유지
+        }
+      }
+    }
+  }
 }
 
 export async function getIncomeRecords(
@@ -2141,4 +2170,450 @@ export async function markExpenseClaimsAsProcessed(
       data: requests,
     },
   });
+}
+
+// ============================================
+// 작정헌금 v2 관련
+// ============================================
+
+// 작정헌금 v2 시트 헤더
+const PLEDGE_HEADERS = [
+  'id', 'donor_id', 'donor_name', 'representative',
+  'offering_type', 'offering_code', 'pledge_period',
+  'amount', 'yearly_amount', 'year', 'start_month', 'end_month',
+  'fulfilled_amount', 'fulfilled_count',
+  'current_streak', 'max_streak', 'last_fulfilled_date',
+  'memo', 'status', 'created_at', 'updated_at'
+];
+
+const PLEDGE_HISTORY_HEADERS = [
+  'id', 'pledge_id', 'income_id', 'amount', 'period_number', 'matched_at'
+];
+
+const PLEDGE_MILESTONE_HEADERS = [
+  'id', 'donor_name', 'milestone_type', 'achieved_at', 'offering_type', 'year'
+];
+
+/**
+ * 작정헌금 v2 시트 초기화 (헤더 생성)
+ */
+export async function initializePledgeSheets(): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+
+  const sheetConfigs = [
+    { name: FINANCE_CONFIG.sheets.pledges, headers: PLEDGE_HEADERS },
+    { name: FINANCE_CONFIG.sheets.pledgeHistory, headers: PLEDGE_HISTORY_HEADERS },
+    { name: FINANCE_CONFIG.sheets.pledgeMilestones, headers: PLEDGE_MILESTONE_HEADERS },
+  ];
+
+  for (const config of sheetConfigs) {
+    try {
+      // 시트 생성 시도
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+        requestBody: {
+          requests: [{
+            addSheet: { properties: { title: config.name } }
+          }]
+        }
+      });
+    } catch {
+      // 시트가 이미 존재하면 무시
+    }
+
+    // 헤더 설정
+    const lastCol = String.fromCharCode(65 + config.headers.length - 1);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      range: `${config.name}!A1:${lastCol}1`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [config.headers] }
+    });
+  }
+}
+
+/**
+ * 작정헌금 목록 조회
+ */
+export async function getPledges(filters?: {
+  year?: number;
+  donor_name?: string;
+  offering_type?: OfferingType;
+  status?: PledgeStatus;
+}): Promise<Pledge[]> {
+  let data = await getSheetData<Pledge>(FINANCE_CONFIG.sheets.pledges);
+
+  if (filters) {
+    if (filters.year) {
+      data = data.filter(p => p.year === filters.year);
+    }
+    if (filters.donor_name) {
+      data = data.filter(p => p.donor_name === filters.donor_name);
+    }
+    if (filters.offering_type) {
+      data = data.filter(p => p.offering_type === filters.offering_type);
+    }
+    if (filters.status) {
+      data = data.filter(p => p.status === filters.status);
+    }
+  }
+
+  return data;
+}
+
+/**
+ * 작정헌금 단일 조회
+ */
+export async function getPledgeById(id: string): Promise<Pledge | null> {
+  const data = await getPledges();
+  return data.find(p => p.id === id) || null;
+}
+
+/**
+ * 헌금자의 특정 연도 작정 조회
+ */
+export async function getPledgeByDonorAndType(
+  donor_name: string,
+  year: number,
+  offering_type: OfferingType
+): Promise<Pledge | null> {
+  const data = await getPledges({ year, donor_name, offering_type });
+  return data[0] || null;
+}
+
+/**
+ * 작정헌금 생성
+ */
+export async function createPledge(pledge: Omit<Pledge, 'id' | 'fulfilled_amount' | 'fulfilled_count' | 'current_streak' | 'max_streak'>): Promise<string> {
+  const id = generateId('PLG');
+  const now = getKSTDateTime();
+
+  const row = [
+    id,
+    pledge.donor_id || '',
+    pledge.donor_name,
+    pledge.representative || '',
+    pledge.offering_type,
+    pledge.offering_code,
+    pledge.pledge_period,
+    pledge.amount,
+    pledge.yearly_amount,
+    pledge.year,
+    pledge.start_month,
+    pledge.end_month,
+    0, // fulfilled_amount
+    0, // fulfilled_count
+    0, // current_streak
+    0, // max_streak
+    '', // last_fulfilled_date
+    pledge.memo || '',
+    pledge.status || 'active',
+    now, // created_at
+    now, // updated_at
+  ];
+
+  await appendToSheet(FINANCE_CONFIG.sheets.pledges, [row]);
+  return id;
+}
+
+/**
+ * 작정헌금 수정
+ */
+export async function updatePledge(
+  id: string,
+  updates: Partial<Pledge>
+): Promise<void> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.pledges);
+  const rowIndex = rows.findIndex(row => row[0] === id);
+
+  if (rowIndex === -1) throw new Error(`Pledge ${id} not found`);
+
+  const headers = rows[0];
+  const currentRow = rows[rowIndex];
+
+  // updated_at 자동 갱신
+  updates.updated_at = getKSTDateTime();
+
+  const updatedRow = headers.map((header, idx) => {
+    if (header in updates) {
+      return (updates as Record<string, unknown>)[header];
+    }
+    return currentRow[idx];
+  });
+
+  const lastCol = String.fromCharCode(65 + headers.length - 1);
+  await updateSheet(
+    FINANCE_CONFIG.sheets.pledges,
+    `A${rowIndex + 1}:${lastCol}${rowIndex + 1}`,
+    [updatedRow as (string | number | boolean)[]]
+  );
+}
+
+/**
+ * 작정헌금 삭제 (soft delete - status를 cancelled로 변경)
+ */
+export async function deletePledge(id: string): Promise<void> {
+  await updatePledge(id, { status: 'cancelled' as PledgeStatus });
+}
+
+/**
+ * 작정 실적 업데이트 (수입 입력 시 호출)
+ */
+export async function updatePledgeFulfillment(
+  pledgeId: string,
+  incomeId: string,
+  amount: number,
+  periodNumber?: number
+): Promise<void> {
+  // 1. 현재 작정 조회
+  const pledge = await getPledgeById(pledgeId);
+  if (!pledge) throw new Error(`Pledge ${pledgeId} not found`);
+
+  // 2. 이력 추가
+  const historyId = generateId('PHI');
+  const now = getKSTDateTime();
+  const historyRow = [
+    historyId,
+    pledgeId,
+    incomeId,
+    amount,
+    periodNumber || '',
+    now,
+  ];
+  await appendToSheet(FINANCE_CONFIG.sheets.pledgeHistory, [historyRow]);
+
+  // 3. 실적 업데이트
+  const newFulfilledAmount = pledge.fulfilled_amount + amount;
+  const newFulfilledCount = pledge.fulfilled_count + 1;
+
+  // 4. 스트릭 계산
+  const { newStreak, newMaxStreak } = await calculateStreak(pledge, periodNumber);
+
+  // 5. 작정 업데이트
+  await updatePledge(pledgeId, {
+    fulfilled_amount: newFulfilledAmount,
+    fulfilled_count: newFulfilledCount,
+    current_streak: newStreak,
+    max_streak: Math.max(pledge.max_streak, newStreak),
+    last_fulfilled_date: getKSTDate(),
+  });
+
+  // 6. 마일스톤 체크
+  await checkAndAwardMilestones(pledge, newFulfilledAmount, newStreak);
+}
+
+/**
+ * 스트릭 계산
+ */
+async function calculateStreak(
+  pledge: Pledge,
+  currentPeriod?: number
+): Promise<{ newStreak: number; newMaxStreak: number }> {
+  // 이력 조회
+  const history = await getPledgeHistory(pledge.id);
+  const fulfilledPeriods = new Set(
+    history
+      .filter(h => h.period_number)
+      .map(h => h.period_number as number)
+  );
+
+  if (currentPeriod) {
+    fulfilledPeriods.add(currentPeriod);
+  }
+
+  // 연속 달성 계산 (현재 기간부터 역순)
+  let streak = 0;
+  const maxPeriod = pledge.pledge_period === 'weekly' ? 52 :
+                    pledge.pledge_period === 'monthly' ? 12 : 1;
+
+  for (let p = currentPeriod || maxPeriod; p >= 1; p--) {
+    if (fulfilledPeriods.has(p)) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+
+  return {
+    newStreak: streak,
+    newMaxStreak: Math.max(pledge.max_streak, streak),
+  };
+}
+
+/**
+ * 작정 이력 조회
+ */
+export async function getPledgeHistory(pledgeId: string): Promise<PledgeHistory[]> {
+  const data = await getSheetData<PledgeHistory>(FINANCE_CONFIG.sheets.pledgeHistory);
+  return data.filter(h => h.pledge_id === pledgeId);
+}
+
+/**
+ * 마일스톤 체크 및 부여
+ */
+async function checkAndAwardMilestones(
+  pledge: Pledge,
+  fulfilledAmount: number,
+  streak: number
+): Promise<void> {
+  const percentage = (fulfilledAmount / pledge.yearly_amount) * 100;
+
+  // 달성률 마일스톤
+  if (percentage >= 25 && percentage < 50) {
+    await awardMilestone(pledge.donor_name, 'progress_25', pledge.offering_type, pledge.year);
+  } else if (percentage >= 50 && percentage < 75) {
+    await awardMilestone(pledge.donor_name, 'progress_50', pledge.offering_type, pledge.year);
+  } else if (percentage >= 75 && percentage < 100) {
+    await awardMilestone(pledge.donor_name, 'progress_75', pledge.offering_type, pledge.year);
+  } else if (percentage >= 100) {
+    await awardMilestone(pledge.donor_name, 'progress_100', pledge.offering_type, pledge.year);
+  }
+
+  // 스트릭 마일스톤
+  if (streak >= 4) await awardMilestone(pledge.donor_name, 'streak_4', pledge.offering_type, pledge.year);
+  if (streak >= 12) await awardMilestone(pledge.donor_name, 'streak_12', pledge.offering_type, pledge.year);
+  if (streak >= 24) await awardMilestone(pledge.donor_name, 'streak_24', pledge.offering_type, pledge.year);
+  if (streak >= 52) await awardMilestone(pledge.donor_name, 'streak_52', pledge.offering_type, pledge.year);
+
+  // 첫 달성 마일스톤
+  if (pledge.fulfilled_count === 0) {
+    await awardMilestone(pledge.donor_name, 'first_fulfill', pledge.offering_type, pledge.year);
+  }
+}
+
+/**
+ * 마일스톤 부여 (중복 방지)
+ */
+async function awardMilestone(
+  donorName: string,
+  milestoneType: string,
+  offeringType?: OfferingType,
+  year?: number
+): Promise<void> {
+  // 기존 마일스톤 확인
+  const existing = await getSheetData<PledgeMilestone>(FINANCE_CONFIG.sheets.pledgeMilestones);
+  const alreadyHas = existing.some(m =>
+    m.donor_name === donorName &&
+    m.milestone_type === milestoneType &&
+    m.offering_type === offeringType &&
+    m.year === year
+  );
+
+  if (alreadyHas) return;
+
+  // 새 마일스톤 추가
+  const id = generateId('MIL');
+  const row = [
+    id,
+    donorName,
+    milestoneType,
+    getKSTDateTime(),
+    offeringType || '',
+    year || '',
+  ];
+  await appendToSheet(FINANCE_CONFIG.sheets.pledgeMilestones, [row]);
+}
+
+/**
+ * 헌금자의 마일스톤 조회
+ */
+export async function getDonorMilestones(donorName: string): Promise<PledgeMilestone[]> {
+  const data = await getSheetData<PledgeMilestone>(FINANCE_CONFIG.sheets.pledgeMilestones);
+  return data.filter(m => m.donor_name === donorName);
+}
+
+/**
+ * 교회 전체 작정 통계 조회
+ */
+export async function getChurchPledgeStats(year: number): Promise<{
+  building: { count: number; totalPledged: number; totalFulfilled: number };
+  mission: { count: number; totalPledged: number; totalFulfilled: number };
+  weekly: { count: number; totalPledged: number; totalFulfilled: number };
+}> {
+  const pledges = await getPledges({ year, status: 'active' as PledgeStatus });
+
+  const stats = {
+    building: { count: 0, totalPledged: 0, totalFulfilled: 0 },
+    mission: { count: 0, totalPledged: 0, totalFulfilled: 0 },
+    weekly: { count: 0, totalPledged: 0, totalFulfilled: 0 },
+  };
+
+  for (const pledge of pledges) {
+    const type = pledge.offering_type as keyof typeof stats;
+    if (stats[type]) {
+      stats[type].count++;
+      stats[type].totalPledged += pledge.yearly_amount;
+      stats[type].totalFulfilled += pledge.fulfilled_amount;
+    }
+  }
+
+  return stats;
+}
+
+/**
+ * 수입 코드로 헌금 종류 판별
+ */
+export function getOfferingTypeByCode(code: number): OfferingType | null {
+  switch (code) {
+    case 501: return 'building';
+    case 21: return 'mission';
+    case 11: return 'weekly';
+    default: return null;
+  }
+}
+
+/**
+ * 수입 입력 시 자동 작정 매칭
+ */
+export async function matchIncomeToPlledge(
+  donorName: string,
+  incomeId: string,
+  incomeCode: number,
+  amount: number,
+  incomeDate: string
+): Promise<{ matched: boolean; pledgeId?: string }> {
+  // 1. 헌금 종류 판별
+  const offeringType = getOfferingTypeByCode(incomeCode);
+  if (!offeringType) {
+    return { matched: false };
+  }
+
+  // 2. 해당 연도 작정 조회
+  const year = parseInt(incomeDate.substring(0, 4));
+  const pledge = await getPledgeByDonorAndType(donorName, year, offeringType);
+  if (!pledge || pledge.status !== 'active') {
+    return { matched: false };
+  }
+
+  // 3. 기간 번호 계산
+  const periodNumber = calculatePeriodNumber(incomeDate, pledge.pledge_period);
+
+  // 4. 실적 업데이트
+  await updatePledgeFulfillment(pledge.id, incomeId, amount, periodNumber);
+
+  return { matched: true, pledgeId: pledge.id };
+}
+
+/**
+ * 날짜로 기간 번호 계산
+ */
+function calculatePeriodNumber(dateStr: string, period: PledgePeriod): number {
+  const date = new Date(dateStr);
+
+  switch (period) {
+    case 'weekly':
+      // 해당 연도의 몇 번째 주인지 계산
+      const startOfYear = new Date(date.getFullYear(), 0, 1);
+      const dayOfYear = Math.floor((date.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+      return Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
+
+    case 'monthly':
+      return date.getMonth() + 1;
+
+    case 'yearly':
+      return 1;
+
+    default:
+      return 1;
+  }
 }

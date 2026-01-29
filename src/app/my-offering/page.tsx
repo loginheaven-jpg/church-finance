@@ -16,7 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Heart, Calendar, TrendingUp, Loader2, ChevronLeft, ChevronRight, Users, Wallet } from 'lucide-react';
+import { Heart, Calendar, TrendingUp, Loader2, ChevronLeft, ChevronRight, Users, Wallet, Plus } from 'lucide-react';
+import { PledgeStatusCard } from '@/components/pledge';
+import type { Pledge, PledgeMilestone } from '@/types';
 import {
   LineChart,
   Line,
@@ -120,6 +122,10 @@ export default function MyOfferingPage() {
   const [yearlyHistory, setYearlyHistory] = useState<YearlyHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Pledge v2 상태
+  const [pledgesV2, setPledgesV2] = useState<Pledge[]>([]);
+  const [milestonesV2, setMilestonesV2] = useState<PledgeMilestone[]>([]);
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -142,6 +148,38 @@ export default function MyOfferingPage() {
 
     fetchData();
   }, [year, mode]);
+
+  // Pledge v2 데이터 로드
+  useEffect(() => {
+    const fetchPledgesV2 = async () => {
+      if (!data?.userName) return;
+      try {
+        const res = await fetch(`/api/pledges?year=${year}&donor_name=${encodeURIComponent(data.userName)}`);
+        if (res.ok) {
+          const result = await res.json();
+          setPledgesV2(result.pledges || []);
+        }
+      } catch (err) {
+        console.error('Pledge v2 조회 오류:', err);
+      }
+    };
+
+    fetchPledgesV2();
+  }, [year, data?.userName]);
+
+  // Pledge 데이터 새로고침
+  const refreshPledges = async () => {
+    if (!data?.userName) return;
+    try {
+      const res = await fetch(`/api/pledges?year=${year}&donor_name=${encodeURIComponent(data.userName)}`);
+      if (res.ok) {
+        const result = await res.json();
+        setPledgesV2(result.pledges || []);
+      }
+    } catch (err) {
+      console.error('Pledge 새로고침 오류:', err);
+    }
+  };
 
   // 연도별 차트로 전환 시 히스토리 로드
   useEffect(() => {
@@ -547,66 +585,15 @@ export default function MyOfferingPage() {
           </CardContent>
         </Card>
 
-        {/* 작정헌금 현황 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
-              작정헌금 현황
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.pledgeStatus.every(p => p.pledged_amount === 0) ? (
-              <p className="text-slate-500 text-center py-8">
-                {year}년 작정헌금이 없습니다
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {data.pledgeStatus.map((pledge) => (
-                  pledge.pledged_amount > 0 && (
-                    <div key={pledge.type} className="p-4 bg-slate-50 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-medium">{pledge.type}</span>
-                        <span className="text-sm text-slate-500">
-                          {Math.round((pledge.fulfilled_amount / pledge.pledged_amount) * 100)}% 달성
-                        </span>
-                      </div>
-                      {/* 진행률 바 */}
-                      <div className="w-full bg-slate-200 rounded-full h-2 mb-3">
-                        <div
-                          className={`h-2 rounded-full ${
-                            pledge.fulfilled_amount >= pledge.pledged_amount
-                              ? 'bg-green-500'
-                              : 'bg-blue-500'
-                          }`}
-                          style={{
-                            width: `${Math.min(100, (pledge.fulfilled_amount / pledge.pledged_amount) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-sm">
-                        <div>
-                          <p className="text-slate-500">작정액</p>
-                          <p className="font-medium">{formatAmount(pledge.pledged_amount)}</p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500">누계액</p>
-                          <p className="font-medium text-blue-600">{formatAmount(pledge.fulfilled_amount)}</p>
-                        </div>
-                        <div>
-                          <p className="text-slate-500">잔액</p>
-                          <p className={`font-medium ${pledge.remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                            {formatAmount(pledge.remaining)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* 작정헌금 현황 (새로운 v2 컴포넌트) */}
+        <PledgeStatusCard
+          pledges={pledgesV2}
+          milestones={milestonesV2}
+          donorName={data.userName}
+          representative={data.familyGroup.representative}
+          year={year}
+          onRefresh={refreshPledges}
+        />
       </div>
 
       {/* 상세 내역 */}

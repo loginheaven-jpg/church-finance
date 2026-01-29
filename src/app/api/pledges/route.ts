@@ -1,0 +1,168 @@
+import { NextRequest, NextResponse } from 'next/server';
+import {
+  getPledges,
+  createPledge,
+  initializePledgeSheets,
+  getChurchPledgeStats,
+} from '@/lib/google-sheets';
+import type {
+  OfferingType,
+  PledgePeriod,
+  PledgeStatus,
+  OFFERING_CODE_MAP,
+} from '@/types';
+
+// 헌금 종류별 수입코드 매핑
+const OFFERING_CODE_MAP_LOCAL: Record<string, number> = {
+  building: 501,
+  mission: 21,
+  weekly: 11,
+};
+
+/**
+ * 작정헌금 목록 조회
+ * GET /api/pledges?year=2026&donor_name=홍길동&offering_type=building
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : undefined;
+    const donor_name = searchParams.get('donor_name') || undefined;
+    const offering_type = searchParams.get('offering_type') as OfferingType | undefined;
+    const status = searchParams.get('status') as PledgeStatus | undefined;
+    const stats = searchParams.get('stats') === 'true';
+
+    // 교회 전체 통계 요청
+    if (stats && year) {
+      const churchStats = await getChurchPledgeStats(year);
+      return NextResponse.json({
+        success: true,
+        stats: churchStats,
+      });
+    }
+
+    const pledges = await getPledges({
+      year,
+      donor_name,
+      offering_type,
+      status,
+    });
+
+    return NextResponse.json({
+      success: true,
+      pledges,
+      count: pledges.length,
+    });
+  } catch (error) {
+    console.error('Pledges GET error:', error);
+    return NextResponse.json(
+      { success: false, error: '작정헌금 조회 중 오류가 발생했습니다' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * 작정헌금 생성
+ * POST /api/pledges
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+
+    const {
+      donor_name,
+      representative,
+      offering_type,
+      pledge_period,
+      amount,
+      year,
+      start_month = 1,
+      end_month = 12,
+      memo,
+    } = body;
+
+    // 필수 필드 검증
+    if (!donor_name || !offering_type || !pledge_period || !amount || !year) {
+      return NextResponse.json(
+        { success: false, error: '필수 필드가 누락되었습니다' },
+        { status: 400 }
+      );
+    }
+
+    // 유효성 검증
+    if (!['building', 'mission', 'weekly'].includes(offering_type)) {
+      return NextResponse.json(
+        { success: false, error: '유효하지 않은 헌금 종류입니다' },
+        { status: 400 }
+      );
+    }
+
+    if (!['weekly', 'monthly', 'yearly'].includes(pledge_period)) {
+      return NextResponse.json(
+        { success: false, error: '유효하지 않은 작정 주기입니다' },
+        { status: 400 }
+      );
+    }
+
+    // 연간 환산 금액 계산
+    let yearly_amount = amount;
+    if (pledge_period === 'weekly') {
+      yearly_amount = amount * 52;
+    } else if (pledge_period === 'monthly') {
+      const months = end_month - start_month + 1;
+      yearly_amount = amount * months;
+    }
+
+    // 수입코드 매핑
+    const offering_code = OFFERING_CODE_MAP_LOCAL[offering_type];
+
+    // 중복 체크
+    const existing = await getPledges({
+      year,
+      donor_name,
+      offering_type,
+      status: 'active',
+    });
+
+    if (existing.length > 0) {
+      return NextResponse.json(
+        { success: false, error: '이미 해당 연도에 같은 종류의 작정이 있습니다' },
+        { status: 400 }
+      );
+    }
+
+    // 시트 초기화 (헤더 없으면 생성)
+    await initializePledgeSheets();
+
+    // 작정 생성
+    const pledgeId = await createPledge({
+      donor_name,
+      representative: representative || donor_name,
+      offering_type,
+      offering_code,
+      pledge_period,
+      amount,
+      yearly_amount,
+      year,
+      start_month,
+      end_month,
+      memo,
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    return NextResponse.json({
+      success: true,
+      pledgeId,
+      message: '작정이 등록되었습니다',
+    });
+  } catch (error) {
+    console.error('Pledges POST error:', error);
+    return NextResponse.json(
+      { success: false, error: '작정헌금 생성 중 오류가 발생했습니다' },
+      { status: 500 }
+    );
+  }
+}

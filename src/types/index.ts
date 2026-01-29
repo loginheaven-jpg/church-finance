@@ -147,7 +147,7 @@ export interface CarryoverBalance {
   updated_by?: string;    // 수정자
 }
 
-// 작정헌금 (Pledge Donation)
+// 작정헌금 (Pledge Donation) - 기존 호환용
 export type PledgeType = '건축헌금' | '선교헌금';
 
 export interface PledgeDonation {
@@ -161,6 +161,145 @@ export interface PledgeDonation {
   note?: string;
   created_at: string;
   updated_at: string;
+}
+
+// ============================================
+// 새 작정헌금 시스템 (v2)
+// ============================================
+
+// 헌금 종류 (수입코드 연동)
+export type OfferingType = 'building' | 'mission' | 'weekly';
+
+// 작정 주기
+export type PledgePeriod = 'weekly' | 'monthly' | 'yearly';
+
+// 작정 상태
+export type PledgeStatus = 'active' | 'completed' | 'cancelled';
+
+// 헌금 종류 ↔ 수입코드 매핑
+export const OFFERING_CODE_MAP: Record<OfferingType, number> = {
+  building: 501,  // 성전봉헌헌금
+  mission: 21,    // 선교헌금
+  weekly: 11,     // 주일헌금
+};
+
+// 헌금 종류 한글 라벨
+export const OFFERING_TYPE_LABELS: Record<OfferingType, string> = {
+  building: '성전봉헌헌금',
+  mission: '선교헌금',
+  weekly: '주정헌금',
+};
+
+// 작정 주기 한글 라벨
+export const PLEDGE_PERIOD_LABELS: Record<PledgePeriod, string> = {
+  weekly: '주정',
+  monthly: '월정',
+  yearly: '연간',
+};
+
+// 새 작정헌금 인터페이스 (v2)
+export interface Pledge {
+  id: string;
+  donor_id?: string;        // 헌금자 ID (선택)
+  donor_name: string;       // 작정자명
+  representative?: string;  // 대표자명
+
+  // 헌금 종류
+  offering_type: OfferingType;
+  offering_code: number;    // 501, 21, 11
+
+  // 작정 정보
+  pledge_period: PledgePeriod;
+  amount: number;           // 주기당 금액
+  yearly_amount: number;    // 연간 환산 금액
+
+  // 기간
+  year: number;
+  start_month: number;
+  end_month: number;
+
+  // 실적
+  fulfilled_amount: number;
+  fulfilled_count: number;
+
+  // 스트릭 시스템
+  current_streak: number;
+  max_streak: number;
+  last_fulfilled_date?: string;
+
+  // 메타
+  memo?: string;
+  status: PledgeStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+// 작정헌금 이력
+export interface PledgeHistory {
+  id: string;
+  pledge_id: string;
+  income_id: string;
+  amount: number;
+  period_number?: number;  // 해당 주차/월 번호
+  matched_at: string;
+}
+
+// 마일스톤 종류
+export type MilestoneType =
+  | 'first_pledge'    // 첫 작정
+  | 'first_fulfill'   // 첫 달성
+  | 'progress_25'     // 25% 달성
+  | 'progress_50'     // 50% 달성
+  | 'progress_75'     // 75% 달성
+  | 'progress_100'    // 100% 달성
+  | 'streak_4'        // 4주/월 연속
+  | 'streak_12'       // 12주/월 연속
+  | 'streak_24'       // 24주/월 연속
+  | 'streak_52'       // 52주 연속
+  | 'building_1y'     // 성전봉헌 1년
+  | 'building_3y'     // 성전봉헌 3년
+  | 'mission_1y'      // 선교 1년
+  | 'all_types';      // 3종류 모두
+
+// 마일스톤
+export interface PledgeMilestone {
+  id: string;
+  donor_name: string;
+  milestone_type: MilestoneType;
+  achieved_at: string;
+  offering_type?: OfferingType;
+  year?: number;
+}
+
+// 마일스톤 정보
+export const MILESTONE_INFO: Record<MilestoneType, { emoji: string; message: string }> = {
+  first_pledge: { emoji: '🌱', message: '작정의 첫 걸음을 내딛으셨습니다!' },
+  first_fulfill: { emoji: '✨', message: '첫 번째 약속을 지키셨습니다!' },
+  progress_25: { emoji: '🌱', message: '벌써 4분의 1을 달성하셨네요!' },
+  progress_50: { emoji: '🌿', message: '절반을 넘으셨습니다! 함께해요!' },
+  progress_75: { emoji: '🌳', message: '목표가 눈앞에 보입니다!' },
+  progress_100: { emoji: '🎉', message: '올해 작정을 완수하셨습니다!' },
+  streak_4: { emoji: '🔥', message: '한 달간 꾸준히 함께하셨습니다!' },
+  streak_12: { emoji: '💪', message: '분기 내내 함께하셨습니다!' },
+  streak_24: { emoji: '⭐', message: '반년을 함께 하셨습니다!' },
+  streak_52: { emoji: '🏆', message: '1년간 매주 함께하셨습니다!' },
+  building_1y: { emoji: '🏛️', message: '성전 건축의 동역자입니다' },
+  building_3y: { emoji: '🏰', message: '성전을 함께 세워가고 있습니다' },
+  mission_1y: { emoji: '🌍', message: '선교의 동역자입니다' },
+  all_types: { emoji: '💎', message: '온전한 헌신을 하고 계십니다' },
+};
+
+// API 응답용 작정 요약
+export interface PledgeSummary {
+  offering_type: OfferingType;
+  pledge_period: PledgePeriod;
+  amount: number;
+  yearly_amount: number;
+  fulfilled_amount: number;
+  fulfilled_percentage: number;
+  current_streak: number;
+  max_streak: number;
+  status: PledgeStatus;
 }
 
 // 수입부 코드

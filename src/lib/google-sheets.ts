@@ -1936,48 +1936,69 @@ export interface BuildingYearlyHistory {
 
 /**
  * 건축현황마스터 전체 데이터 읽기
- * 시트: 건축현황마스터
+ * 시트: 건축원장
+ *
+ * 실제 시트 구조:
+ * - D4: 토지비, D5: 건물비, D6: 합계
+ * - D8: 헌금(~11년), D9: 대출
+ * - D11: 헌금(12년~)
+ * - B13: 스냅샷연도 (예: "2025")
+ * - D13: 금년이자지출, D14: 금년원금상환
+ * - D16: 누적이자지출, D17: 누적원금상환, D18: 대출잔금
+ * - J2: 이자율 (예: "4.65%")
+ * - F4~F17: 연도(2012~2025), G4~G17: 연간헌금액
  */
 export async function getBuildingMaster(): Promise<BuildingMasterData> {
-  const rows = await readSheet(FINANCE_CONFIG.sheets.buildingMaster, 'A:E');
+  const rows = await readSheet(FINANCE_CONFIG.sheets.buildingMaster, 'A:K');
 
   const parseNum = (val: string | undefined) => {
     if (!val) return 0;
     return Number(String(val).replace(/,/g, '')) || 0;
   };
 
-  // 기본정보 섹션 (행 2-6)
-  const landCost = parseNum(rows[1]?.[1]);
-  const buildingCost = parseNum(rows[2]?.[1]);
-  const totalCost = parseNum(rows[3]?.[1]);
-  const initialLoan = parseNum(rows[4]?.[1]);
-  const interestRate = parseFloat(String(rows[5]?.[1] || '4.7').replace(/%/g, '')) || 4.7;
+  // 건축비 (D열, index 3)
+  const landCost = parseNum(rows[3]?.[3]);        // D4: 토지
+  const buildingCost = parseNum(rows[4]?.[3]);    // D5: 건물
+  const totalCost = parseNum(rows[5]?.[3]);       // D6: 합계
 
-  // 스냅샷 섹션 (행 8-14)
-  const snapshotDate = String(rows[7]?.[1] || '2025-12-31');
-  const snapshotYear = parseInt(snapshotDate.substring(0, 4)) || 2025;
-  const cumulativeDonationBefore2011 = parseNum(rows[8]?.[1]);
-  const cumulativeDonationAfter2012 = parseNum(rows[9]?.[1]);
-  const cumulativePrincipal = parseNum(rows[10]?.[1]);
-  const cumulativeInterest = parseNum(rows[11]?.[1]);
-  const loanBalance = parseNum(rows[12]?.[1]);
+  // 비용조달 (D열)
+  const cumulativeDonationBefore2011 = parseNum(rows[7]?.[3]);  // D8: 헌금(~11년)
+  const initialLoan = parseNum(rows[8]?.[3]);     // D9: 대출
+  const cumulativeDonationAfter2012 = parseNum(rows[10]?.[3]);  // D11: 헌금(12년~)
 
-  // 히스토리 섹션 (행 16부터, 연도|헌금|원금|이자|잔액|마일스톤)
+  // 스냅샷 연도 (B13, index 1)
+  const snapshotYearStr = String(rows[12]?.[1] || '2025');
+  const snapshotYear = parseInt(snapshotYearStr) || 2025;
+  const snapshotDate = `${snapshotYear}-12-31`;
+
+  // 이자율 (J2, index 9)
+  const interestRateStr = String(rows[1]?.[9] || '4.7').replace(/%/g, '');
+  const interestRate = parseFloat(interestRateStr) || 4.7;
+
+  // 누적 상환 (D열)
+  const cumulativeInterest = parseNum(rows[15]?.[3]);    // D16: 누적 이자 지출
+  const cumulativePrincipal = parseNum(rows[16]?.[3]);   // D17: 누적 원금 상환
+  const loanBalance = parseNum(rows[17]?.[3]);           // D18: 대출잔금
+
+  // 히스토리 (F-G열: 연도별 헌금)
+  // F4~F17에 연도, G4~G17에 헌금액
   const history: BuildingYearlyHistory[] = [];
-  for (let i = 15; i < rows.length; i++) {
+  for (let i = 3; i <= 17; i++) {  // Row 4-18 (index 3-17)
     const row = rows[i];
-    if (!row || !row[0]) continue;
+    if (!row) continue;
 
-    const year = parseInt(String(row[0]));
+    const yearStr = String(row[5] || '');  // F열 (index 5)
+    const year = parseInt(yearStr);
     if (isNaN(year) || year < 2003) continue;
+
+    const donation = parseNum(row[6]);  // G열 (index 6)
 
     history.push({
       year,
-      donation: parseNum(row[1]),
-      principal: parseNum(row[2]),
-      interest: parseNum(row[3]),
-      loanBalance: parseNum(row[4]),
-      milestone: row[5] ? String(row[5]) : undefined,
+      donation,
+      principal: 0,  // 연도별 원금 데이터는 시트에 없음 (폴백 사용)
+      interest: 0,   // 연도별 이자 데이터는 시트에 없음 (폴백 사용)
+      loanBalance: 0, // 연도별 잔액 데이터는 시트에 없음 (폴백 사용)
     });
   }
 

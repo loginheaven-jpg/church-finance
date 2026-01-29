@@ -185,8 +185,21 @@ export default function PledgeManagementPage() {
     loadData();
   }, [loadData]);
 
-  // 대량 입력 모달 열기
+  // 대량 입력 모달 열기 (임시저장 자동 불러오기)
   const openBulkDialog = () => {
+    const saved = localStorage.getItem(`pledge_bulk_${year}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setBulkRows(parsed);
+          setDialogOpen(true);
+          return;
+        }
+      } catch {
+        // 파싱 실패 시 빈 행으로 시작
+      }
+    }
     setBulkRows([createEmptyRow(year), createEmptyRow(year), createEmptyRow(year)]);
     setDialogOpen(true);
   };
@@ -565,7 +578,10 @@ export default function PledgeManagementPage() {
 
       {/* 대량 입력 모달 - 화면 폭에 맞게 최대 확장 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-[95vw] w-full max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-[95vw] w-full max-h-[90vh] overflow-y-auto"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>작정헌금 일괄 등록</DialogTitle>
             <p className="text-sm text-slate-500">Enter: 아래 셀로 이동 | Tab: 오른쪽 셀로 이동</p>
@@ -705,7 +721,7 @@ export default function PledgeManagementPage() {
                   임시저장
                 </Button>
                 <Button variant="ghost" onClick={loadTempBulkRows}>
-                  불러오기
+                  임시저장 불러오기
                 </Button>
               </div>
               <Button onClick={submitBulkRows} disabled={saving}>

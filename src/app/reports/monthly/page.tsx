@@ -137,8 +137,8 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className="text-lg font-bold text-slate-700" title={formatFullAmount(carryoverBalance)}>
-                  {formatAmount(carryoverBalance)}원
+                <div className="text-base font-bold text-slate-700">
+                  {formatFullAmount(carryoverBalance)}
                 </div>
               </CardContent>
             </Card>
@@ -152,8 +152,8 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className="text-lg font-bold text-green-600" title={formatFullAmount(totalIncome)}>
-                  {formatAmount(totalIncome)}원
+                <div className="text-base font-bold text-green-600">
+                  {formatFullAmount(totalIncome)}
                 </div>
               </CardContent>
             </Card>
@@ -167,8 +167,8 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className="text-lg font-bold text-red-600" title={formatFullAmount(totalExpense)}>
-                  {formatAmount(totalExpense)}원
+                <div className="text-base font-bold text-red-600">
+                  {formatFullAmount(totalExpense)}
                 </div>
               </CardContent>
             </Card>
@@ -182,8 +182,8 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className={`text-lg font-bold ${totalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`} title={formatFullAmount(totalBalance)}>
-                  {totalBalance >= 0 ? '+' : ''}{formatAmount(totalBalance)}원
+                <div className={`text-base font-bold ${totalBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  {totalBalance >= 0 ? '+' : ''}{formatFullAmount(totalBalance)}
                 </div>
               </CardContent>
             </Card>
@@ -197,8 +197,8 @@ export default function MonthlyReportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 pb-3 px-3">
-                <div className="text-lg font-bold text-amber-600" title={formatFullAmount(currentBalance)}>
-                  {formatAmount(currentBalance)}원
+                <div className="text-base font-bold text-amber-600">
+                  {formatFullAmount(currentBalance)}
                 </div>
               </CardContent>
             </Card>

@@ -15,6 +15,7 @@ import { Loader2, FileText, X } from 'lucide-react';
 interface ExpenseRecord {
   id: string;
   date: string;
+  transaction_date?: string;
   payment_method: string;
   vendor: string;
   description: string;
@@ -27,7 +28,8 @@ interface ExpenseRecord {
 interface ExpenseDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  accountCode: number;
+  accountCode?: number;
+  categoryCode?: number;
   accountName: string;
   year: number;
 }
@@ -49,6 +51,7 @@ export function ExpenseDetailModal({
   open,
   onOpenChange,
   accountCode,
+  categoryCode,
   accountName,
   year,
 }: ExpenseDetailModalProps) {
@@ -57,17 +60,19 @@ export function ExpenseDetailModal({
   const [totalAmount, setTotalAmount] = useState(0);
 
   useEffect(() => {
-    if (open && accountCode) {
+    if (open && (accountCode || categoryCode)) {
       loadRecords();
     }
-  }, [open, accountCode, year]);
+  }, [open, accountCode, categoryCode, year]);
 
   const loadRecords = async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/expense/records?accountCode=${accountCode}&year=${year}`
-      );
+      const params = new URLSearchParams({ year: String(year) });
+      if (accountCode) params.set('accountCode', String(accountCode));
+      if (categoryCode) params.set('categoryCode', String(categoryCode));
+
+      const res = await fetch(`/api/expense/records?${params.toString()}`);
       const data = await res.json();
       if (data.success) {
         setRecords(data.data.records || []);
@@ -86,7 +91,7 @@ export function ExpenseDetailModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            {accountName} ({accountCode}) 지출 내역
+            {accountName} {accountCode || categoryCode ? `(${accountCode || categoryCode})` : ''} 지출 내역
           </DialogTitle>
           <DialogDescription>
             {year}년 총 집행: <span className="font-semibold text-slate-900">{formatCurrency(totalAmount)}</span>
@@ -121,7 +126,7 @@ export function ExpenseDetailModal({
                     className="border-b border-slate-100 hover:bg-slate-50"
                   >
                     <td className="py-2 px-3 text-slate-600">
-                      {formatDate(record.date)}
+                      {formatDate(record.transaction_date || record.date)}
                     </td>
                     <td className="py-2 px-3">
                       <div className="font-medium">{record.description || record.vendor || '-'}</div>

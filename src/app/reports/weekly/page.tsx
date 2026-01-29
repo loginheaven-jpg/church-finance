@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import type { WeeklyReport } from '@/types';
+import { ExpenseDetailModal } from '@/components/expense-detail-modal';
 
 // 주어진 날짜의 주일(일요일)을 계산
 function getSundayOfWeek(date: Date): Date {
@@ -38,6 +39,24 @@ export default function WeeklyReportPage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+
+  // 지출 상세 모달 상태
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<{
+    accountCode?: number;
+    categoryCode?: number;
+    name: string;
+  } | null>(null);
+
+  const handleCategoryClick = (categoryCode: number, name: string) => {
+    setSelectedExpense({ categoryCode, name });
+    setExpenseModalOpen(true);
+  };
+
+  const handleAccountClick = (accountCode: number, name: string) => {
+    setSelectedExpense({ accountCode, name });
+    setExpenseModalOpen(true);
+  };
 
   const fetchReport = async (offset: number) => {
     setLoading(true);
@@ -251,7 +270,11 @@ export default function WeeklyReportPage() {
                     {report.expense.byCategory
                       .filter(cat => cat.amount > 0)
                       .map((cat) => (
-                        <TableRow key={cat.categoryCode}>
+                        <TableRow
+                          key={cat.categoryCode}
+                          className="cursor-pointer hover:bg-red-50"
+                          onClick={() => handleCategoryClick(cat.categoryCode, cat.categoryName)}
+                        >
                           <TableCell className="font-medium">{cat.categoryName}</TableCell>
                           <TableCell className="text-right">{formatAmount(cat.amount)}</TableCell>
                         </TableRow>
@@ -304,7 +327,11 @@ export default function WeeklyReportPage() {
                   <h3 className="text-md font-semibold text-slate-700 mb-3">지출 상세</h3>
                   <div className="space-y-1">
                     {report.expense.byCode.map((item) => (
-                      <div key={item.code} className="flex justify-between text-sm py-1 border-b border-slate-100">
+                      <div
+                        key={item.code}
+                        className="flex justify-between text-sm py-1 border-b border-slate-100 cursor-pointer hover:bg-red-50 rounded px-1"
+                        onClick={() => handleAccountClick(item.code, item.name)}
+                      >
                         <span className="text-slate-600">
                           <span className="text-slate-400 mr-2">[{item.code}]</span>
                           {item.name}
@@ -318,6 +345,18 @@ export default function WeeklyReportPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* 지출 상세 모달 */}
+      {selectedExpense && (
+        <ExpenseDetailModal
+          open={expenseModalOpen}
+          onOpenChange={setExpenseModalOpen}
+          accountCode={selectedExpense.accountCode}
+          categoryCode={selectedExpense.categoryCode}
+          accountName={selectedExpense.name}
+          year={report?.year || new Date().getFullYear()}
+        />
       )}
 
       {/* Print Styles */}

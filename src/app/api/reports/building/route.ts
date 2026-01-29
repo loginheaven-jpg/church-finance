@@ -346,26 +346,21 @@ export async function GET(request: NextRequest) {
           interest: currentYearInterest,
         });
       } else {
-        // 과거년도: 마스터 히스토리 또는 폴백 사용
+        // 과거년도: 마스터 히스토리 + 폴백 병합
+        // 시트에는 헌금만 있으므로 원금/이자는 폴백 데이터 사용
         const masterData = masterHistoryByYear.get(year);
-        if (masterData) {
-          recentYears.push({
-            year,
-            donation: masterData.donation,
-            repayment: masterData.principal + masterData.interest,
-            principal: masterData.principal,
-            interest: masterData.interest,
-          });
-        } else if (year >= 2020 && year <= 2025) {
-          // 폴백 적용된 헌금 + 원금/이자 데이터
-          const donation = yearlyDonationFallback[year] || 0;
-          const repayment = yearlyRepaymentData[year] || { principal: 0, interest: 0 };
+        const fallbackRepayment = yearlyRepaymentData[year] || { principal: 0, interest: 0 };
+        const donation = masterData?.donation || yearlyDonationFallback[year] || 0;
+        const principal = fallbackRepayment.principal;
+        const interest = fallbackRepayment.interest;
+
+        if (donation > 0 || principal > 0 || interest > 0) {
           recentYears.push({
             year,
             donation,
-            repayment: repayment.principal + repayment.interest,
-            principal: repayment.principal,
-            interest: repayment.interest,
+            repayment: principal + interest,
+            principal,
+            interest,
           });
         }
       }

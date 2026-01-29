@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -96,6 +96,70 @@ export default function PledgeManagementPage() {
 
   // 시트형 대량 입력 상태
   const [bulkRows, setBulkRows] = useState<BulkEntryRow[]>([]);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  // 셀 이동 (엑셀 스타일)
+  const EDITABLE_COLUMNS = ['donor_name', 'start_date', 'end_date', 'amount'];
+
+  const moveCellFocus = (currentRowIdx: number, currentCol: string, direction: 'down' | 'right') => {
+    if (!tableRef.current) return;
+
+    const colIdx = EDITABLE_COLUMNS.indexOf(currentCol);
+    let nextRowIdx = currentRowIdx;
+    let nextColIdx = colIdx;
+
+    if (direction === 'down') {
+      nextRowIdx = currentRowIdx + 1;
+      // 마지막 행이면 새 행 추가
+      if (nextRowIdx >= bulkRows.length) {
+        addRow();
+        // 새 행 추가 후 setTimeout으로 포커스
+        setTimeout(() => {
+          const nextInput = tableRef.current?.querySelector(
+            `[data-row="${nextRowIdx}"][data-col="${currentCol}"]`
+          ) as HTMLInputElement;
+          nextInput?.focus();
+        }, 50);
+        return;
+      }
+    } else if (direction === 'right') {
+      nextColIdx = colIdx + 1;
+      if (nextColIdx >= EDITABLE_COLUMNS.length) {
+        nextColIdx = 0;
+        nextRowIdx = currentRowIdx + 1;
+        if (nextRowIdx >= bulkRows.length) {
+          addRow();
+          setTimeout(() => {
+            const nextInput = tableRef.current?.querySelector(
+              `[data-row="${nextRowIdx}"][data-col="${EDITABLE_COLUMNS[0]}"]`
+            ) as HTMLInputElement;
+            nextInput?.focus();
+          }, 50);
+          return;
+        }
+      }
+    }
+
+    const nextCol = EDITABLE_COLUMNS[nextColIdx];
+    const nextInput = tableRef.current?.querySelector(
+      `[data-row="${nextRowIdx}"][data-col="${nextCol}"]`
+    ) as HTMLInputElement;
+    nextInput?.focus();
+  };
+
+  const handleCellKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    rowIdx: number,
+    col: string
+  ) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      moveCellFocus(rowIdx, col, 'down');
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      moveCellFocus(rowIdx, col, 'right');
+    }
+  };
 
   // 데이터 로드
   const loadData = useCallback(async () => {
@@ -499,31 +563,32 @@ export default function PledgeManagementPage() {
         </CardContent>
       </Card>
 
-      {/* 대량 입력 모달 */}
+      {/* 대량 입력 모달 - 화면 폭에 맞게 최대 확장 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] w-full max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>작정헌금 일괄 등록</DialogTitle>
+            <p className="text-sm text-slate-500">Enter: 아래 셀로 이동 | Tab: 오른쪽 셀로 이동</p>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* 시트형 테이블 */}
-            <div className="overflow-x-auto border rounded-lg">
-              <Table>
+            {/* 시트형 테이블 - 엑셀 스타일 */}
+            <div className="border rounded-lg">
+              <Table ref={tableRef}>
                 <TableHeader>
                   <TableRow className="bg-slate-50">
-                    <TableHead className="w-[120px]">헌금종류</TableHead>
-                    <TableHead className="w-[120px]">작정자명</TableHead>
-                    <TableHead className="w-[130px]">시작일</TableHead>
-                    <TableHead className="w-[130px]">종료일</TableHead>
-                    <TableHead className="w-[100px]">주기</TableHead>
-                    <TableHead className="w-[140px]">주기당 금액</TableHead>
-                    <TableHead className="w-[140px] bg-slate-100">연간합계</TableHead>
+                    <TableHead className="min-w-[100px]">헌금종류</TableHead>
+                    <TableHead className="min-w-[120px]">작정자명</TableHead>
+                    <TableHead className="min-w-[140px]">시작일</TableHead>
+                    <TableHead className="min-w-[140px]">종료일</TableHead>
+                    <TableHead className="min-w-[80px]">주기</TableHead>
+                    <TableHead className="min-w-[140px]">주기당 금액</TableHead>
+                    <TableHead className="min-w-[140px] bg-slate-100">연간합계</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bulkRows.map((row) => (
+                  {bulkRows.map((row, rowIdx) => (
                     <TableRow key={row.id}>
                       <TableCell className="p-1">
                         <Select
@@ -545,6 +610,9 @@ export default function PledgeManagementPage() {
                           placeholder="홍길동"
                           value={row.donor_name}
                           onChange={(e) => updateRow(row.id, 'donor_name', e.target.value)}
+                          onKeyDown={(e) => handleCellKeyDown(e, rowIdx, 'donor_name')}
+                          data-row={rowIdx}
+                          data-col="donor_name"
                         />
                       </TableCell>
                       <TableCell className="p-1">
@@ -553,6 +621,9 @@ export default function PledgeManagementPage() {
                           className="h-9"
                           value={row.start_date}
                           onChange={(e) => updateRow(row.id, 'start_date', e.target.value)}
+                          onKeyDown={(e) => handleCellKeyDown(e, rowIdx, 'start_date')}
+                          data-row={rowIdx}
+                          data-col="start_date"
                         />
                       </TableCell>
                       <TableCell className="p-1">
@@ -561,6 +632,9 @@ export default function PledgeManagementPage() {
                           className="h-9"
                           value={row.end_date}
                           onChange={(e) => updateRow(row.id, 'end_date', e.target.value)}
+                          onKeyDown={(e) => handleCellKeyDown(e, rowIdx, 'end_date')}
+                          data-row={rowIdx}
+                          data-col="end_date"
                         />
                       </TableCell>
                       <TableCell className="p-1">
@@ -587,6 +661,9 @@ export default function PledgeManagementPage() {
                             const value = e.target.value.replace(/[^0-9]/g, '');
                             updateRow(row.id, 'amount', value ? Number(value).toLocaleString() : '');
                           }}
+                          onKeyDown={(e) => handleCellKeyDown(e, rowIdx, 'amount')}
+                          data-row={rowIdx}
+                          data-col="amount"
                         />
                       </TableCell>
                       <TableCell className="p-1 bg-slate-50">

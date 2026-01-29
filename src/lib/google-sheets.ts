@@ -21,6 +21,7 @@ import type {
   OfferingType,
   PledgePeriod,
   PledgeStatus,
+  CardExpenseTempRecord,
 } from '@/types';
 
 // ============================================
@@ -81,6 +82,7 @@ const FINANCE_CONFIG = {
     businessInfo: '사업자정보',
     expenseClaim: '지출청구',
     accounts: '계정',
+    cardExpenseTemp: '카드내역임시',
   },
 };
 
@@ -2839,4 +2841,165 @@ function calculatePeriodNumber(dateStr: string, period: PledgePeriod): number {
     default:
       return 1;
   }
+}
+
+// ============================================
+// 카드내역 임시저장 CRUD
+// ============================================
+
+const CARD_EXPENSE_TEMP_HEADERS = [
+  'tempId',
+  'transaction_date',
+  'vendor',
+  'note',
+  'amount',
+  'description',
+  'account_code',
+  'card_number',
+  'matching_record_id',
+  'matching_record_date',
+  'matching_record_amount',
+  'created_at',
+  'status',
+];
+
+/**
+ * 카드내역 임시데이터 전체 조회
+ */
+export async function getCardExpenseTemp(): Promise<CardExpenseTempRecord[]> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.cardExpenseTemp);
+  if (rows.length <= 1) return []; // 헤더만 있거나 빈 시트
+
+  return rows.slice(1).map((row) => ({
+    tempId: row[0] || '',
+    transaction_date: row[1] || '',
+    vendor: row[2] || '',
+    note: row[3] || '',
+    amount: Number(row[4]) || 0,
+    description: row[5] || '',
+    account_code: row[6] ? Number(row[6]) : null,
+    card_number: row[7] || '',
+    matching_record_id: row[8] || null,
+    matching_record_date: row[9] || null,
+    matching_record_amount: row[10] ? Number(row[10]) : null,
+    created_at: row[11] || '',
+    status: (row[12] as 'pending' | 'applied') || 'pending',
+  }));
+}
+
+/**
+ * 카드내역 임시데이터 저장 (기존 데이터 전체 삭제 후 새로 저장)
+ */
+export async function saveCardExpenseTemp(records: CardExpenseTempRecord[]): Promise<void> {
+  const sheetName = FINANCE_CONFIG.sheets.cardExpenseTemp;
+
+  // 1. 기존 데이터 클리어 (헤더 유지)
+  await clearSheetData(sheetName);
+
+  // 2. 새 데이터 추가
+  if (records.length > 0) {
+    const data = records.map((r) => [
+      r.tempId,
+      r.transaction_date,
+      r.vendor,
+      r.note,
+      r.amount,
+      r.description,
+      r.account_code ?? '',
+      r.card_number,
+      r.matching_record_id ?? '',
+      r.matching_record_date ?? '',
+      r.matching_record_amount ?? '',
+      r.created_at,
+      r.status,
+    ]);
+    await appendToSheet(sheetName, data);
+  }
+}
+
+/**
+ * 카드내역 임시데이터 단건 업데이트 (description, account_code)
+ */
+export async function updateCardExpenseTempItem(
+  tempId: string,
+  updates: { description?: string; account_code?: number | null }
+): Promise<boolean> {
+  const sheetName = FINANCE_CONFIG.sheets.cardExpenseTemp;
+  const rows = await readSheet(sheetName);
+
+  if (rows.length <= 1) return false;
+
+  // 헤더 제외하고 해당 tempId 찾기
+  const rowIndex = rows.findIndex((row, idx) => idx > 0 && row[0] === tempId);
+  if (rowIndex === -1) return false;
+
+  // 업데이트할 필드 (description: 5, account_code: 6)
+  const row = rows[rowIndex];
+  if (updates.description !== undefined) {
+    row[5] = updates.description;
+  }
+  if (updates.account_code !== undefined) {
+    row[6] = updates.account_code !== null ? String(updates.account_code) : '';
+  }
+
+  // 해당 행만 업데이트
+  await updateSheet(sheetName, `A${rowIndex + 1}:M${rowIndex + 1}`, [row]);
+  return true;
+}
+
+/**
+ * 카드내역 임시데이터 상태 일괄 업데이트
+ */
+export async function updateCardExpenseTempStatus(
+  tempIds: string[],
+  status: 'pending' | 'applied'
+): Promise<void> {
+  const sheetName = FINANCE_CONFIG.sheets.cardExpenseTemp;
+  const rows = await readSheet(sheetName);
+
+  if (rows.length <= 1) return;
+
+  const tempIdSet = new Set(tempIds);
+  let updated = false;
+
+  for (let i = 1; i < rows.length; i++) {
+    if (tempIdSet.has(rows[i][0])) {
+      rows[i][12] = status;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    // 전체 데이터 다시 쓰기 (헤더 제외)
+    const sheets = getGoogleSheetsClient();
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      range: `${sheetName}!A2:M${rows.length}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: rows.slice(1),
+      },
+    });
+  }
+}
+
+/**
+ * 카드내역 임시데이터 시트 초기화 (헤더 포함 재생성)
+ */
+export async function initCardExpenseTempSheet(): Promise<void> {
+  const sheetName = FINANCE_CONFIG.sheets.cardExpenseTemp;
+  const sheets = getGoogleSheetsClient();
+
+  // 시트 전체 클리어
+  try {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      range: `${sheetName}!A:M`,
+    });
+  } catch {
+    // 시트가 없으면 무시
+  }
+
+  // 헤더 추가
+  await appendToSheet(sheetName, [CARD_EXPENSE_TEMP_HEADERS]);
 }

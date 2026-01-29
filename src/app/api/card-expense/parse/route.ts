@@ -4,8 +4,10 @@ import {
   getCardOwners,
   findNhCardExpenseRecord,
   generateId,
+  saveCardExpenseTemp,
+  getKSTDateTime,
 } from '@/lib/google-sheets';
-import type { CardOwner, CardExpenseItem, CardExpenseParseResponse } from '@/types';
+import type { CardOwner, CardExpenseItem, CardExpenseParseResponse, CardExpenseTempRecord } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -165,6 +167,32 @@ export async function POST(request: NextRequest) {
       });
     } else {
       warning = `지출부에서 금액 ${totalAmount.toLocaleString()}원과 일치하는 'NH카드대금' 항목을 찾을 수 없습니다.`;
+    }
+
+    // 임시 시트에 저장 (기존 데이터 덮어쓰기)
+    const now = getKSTDateTime();
+    const tempRecords: CardExpenseTempRecord[] = transactions.map((tx) => ({
+      tempId: tx.tempId,
+      transaction_date: tx.transaction_date || '',
+      vendor: tx.vendor,
+      note: tx.note,
+      amount: tx.amount,
+      description: tx.description,
+      account_code: tx.account_code,
+      card_number: tx.card_number || '',
+      matching_record_id: matchingRecord?.id || null,
+      matching_record_date: matchingRecord?.date || null,
+      matching_record_amount: matchingRecord?.amount || null,
+      created_at: now,
+      status: 'pending' as const,
+    }));
+
+    try {
+      await saveCardExpenseTemp(tempRecords);
+      console.log(`Saved ${tempRecords.length} records to temp sheet`);
+    } catch (saveError) {
+      console.error('Failed to save to temp sheet:', saveError);
+      // 저장 실패해도 파싱 결과는 반환 (기존 동작 유지)
     }
 
     return NextResponse.json<CardExpenseParseResponse>({

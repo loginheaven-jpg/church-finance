@@ -112,6 +112,23 @@ export interface CardExpenseParseResponse {
   error?: string;
 }
 
+// 카드내역 임시저장 (서버 측)
+export interface CardExpenseTempRecord {
+  tempId: string;
+  transaction_date: string;  // 매출일
+  vendor: string;            // 카드보유자명
+  note: string;              // 가맹점명
+  amount: number;
+  description: string;       // 내역 (입력값)
+  account_code: number | null;
+  card_number: string;       // 카드번호
+  matching_record_id: string | null;   // NH카드대금 매칭 행 ID
+  matching_record_date: string | null; // NH카드대금 기준일
+  matching_record_amount: number | null;
+  created_at: string;
+  status: 'pending' | 'applied';
+}
+
 // 매칭 규칙
 export interface MatchingRule {
   id: string;

@@ -579,7 +579,7 @@ export default function PledgeManagementPage() {
       {/* 대량 입력 모달 - 화면 폭에 맞게 최대 확장 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent
-          className="max-w-[95vw] w-full max-h-[90vh] overflow-y-auto"
+          className="max-w-[95vw] sm:max-w-[95vw] w-full max-h-[90vh] overflow-y-auto"
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>

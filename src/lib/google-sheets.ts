@@ -2526,10 +2526,16 @@ export async function recalculatePledgeFulfillment(pledgeId: string): Promise<{ 
   });
 
   // 4. 가족 구성원 전체의 해당 코드 수입 필터링
-  const matchingRecords = allIncomeRecords.filter(record =>
-    familyMemberNames.has(record.donor_name) &&
-    record.offering_code === pledge.offering_code
-  );
+  // 건축헌금의 경우 코드 500, 501 둘 다 매칭 (수입코드 테이블에 두 코드가 존재)
+  const buildingCodes = [500, 501];
+  const matchingRecords = allIncomeRecords.filter(record => {
+    if (!familyMemberNames.has(record.donor_name)) return false;
+    // 건축헌금(501)인 경우 500, 501 둘 다 매칭
+    if (pledge.offering_code === 501) {
+      return buildingCodes.includes(record.offering_code);
+    }
+    return record.offering_code === pledge.offering_code;
+  });
 
   // 5. 누계 계산
   const fulfilled_amount = matchingRecords.reduce((sum, r) => sum + (r.amount || 0), 0);

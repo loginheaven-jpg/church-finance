@@ -30,7 +30,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, Upload, CreditCard, AlertTriangle, Check, FileSpreadsheet, Filter, RefreshCw } from 'lucide-react';
+import { Loader2, Upload, CreditCard, AlertTriangle, Check, FileSpreadsheet, Filter, RefreshCw, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { hasRole } from '@/lib/auth/finance-permissions';
@@ -54,6 +54,37 @@ export default function CardExpenseIntegrationPage() {
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [vendorStats, setVendorStats] = useState<Record<string, { total: number; completed: number }>>({});
   const savingRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const [saving, setSaving] = useState(false);
+
+  // 전체 저장 (디바운스 무시하고 즉시 저장)
+  const handleSaveAll = useCallback(async () => {
+    // 대기 중인 타이머 모두 취소
+    Object.values(savingRef.current).forEach(timer => clearTimeout(timer));
+    savingRef.current = {};
+
+    setSaving(true);
+    try {
+      // 현재 transactions의 모든 항목을 저장
+      const savePromises = transactions.map(tx =>
+        fetch('/api/card-expense/temp', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tempId: tx.tempId,
+            description: tx.description,
+            account_code: tx.account_code,
+          }),
+        })
+      );
+      await Promise.all(savePromises);
+      toast.success('저장되었습니다');
+    } catch (error) {
+      console.error('Save all failed:', error);
+      toast.error('저장 중 오류가 발생했습니다');
+    } finally {
+      setSaving(false);
+    }
+  }, [transactions]);
 
   // 서버에서 임시 데이터 조회
   const fetchTempData = useCallback(async () => {
@@ -491,8 +522,25 @@ export default function CardExpenseIntegrationPage() {
               </Table>
             </div>
 
-            {isAdmin && (
-              <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={handleSaveAll}
+                disabled={saving || filteredTransactions.length === 0}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    저장 중...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    저장
+                  </>
+                )}
+              </Button>
+              {isAdmin && (
                 <Button
                   onClick={() => setConfirmDialogOpen(true)}
                   disabled={incompleteCount > 0 || applying || filteredTransactions.length === 0}
@@ -509,8 +557,8 @@ export default function CardExpenseIntegrationPage() {
                     </>
                   )}
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </CardContent>
         </Card>
       )}

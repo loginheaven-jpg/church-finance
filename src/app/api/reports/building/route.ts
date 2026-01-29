@@ -227,85 +227,39 @@ export async function GET(request: NextRequest) {
       currentYearRepayment = currentYearPrincipal + currentYearInterest;
     }
 
-    // 3. 히스토리 데이터 구성 (마스터에서 읽기 + 폴백)
+    // 3. 히스토리 데이터 구성 (earlyHistoryData + yearlyProgressData 고정 사용)
     const historyData: BuildingHistory[] = [];
 
-    // 마스터 히스토리가 있으면 사용, 없으면 기존 earlyHistoryData 폴백
-    if (master.history.length > 0) {
-      // 누적 계산용 변수
-      let cumulativeDonation = master.cumulativeDonationBefore2011;
-      let cumulativePrincipal = 0;
-      let cumulativeInterest = 0;
+    // 2003~2011 초기 히스토리 (마일스톤 포함)
+    historyData.push(...earlyHistoryData);
 
-      for (const h of master.history) {
-        // 2012년 이전은 누적을 따로 계산
-        if (h.year <= 2011) {
-          historyData.push({
-            year: h.year,
-            yearlyDonation: h.donation,
-            cumulativeDonation: h.year === 2011 ? master.cumulativeDonationBefore2011 : cumulativeDonation,
-            principalPaid: h.principal,
-            interestPaid: h.interest,
-            loanBalance: h.loanBalance,
-            milestone: h.milestone ? {
-              title: h.milestone.split(':')[0] || h.milestone,
-              description: h.milestone.split(':')[1] || '',
-              icon: h.milestone.includes('토지') ? '🏞️' : h.milestone.includes('완공') ? '🏛️' : '📍'
-            } : undefined
-          });
-        } else {
-          // 2012년 이후 누적 계산
-          cumulativeDonation += h.donation;
-          cumulativePrincipal += h.principal;
-          cumulativeInterest += h.interest;
+    // 2012~스냅샷연도 히스토리 추가 (yearlyProgressData 기반)
+    let prevCumulativeDonation = 3200000000; // 2011년 누적
+    for (let year = 2012; year <= master.snapshotYear; year++) {
+      const yearlyDonation = yearlyDonationFallback[year] || 0;
+      prevCumulativeDonation += yearlyDonation;
 
-          historyData.push({
-            year: h.year,
-            yearlyDonation: h.donation,
-            cumulativeDonation,
-            principalPaid: cumulativePrincipal,
-            interestPaid: cumulativeInterest,
-            loanBalance: h.loanBalance,
-            milestone: h.year === master.snapshotYear ? {
-              title: '스냅샷',
-              description: `잔액 ${(h.loanBalance / 100000000).toFixed(1)}억`,
-              icon: '📍'
-            } : undefined
-          });
-        }
-      }
-    } else {
-      // 폴백: 기존 earlyHistoryData 사용
-      historyData.push(...earlyHistoryData);
+      const progress = yearlyProgressData[year] || {
+        principalPaid: 0,
+        interestPaid: 0,
+        loanBalance: 2100000000,
+      };
 
-      // 2012~스냅샷연도 히스토리 추가
-      let prevCumulativeDonation = 3200000000; // 2011년 누적
-      for (let year = 2012; year <= master.snapshotYear; year++) {
-        const yearlyDonation = yearlyDonationFallback[year] || 0;
-        prevCumulativeDonation += yearlyDonation;
-
-        const progress = yearlyProgressData[year] || {
-          principalPaid: 0,
-          interestPaid: 0,
-          loanBalance: 2100000000,
-        };
-
-        historyData.push({
-          year,
-          yearlyDonation,
-          cumulativeDonation: prevCumulativeDonation,
-          principalPaid: progress.principalPaid,
-          interestPaid: progress.interestPaid,
-          loanBalance: year === master.snapshotYear ? master.loanBalance : progress.loanBalance,
-          ...(year === master.snapshotYear && {
-            milestone: {
-              title: '스냅샷',
-              description: `잔액 ${(master.loanBalance / 100000000).toFixed(1)}억`,
-              icon: '📍'
-            }
-          })
-        });
-      }
+      historyData.push({
+        year,
+        yearlyDonation,
+        cumulativeDonation: prevCumulativeDonation,
+        principalPaid: progress.principalPaid,
+        interestPaid: progress.interestPaid,
+        loanBalance: year === master.snapshotYear ? master.loanBalance : progress.loanBalance,
+        ...(year === master.snapshotYear && {
+          milestone: {
+            title: '스냅샷',
+            description: `잔액 ${(master.loanBalance / 100000000).toFixed(1)}억`,
+            icon: '📍'
+          }
+        })
+      });
     }
 
     // 금년 데이터 추가 (스냅샷 이후 연도)

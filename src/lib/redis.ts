@@ -23,7 +23,7 @@ export const CACHE_TTL = {
 // 캐시 키 생성 헬퍼
 export const cacheKeys = {
   dashboard: (year: number, weekOffset: number) =>
-    `finance:dashboard:${year}:${weekOffset}`,
+    `finance:dashboard:v2:${year}:${weekOffset}`,
   weeklyReport: (year: number, weekNo: number) =>
     `finance:report:weekly:${year}:${weekNo}`,
   monthlyReport: (year: number) =>

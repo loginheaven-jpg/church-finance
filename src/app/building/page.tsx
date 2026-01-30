@@ -120,7 +120,7 @@ function formatFullCurrency(amount: number): string {
 // Components
 // ============================================================================
 
-// 커스텀 툴팁
+// 커스텀 툴팁 (차트 데이터가 억 단위이므로 억원으로 표시)
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: unknown[]; label?: string }) {
   if (!active || !payload || payload.length === 0) return null;
 
@@ -131,12 +131,17 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
     color: string;
   }
 
+  // 억 단위 값을 억원 형식으로 포맷
+  const formatBillions = (value: number): string => {
+    return `${value.toFixed(1)}억원`;
+  };
+
   return (
     <div className="bg-white p-4 rounded-lg shadow-lg border border-slate-200">
       <p className="font-semibold mb-2">{label}년</p>
       {(payload as PayloadItem[]).map((item, index) => (
         <p key={index} className="text-sm" style={{ color: item.color }}>
-          {item.name}: {formatFullCurrency(item.value)}
+          {item.name}: {formatBillions(item.value)}
         </p>
       ))}
     </div>

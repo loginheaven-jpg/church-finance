@@ -121,30 +121,30 @@ export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartPr
         <div className="h-[180px] md:h-[240px] mb-6">
           <p className="text-[12px] md:text-[13px] text-[#6B7B8C] mb-2 font-medium">주간 추이</p>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 10, right: 55, left: 5, bottom: 5 }}>
+            <ComposedChart data={data} margin={{ top: 10, right: 40, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E8ECF0" />
               <XAxis
                 dataKey="date"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 11, fill: '#6B7B8C' }}
+                tick={{ fontSize: 10, fill: '#6B7B8C' }}
               />
               <YAxis
                 yAxisId="left"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 11, fill: '#6B7B8C' }}
+                tick={{ fontSize: 10, fill: '#6B7B8C' }}
                 tickFormatter={(v) => formatAmount(v)}
-                width={50}
+                width={40}
               />
               <YAxis
                 yAxisId="right"
                 orientation="right"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 11, fill: '#9CA3AF' }}
+                tick={{ fontSize: 10, fill: '#9CA3AF' }}
                 tickFormatter={(v) => formatAmount(v)}
-                width={50}
+                width={40}
               />
               <Tooltip
                 cursor={{ stroke: '#C9A962', strokeDasharray: '3 3' }}

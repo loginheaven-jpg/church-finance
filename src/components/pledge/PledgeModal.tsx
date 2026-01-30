@@ -182,9 +182,9 @@ export function PledgeModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 py-4">
+        <div className="space-y-3 py-2">
           {/* 헌금 종류 선택 */}
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label className="text-sm font-medium">헌금 종류</Label>
             <div className="grid grid-cols-3 gap-2">
               {OFFERING_TYPES.map((type) => (
@@ -192,7 +192,7 @@ export function PledgeModal({
                   key={type.value}
                   type="button"
                   onClick={() => setOfferingType(type.value)}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all ${
+                  className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
                     offeringType === type.value
                       ? 'border-green-600 bg-green-50 text-green-700'
                       : 'border-slate-200 hover:border-slate-300 text-slate-600'
@@ -200,7 +200,6 @@ export function PledgeModal({
                 >
                   {type.icon}
                   <span className="text-sm font-medium">{type.label}</span>
-                  <span className="text-[10px] text-slate-500">{type.description}</span>
                 </button>
               ))}
             </div>
@@ -311,13 +310,13 @@ export function PledgeModal({
           )}
 
           {/* 메모 */}
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label className="text-sm font-medium">감사노트 (선택)</Label>
             <Textarea
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               placeholder="감사의 마음으로 드립니다..."
-              className="resize-none h-20"
+              className="resize-none h-12"
             />
           </div>
 
@@ -326,7 +325,7 @@ export function PledgeModal({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="pt-2">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

@@ -129,17 +129,17 @@ export default function WeeklyReportPage() {
   return (
     <div className="space-y-6 print:space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between print:hidden">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-slate-900">
-            {report?.weekNumber || '--'} 주차 보고
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 print:hidden">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <h1 className="text-lg sm:text-2xl font-bold text-slate-900 whitespace-nowrap">
+            {report?.weekNumber || '--'} 주차보고
           </h1>
           <span className="text-sm text-slate-500">
             {report?.year}년
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* 주 네비게이션 */}
           <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}>
             <ChevronLeft className="h-4 w-4" />
@@ -187,23 +187,23 @@ export default function WeeklyReportPage() {
         <div ref={printRef} className="space-y-6 print:space-y-4">
           {/* 잔고 현황 (3열: 전주최종잔고 | 수지차액 | 현재잔고) */}
           <Card className="print:shadow-none print:border-2">
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-slate-50 rounded-lg print:bg-white print:border">
-                  <div className="text-sm text-slate-500 mb-1">전주최종잔고</div>
-                  <div className="text-xl font-bold text-slate-900">
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                <div className="text-center p-2 sm:p-4 bg-slate-50 rounded-lg print:bg-white print:border">
+                  <div className="text-xs sm:text-sm text-slate-500 mb-1">전주최종잔고</div>
+                  <div className="text-sm sm:text-xl font-bold text-slate-900">
                     {formatAmount(report.previousBalance)}원
                   </div>
                 </div>
-                <div className={`text-center p-4 rounded-lg print:bg-white print:border ${report.balance >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-                  <div className={`text-sm mb-1 ${report.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>수지차액</div>
-                  <div className={`text-xl font-bold ${report.balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                <div className={`text-center p-2 sm:p-4 rounded-lg print:bg-white print:border ${report.balance >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                  <div className={`text-xs sm:text-sm mb-1 ${report.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>수지차액</div>
+                  <div className={`text-sm sm:text-xl font-bold ${report.balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                     {report.balance >= 0 ? '+' : ''}{formatAmount(report.balance)}원
                   </div>
                 </div>
-                <div className="text-center p-4 bg-blue-50 rounded-lg print:bg-white print:border">
-                  <div className="text-sm text-blue-600 mb-1">현재잔고</div>
-                  <div className="text-xl font-bold text-blue-700">
+                <div className="text-center p-2 sm:p-4 bg-blue-50 rounded-lg print:bg-white print:border">
+                  <div className="text-xs sm:text-sm text-blue-600 mb-1">현재잔고</div>
+                  <div className="text-sm sm:text-xl font-bold text-blue-700">
                     {formatAmount(report.currentBalance)}원
                   </div>
                 </div>

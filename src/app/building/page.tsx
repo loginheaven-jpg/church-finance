@@ -619,26 +619,26 @@ export default function BuildingPage() {
             {/* 시뮬레이션 결과 */}
             {simulationResult && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-6 bg-white rounded-lg border-2 border-blue-300 text-center">
-                    <p className="text-sm text-muted-foreground mb-2">예상 완납 시점</p>
-                    <p className={`text-5xl font-bold ${simulationResult.payoffYear ? 'text-blue-600' : 'text-red-600'}`}>
+                <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                  <div className="p-3 sm:p-6 bg-white rounded-lg border-2 border-blue-300 text-center">
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-1 sm:mb-2">예상 완납 시점</p>
+                    <p className={`text-2xl sm:text-5xl font-bold ${simulationResult.payoffYear ? 'text-blue-600' : 'text-red-600'}`}>
                       {simulationResult.payoffYear
                         ? `${simulationResult.payoffYear}년`
                         : '완납 불가'}
                     </p>
                     {simulationResult.payoffYear && (
-                      <p className="text-base text-blue-500 mt-2">
+                      <p className="text-sm sm:text-base text-blue-500 mt-1 sm:mt-2">
                         {simulationResult.payoffYear - new Date().getFullYear()}년 후
                       </p>
                     )}
                   </div>
-                  <div className="p-6 bg-white rounded-lg border-2 border-red-300 text-center">
-                    <p className="text-sm text-muted-foreground mb-2">총 이자 (누적)</p>
-                    <p className="text-5xl font-bold text-red-600">
+                  <div className="p-3 sm:p-6 bg-white rounded-lg border-2 border-red-300 text-center">
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-1 sm:mb-2">총 이자 (누적)</p>
+                    <p className="text-2xl sm:text-5xl font-bold text-red-600">
                       {formatCurrency(simulationResult.totalInterestPaid)}
                     </p>
-                    <p className="text-base text-red-500 mt-2">
+                    <p className="text-sm sm:text-base text-red-500 mt-1 sm:mt-2">
                       +{formatCurrency(simulationResult.additionalInterest)} 추가
                     </p>
                   </div>
@@ -679,8 +679,8 @@ export default function BuildingPage() {
         </Card>
       </div>
 
-      {/* 우리의 여정 차트 */}
-      <Card>
+      {/* 우리의 여정 차트 - 모바일 개선 후 다시 오픈 예정 */}
+      <Card className="hidden">
         <CardHeader>
           <CardTitle className="text-xl">건축 히스토리 (2003~현재)</CardTitle>
           <CardDescription>

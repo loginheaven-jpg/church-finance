@@ -636,30 +636,26 @@ export default function MyOfferingPage() {
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[400px]">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-600">날짜</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-600">헌금자</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-600">구분</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-slate-600">금액</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-600">비고</th>
+                    <th className="text-left py-2 px-2 sm:px-4 text-xs sm:text-sm font-medium text-slate-600">날짜</th>
+                    <th className="text-left py-2 px-2 sm:px-4 text-xs sm:text-sm font-medium text-slate-600">헌금자</th>
+                    <th className="text-left py-2 px-2 sm:px-4 text-xs sm:text-sm font-medium text-slate-600">구분</th>
+                    <th className="text-right py-2 px-2 sm:px-4 text-xs sm:text-sm font-medium text-slate-600">금액</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRecords.map((record) => (
                     <tr key={record.id} className="border-b last:border-0 hover:bg-slate-50">
-                      <td className="py-3 px-4 text-sm">{record.date}</td>
-                      <td className="py-3 px-4 text-sm">{record.donor_name}</td>
-                      <td className="py-3 px-4 text-sm">
+                      <td className="py-2 px-2 sm:px-4 text-xs sm:text-sm whitespace-nowrap">{record.date}</td>
+                      <td className="py-2 px-2 sm:px-4 text-xs sm:text-sm">{record.donor_name}</td>
+                      <td className="py-2 px-2 sm:px-4 text-xs sm:text-sm whitespace-nowrap">
                         {data.summaryByType.find(s => s.code === record.offering_code)?.name ||
                           `코드${record.offering_code}`}
                       </td>
-                      <td className="py-3 px-4 text-sm text-right font-medium">
+                      <td className="py-2 px-2 sm:px-4 text-xs sm:text-sm text-right font-medium whitespace-nowrap">
                         {record.amount.toLocaleString()}원
-                      </td>
-                      <td className="py-3 px-4 text-sm text-slate-500">
-                        {record.note || '-'}
                       </td>
                     </tr>
                   ))}

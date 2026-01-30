@@ -196,10 +196,10 @@ export default function ComparisonReportPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">연간 비교</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="text-lg sm:text-2xl font-bold text-slate-900">연간 비교</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
             {data.years[0]}년 ~ {data.years[data.years.length - 1]}년 재정 현황 비교
           </p>
         </div>
@@ -211,7 +211,7 @@ export default function ComparisonReportPage() {
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="text-lg font-medium w-32 text-center">
+          <span className="text-base sm:text-lg font-medium w-24 sm:w-32 text-center">
             ~ {endYear}년
           </span>
           <Button

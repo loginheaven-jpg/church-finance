@@ -477,20 +477,20 @@ export default function BudgetExecutionPage() {
   return (
     <div className="space-y-6">
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">예산 및 집행현황</h1>
-          <p className="text-sm text-slate-500 mt-1">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-2xl font-bold text-slate-900">예산 및 집행현황</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 hidden sm:block">
             5개년 예산 집행현황을 분석하고 동기집행률 기반으로 예산 초과 위험을 조기 발견합니다.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {/* 건축제외/전체 토글 */}
           <div className="flex items-center border rounded-lg overflow-hidden">
             <button
               onClick={() => setExcludeConstruction(true)}
               className={cn(
-                "px-3 py-1.5 text-sm font-medium transition-colors",
+                "px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium transition-colors",
                 excludeConstruction
                   ? "bg-slate-800 text-white"
                   : "bg-white text-slate-600 hover:bg-slate-100"
@@ -501,35 +501,37 @@ export default function BudgetExecutionPage() {
             <button
               onClick={() => setExcludeConstruction(false)}
               className={cn(
-                "px-3 py-1.5 text-sm font-medium transition-colors",
+                "px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium transition-colors",
                 !excludeConstruction
                   ? "bg-slate-800 text-white"
                   : "bg-white text-slate-600 hover:bg-slate-100"
               )}
             >
-              전체 예산
+              전체예산
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <Button
               variant="outline"
               size="icon"
+              className="h-8 w-8 sm:h-10 sm:w-10"
               onClick={() => setSelectedYear(selectedYear - 1)}
               disabled={selectedYear <= currentYear - 4}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-lg font-medium w-20 text-center">{selectedYear}년</span>
+            <span className="text-base sm:text-lg font-medium w-16 sm:w-20 text-center">{selectedYear}년</span>
             <Button
               variant="outline"
               size="icon"
+              className="h-8 w-8 sm:h-10 sm:w-10"
               onClick={() => setSelectedYear(selectedYear + 1)}
               disabled={selectedYear >= currentYear}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <Button variant="outline">
+          <Button variant="outline" size="sm" className="hidden sm:flex">
             <Download className="mr-2 h-4 w-4" />
             Excel 다운로드
           </Button>

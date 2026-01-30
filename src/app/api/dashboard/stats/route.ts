@@ -45,10 +45,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 이번 주 날짜 범위 계산 (월요일 ~ 일요일)
-    const dayOfWeek = kst.getDay();
-    const monday = new Date(kst);
-    monday.setDate(kst.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    // 기준 주 계산: 지나간 가장 최근 일요일이 속한 주 (프론트엔드와 동일)
+    // 오늘이 일요일이면 오늘이 속한 주, 아니면 지난 주
+    const dayOfWeek = kst.getDay(); // 0 = 일요일
+    const lastSunday = new Date(kst);
+    if (dayOfWeek !== 0) {
+      lastSunday.setDate(kst.getDate() - dayOfWeek); // 지난 일요일로 이동
+    }
+
+    // 해당 주의 월요일 계산
+    const monday = new Date(lastSunday);
+    monday.setDate(lastSunday.getDate() - 6); // 일요일 - 6 = 월요일
 
     // week offset 적용
     monday.setDate(monday.getDate() + weekOffset * 7);

@@ -538,7 +538,7 @@ export default function BuildingPage() {
           <CardContent className="pt-6">
             <div className="h-[300px] sm:h-[450px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={recentChartData} barGap={8} margin={{ top: 30, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={recentChartData} barGap={4} barCategoryGap="15%" margin={{ top: 30, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" tick={{ fontSize: 14 }} />
                 <YAxis tickFormatter={(value) => `${value}억`} tick={{ fontSize: 14 }} />

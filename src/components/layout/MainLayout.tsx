@@ -128,7 +128,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     <div className="min-h-screen bg-[#F8F6F3]">
       {/* Mobile Header - md 이하에서만 표시 */}
       <header
-        className="fixed top-0 left-0 right-0 z-50 md:hidden flex items-center justify-between px-4 py-3"
+        className="fixed top-0 left-0 right-0 z-[60] md:hidden flex items-center justify-between px-4 py-3"
         style={{ background: 'linear-gradient(135deg, #2C3E50 0%, #1a2a3a 100%)' }}
       >
         <div className="flex items-center gap-2">

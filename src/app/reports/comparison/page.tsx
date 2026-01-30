@@ -287,10 +287,10 @@ export default function ComparisonReportPage() {
           {viewMode === 'chart' ? (
             <div className={chartMode === 'all' ? 'h-[250px] sm:h-[350px]' : 'h-[400px] sm:h-[600px]'}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={yearlyChartData}>
+              <BarChart data={yearlyChartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="year" />
-                <YAxis tickFormatter={formatAmount} />
+                <XAxis dataKey="year" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={formatAmount} tick={{ fontSize: 11 }} width={45} />
                 <Tooltip
                   formatter={(value) => formatFullAmount(Number(value) || 0)}
                 />

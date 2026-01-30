@@ -182,7 +182,7 @@ export function PledgeModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-2">
+        <div className="space-y-2 py-1">
           {/* 헌금 종류 선택 */}
           <div className="space-y-1">
             <Label className="text-sm font-medium">헌금 종류</Label>
@@ -296,13 +296,13 @@ export function PledgeModal({
 
           {/* 총 작정금액 */}
           {yearlyAmount > 0 && (
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
               <p className="text-sm text-green-700 font-medium">총 작정금액 (연간)</p>
-              <p className="text-2xl font-bold text-green-700 mt-1">
+              <p className="text-xl font-bold text-green-700">
                 {formatAmount(yearlyAmount)}원
               </p>
               {offeringType === 'building' && yearlyAmount >= 1000000 && (
-                <p className="text-xs text-green-600 mt-2">
+                <p className="text-xs text-green-600 mt-1">
                   이 금액으로 대출 이자 약 {Math.floor(yearlyAmount / 5000000)}개월분을 갚을 수 있습니다!
                 </p>
               )}
@@ -310,13 +310,13 @@ export function PledgeModal({
           )}
 
           {/* 메모 */}
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <Label className="text-sm font-medium">감사노트 (선택)</Label>
             <Textarea
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               placeholder="감사의 마음으로 드립니다..."
-              className="resize-none h-12"
+              className="resize-none h-10"
             />
           </div>
 
@@ -325,7 +325,7 @@ export function PledgeModal({
           )}
         </div>
 
-        <DialogFooter className="pt-2">
+        <DialogFooter className="pt-1">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

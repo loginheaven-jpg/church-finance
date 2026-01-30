@@ -1951,7 +1951,7 @@ export interface BuildingYearlyHistory {
  * - F4~F17: 연도(2012~2025), G4~G17: 연간헌금액
  */
 export async function getBuildingMaster(): Promise<BuildingMasterData> {
-  const rows = await readSheet(FINANCE_CONFIG.sheets.buildingMaster, 'A:K');
+  const rows = await readSheet(FINANCE_CONFIG.sheets.buildingMaster, 'A:L');
 
   const parseNum = (val: string | undefined) => {
     if (!val) return 0;

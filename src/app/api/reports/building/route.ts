@@ -305,13 +305,12 @@ export async function GET(request: NextRequest) {
           interest: currentYearInterest,
         });
       } else {
-        // 과거년도: 마스터 히스토리 + 폴백 병합
-        // 시트에는 헌금만 있으므로 원금/이자는 폴백 데이터 사용
+        // 과거년도: 마스터 히스토리에서 읽음 (K-L열: 연간 원금/이자)
         const masterData = masterHistoryByYear.get(year);
-        const fallbackRepayment = yearlyRepaymentData[year] || { principal: 0, interest: 0 };
         const donation = masterData?.donation || yearlyDonationFallback[year] || 0;
-        const principal = fallbackRepayment.principal;
-        const interest = fallbackRepayment.interest;
+        // 시트 K-L열 우선, 없으면 폴백
+        const principal = masterData?.yearlyPrincipal ?? yearlyRepaymentData[year]?.principal ?? 0;
+        const interest = masterData?.yearlyInterest ?? yearlyRepaymentData[year]?.interest ?? 0;
 
         if (donation > 0 || principal > 0 || interest > 0) {
           recentYears.push({

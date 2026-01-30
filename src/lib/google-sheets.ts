@@ -1927,10 +1927,12 @@ export interface BuildingMasterData {
 
 export interface BuildingYearlyHistory {
   year: number;
-  donation: number;
-  principal: number;
-  interest: number;
-  loanBalance: number;
+  donation: number;           // G열: 연간 헌금
+  principal: number;          // H열: 누적 원금 상환
+  interest: number;           // I열: 누적 이자 지출
+  loanBalance: number;        // J열: 대출 잔액
+  yearlyPrincipal: number;    // K열: 연간 원금 상환
+  yearlyInterest: number;     // L열: 연간 이자 지출
   milestone?: string;
 }
 
@@ -1980,8 +1982,8 @@ export async function getBuildingMaster(): Promise<BuildingMasterData> {
   const cumulativePrincipal = parseNum(rows[16]?.[3]);   // D17: 누적 원금 상환
   const loanBalance = parseNum(rows[17]?.[3]);           // D18: 대출잔금
 
-  // 히스토리 (F-J열: 연도별 데이터)
-  // F: 연도, G: 헌금, H: 누적원금, I: 누적이자, J: 잔액
+  // 히스토리 (F-L열: 연도별 데이터)
+  // F: 연도, G: 헌금, H: 누적원금, I: 누적이자, J: 잔액, K: 연간원금, L: 연간이자
   const history: BuildingYearlyHistory[] = [];
   for (let i = 3; i <= 20; i++) {  // Row 4-21 (index 3-20)
     const row = rows[i];
@@ -1991,10 +1993,12 @@ export async function getBuildingMaster(): Promise<BuildingMasterData> {
     const year = parseInt(yearStr);
     if (isNaN(year) || year < 2003) continue;
 
-    const donation = parseNum(row[6]);      // G열: 헌금
-    const principal = parseNum(row[7]);     // H열: 누적 원금 상환
-    const interest = parseNum(row[8]);      // I열: 누적 이자 지출
+    const donation = parseNum(row[6]);            // G열: 연간 헌금
+    const principal = parseNum(row[7]);           // H열: 누적 원금 상환
+    const interest = parseNum(row[8]);            // I열: 누적 이자 지출
     const historyLoanBalance = parseNum(row[9]);  // J열: 대출 잔액
+    const yearlyPrincipal = parseNum(row[10]);    // K열: 연간 원금 상환
+    const yearlyInterest = parseNum(row[11]);     // L열: 연간 이자 지출
 
     history.push({
       year,
@@ -2002,6 +2006,8 @@ export async function getBuildingMaster(): Promise<BuildingMasterData> {
       principal,
       interest,
       loanBalance: historyLoanBalance,
+      yearlyPrincipal,
+      yearlyInterest,
     });
   }
 

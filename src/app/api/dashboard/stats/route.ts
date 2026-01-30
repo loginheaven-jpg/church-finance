@@ -379,17 +379,9 @@ export async function GET(request: NextRequest) {
       getExpenseRecords(eightWeekStart, endDate),
     ]);
 
-    // 주별로 집계 (잔액 포함)
-    const weeklyData: Array<{ date: string; income: number; expense: number; balance: number }> = [];
-
-    // 8주 전까지의 수입/지출 합계 계산 (잔액 시작점)
-    const beforeEightWeeksIncome = yearlyIncomeRecords
-      .filter(r => r.date < eightWeekStart)
-      .reduce((sum, r) => sum + (r.amount || 0), 0);
-    const beforeEightWeeksExpense = yearlyExpenseRecords
-      .filter(r => r.date < eightWeekStart)
-      .reduce((sum, r) => sum + (r.amount || 0), 0);
-    let runningBalance = carryoverBalance + beforeEightWeeksIncome - beforeEightWeeksExpense;
+    // 주별로 집계 (잔액은 역산 방식으로 계산)
+    // 1단계: 8주간의 수입/지출 데이터 수집
+    const weeklyRawData: Array<{ date: string; income: number; expense: number }> = [];
 
     for (let i = 0; i < 8; i++) {
       const weekMonday = new Date(eightWeeksAgo);
@@ -408,18 +400,29 @@ export async function GET(request: NextRequest) {
         .filter(r => r.date >= weekStart && r.date <= weekEnd)
         .reduce((sum, r) => sum + (r.amount || 0), 0);
 
-      // 잔액 누적 계산
-      runningBalance = runningBalance + weekIncome - weekExpense;
-
       // 주의 일요일 날짜를 M/d 형식으로
       const displayDate = `${weekSunday.getMonth() + 1}/${weekSunday.getDate()}`;
 
-      weeklyData.push({
+      weeklyRawData.push({
         date: displayDate,
         income: weekIncome,
         expense: weekExpense,
+      });
+    }
+
+    // 2단계: 역산 방식으로 잔액 계산
+    // 마지막 주(현재 주) 잔액 = 상단 잔액(balance)
+    // 이전 주 잔액 = 다음 주 잔액 - 다음 주 수입 + 다음 주 지출
+    const weeklyData: Array<{ date: string; income: number; expense: number; balance: number }> = [];
+    let runningBalance = balance;
+
+    for (let i = weeklyRawData.length - 1; i >= 0; i--) {
+      weeklyData.unshift({
+        ...weeklyRawData[i],
         balance: runningBalance,
       });
+      // 이전 주 잔액 역산
+      runningBalance = runningBalance - weeklyRawData[i].income + weeklyRawData[i].expense;
     }
 
     const responseData = {

@@ -56,7 +56,7 @@ export function BudgetExecutionCard({
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-[16px] font-semibold text-[#2C3E50]">
             <PieChart className="h-5 w-5 text-[#C9A962]" />
-            예산 집행 현황
+            일반예산 집행 현황(건축 제외)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -77,7 +77,7 @@ export function BudgetExecutionCard({
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-[16px] font-semibold text-[#2C3E50]">
             <PieChart className="h-5 w-5 text-[#C9A962]" />
-            예산 집행 현황
+            일반예산 집행 현황(건축 제외)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -96,7 +96,7 @@ export function BudgetExecutionCard({
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-[16px] font-semibold text-[#2C3E50]">
           <PieChart className="h-5 w-5 text-[#C9A962]" />
-          예산 집행 현황
+          일반예산 집행 현황(건축 제외)
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

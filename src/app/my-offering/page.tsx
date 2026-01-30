@@ -280,7 +280,7 @@ export default function MyOfferingPage() {
             내 헌금
           </h1>
           <p className="text-slate-600 mt-1">
-            {data.familyGroup.representative}님과 가족(연말정산기준 동일그룹)의 헌금 내역입니다.
+            {data.familyGroup.representative}님과 가족(연말정산기준 동일그룹)의 헌금 내역입니다. 본인과 가족만 볼 수 있습니다.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

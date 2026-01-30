@@ -353,17 +353,17 @@ export default function BuildingPage() {
       isFullscreen && "fixed inset-0 z-50 bg-[#F8F6F3] p-8 overflow-auto"
     )}>
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 flex items-center gap-2">
-            <Building2 className="h-8 w-8 text-blue-600" />
+            <Building2 className="h-7 w-7 sm:h-8 sm:w-8 text-blue-600" />
             성전봉헌 현황
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             건축헌금 및 대출 상환 현황
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {session?.name && (
             <Button
               variant="default"
@@ -402,20 +402,20 @@ export default function BuildingPage() {
             {flippedCards.card1 ? (
               <div className="space-y-1">
                 <div className="flex items-baseline gap-2">
-                  <div className="text-3xl font-bold text-green-600">32억</div>
-                  <div className="text-sm text-muted-foreground">건축헌금 (~2011)</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-green-600">32억</div>
+                  <div className="text-xs sm:text-sm text-muted-foreground">건축헌금 (~2011)</div>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <div className="text-3xl font-bold text-red-600">21억</div>
-                  <div className="text-sm text-muted-foreground">대출</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-red-600">21억</div>
+                  <div className="text-xs sm:text-sm text-muted-foreground">대출</div>
                 </div>
               </div>
             ) : (
               <>
-                <div className="text-5xl font-bold text-slate-900">
+                <div className="text-4xl sm:text-5xl font-bold text-slate-900">
                   {formatCurrency(data.summary.totalCost)}
                 </div>
-                <div className="text-sm text-muted-foreground mt-1">
+                <div className="text-xs sm:text-sm text-muted-foreground mt-1">
                   토지 {formatCurrency(data.summary.landCost)} + 건물 {formatCurrency(data.summary.buildingCost)}
                 </div>
               </>
@@ -438,20 +438,20 @@ export default function BuildingPage() {
             {flippedCards.card2 ? (
               <div className="space-y-1">
                 <div className="flex items-baseline gap-2">
-                  <div className="text-3xl font-bold text-blue-600">{formatCurrency(data.summary.principalPaid)}</div>
-                  <div className="text-sm text-muted-foreground">원금상환</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-blue-600">{formatCurrency(data.summary.principalPaid)}</div>
+                  <div className="text-xs sm:text-sm text-muted-foreground">원금상환</div>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <div className="text-3xl font-bold text-red-600">{formatCurrency(data.summary.interestPaid)}</div>
-                  <div className="text-sm text-muted-foreground">이자지출</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-red-600">{formatCurrency(data.summary.interestPaid)}</div>
+                  <div className="text-xs sm:text-sm text-muted-foreground">이자지출</div>
                 </div>
               </div>
             ) : (
               <>
-                <div className="text-5xl font-bold text-blue-600">
+                <div className="text-4xl sm:text-5xl font-bold text-blue-600">
                   {formatCurrency(data.summary.principalPaid + data.summary.interestPaid)}
                 </div>
-                <div className="text-sm text-muted-foreground mt-1">
+                <div className="text-xs sm:text-sm text-muted-foreground mt-1">
                   원금 {formatCurrency(data.summary.principalPaid)} + 이자 {formatCurrency(data.summary.interestPaid)}
                 </div>
               </>
@@ -468,12 +468,12 @@ export default function BuildingPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col justify-center flex-1 pt-0">
-            <div className="text-5xl font-bold text-red-600">
+            <div className="text-4xl sm:text-5xl font-bold text-red-600">
               {formatCurrency(data.summary.loanBalance)}
             </div>
             <div className="mt-2">
               <Progress value={data.summary.repaymentRate} className="h-3" />
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 원금 상환률 {data.summary.repaymentRate}%
               </p>
             </div>
@@ -490,30 +490,30 @@ export default function BuildingPage() {
           <div className="space-y-6 mx-auto" style={{ width: '90%' }}>
             {/* 지출 막대 (위) */}
             <div>
-              <div className="flex justify-between text-xl mb-2">
+              <div className="flex justify-between text-base sm:text-xl mb-2">
                 <span className="font-semibold">지출</span>
                 <span className="text-muted-foreground font-medium">{formatCurrency(totalExpenditure)}</span>
               </div>
-              <div className="flex h-[120px] rounded-lg overflow-hidden">
-                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: `${interestPercent}%`, backgroundColor: '#ea580c' }}>
+              <div className="flex h-[80px] sm:h-[120px] rounded-lg overflow-hidden">
+                <div className="flex items-center justify-center text-white text-lg sm:text-3xl font-bold" style={{ width: `${interestPercent}%`, backgroundColor: '#ea580c' }}>
                   이자 {formatCurrency(interestAmount)}
                 </div>
-                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: `${principalPercent}%`, backgroundColor: '#f97316' }}>
+                <div className="flex items-center justify-center text-white text-lg sm:text-3xl font-bold" style={{ width: `${principalPercent}%`, backgroundColor: '#f97316' }}>
                   원금 {formatCurrency(principalAmount)}
                 </div>
               </div>
             </div>
             {/* 수입 막대 (아래) */}
             <div>
-              <div className="flex justify-between text-xl mb-2">
+              <div className="flex justify-between text-base sm:text-xl mb-2">
                 <span className="font-semibold">수입</span>
                 <span className="text-muted-foreground font-medium">{formatCurrency(totalExpenditure)}</span>
               </div>
-              <div className="flex h-[120px] rounded-lg overflow-hidden">
-                <div className="bg-green-500 flex items-center justify-center text-white text-3xl font-bold" style={{ width: `${donationPercent}%` }}>
+              <div className="flex h-[80px] sm:h-[120px] rounded-lg overflow-hidden">
+                <div className="bg-green-500 flex items-center justify-center text-white text-lg sm:text-3xl font-bold" style={{ width: `${donationPercent}%` }}>
                   건축헌금 {formatCurrency(buildingDonation2012Plus)}
                 </div>
-                <div className="flex items-center justify-center text-white text-3xl font-bold" style={{ width: `${generalPercent}%`, backgroundColor: '#166534' }}>
+                <div className="flex items-center justify-center text-white text-lg sm:text-3xl font-bold" style={{ width: `${generalPercent}%`, backgroundColor: '#166534' }}>
                   일반예산 {formatCurrency(generalBudget)}
                 </div>
               </div>
@@ -536,7 +536,8 @@ export default function BuildingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
-            <ResponsiveContainer width="100%" height={450}>
+            <div className="h-[300px] sm:h-[450px]">
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={recentChartData} barGap={8} margin={{ top: 30, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" tick={{ fontSize: 14 }} />
@@ -563,6 +564,7 @@ export default function BuildingPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
 
@@ -686,7 +688,8 @@ export default function BuildingPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={400}>
+          <div className="h-[280px] sm:h-[400px]">
+          <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis
@@ -744,6 +747,7 @@ export default function BuildingPage() {
               <ReferenceLine x={2025} stroke="#f59e0b" strokeWidth={2} />
             </ComposedChart>
           </ResponsiveContainer>
+          </div>
 
           <Timeline events={data.history} />
         </CardContent>

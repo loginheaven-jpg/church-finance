@@ -147,7 +147,7 @@ function DashboardContent() {
       />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-3 md:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
         <StatsCard
           icon={TrendingUp}
           label="이번 주 수입"

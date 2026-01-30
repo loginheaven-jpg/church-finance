@@ -181,7 +181,7 @@ export function PledgeEntryModal({
 
     return (
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-[460px]">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[460px]">
           <DialogHeader>
             <button
               onClick={handleBackToSelect}
@@ -205,7 +205,7 @@ export function PledgeEntryModal({
               {existingPledges.map((pledge) => (
                 <div
                   key={pledge.id}
-                  className="flex items-center justify-between p-4 border rounded-lg bg-slate-50"
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-4 border rounded-lg bg-slate-50"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
@@ -293,7 +293,7 @@ export function PledgeEntryModal({
 
     return (
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[400px]">
           <div className="text-center py-6">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-green-600" />
@@ -342,7 +342,7 @@ export function PledgeEntryModal({
   // 이름 선택 화면
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[420px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[420px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Heart className="h-5 w-5 text-rose-500" />
@@ -372,7 +372,7 @@ export function PledgeEntryModal({
               <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
             </div>
           ) : (
-            <div className="h-[300px] border rounded-lg overflow-y-auto">
+            <div className="h-[200px] sm:h-[300px] border rounded-lg overflow-y-auto">
               {filteredDonors.length === 0 ? (
                 <div className="text-center py-8 text-slate-500">
                   {searchQuery ? '검색 결과가 없습니다' : '등록된 헌금자가 없습니다'}

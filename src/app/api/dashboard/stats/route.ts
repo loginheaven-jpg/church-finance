@@ -375,6 +375,49 @@ export async function GET(request: NextRequest) {
     // 연간집행률 = (실제지출 / 연간예산) * 100
     const yearlyExecutionRate = totalBudget > 0 ? Math.round((yearlyExpense / totalBudget) * 100) : 0;
 
+    // 계정별 초과집행 항목 계산 (Top 3)
+    // 1. 계정별 실제 지출 집계
+    const expenseByAccount = new Map<number, number>();
+    for (const r of yearlyExpenseRecords) {
+      if (r.category_code >= 500) continue; // 건축비 제외
+      const code = r.account_code || 0;
+      expenseByAccount.set(code, (expenseByAccount.get(code) || 0) + (r.amount || 0));
+    }
+
+    // 2. 계정별 동기예산 대비 집행률 계산
+    const overBudgetItems: Array<{
+      accountCode: number;
+      accountName: string;
+      budgeted: number;
+      syncBudgeted: number;
+      executed: number;
+      executionRate: number;
+    }> = [];
+
+    for (const budget of budgetData) {
+      if (budget.category_code >= 500) continue; // 건축비 제외
+      const executed = expenseByAccount.get(budget.account_code) || 0;
+      const syncBudgeted = Math.round(budget.budgeted_amount / daysInYear * daysPassed);
+      if (syncBudgeted <= 0) continue;
+
+      const rate = Math.round((executed / syncBudgeted) * 100);
+      if (rate > 110) { // 110% 초과만
+        overBudgetItems.push({
+          accountCode: budget.account_code,
+          accountName: budget.account_item,
+          budgeted: budget.budgeted_amount,
+          syncBudgeted,
+          executed,
+          executionRate: rate,
+        });
+      }
+    }
+
+    // 3. 집행률 내림차순 정렬 후 Top 3
+    const topOverBudgetItems = overBudgetItems
+      .sort((a, b) => b.executionRate - a.executionRate)
+      .slice(0, 3);
+
     // 8주 데이터 계산 (7주 전부터 이번 주까지)
     const eightWeeksAgo = new Date(monday);
     eightWeeksAgo.setDate(monday.getDate() - 7 * 7); // 7주 전 월요일
@@ -454,6 +497,8 @@ export async function GET(request: NextRequest) {
       daysInYear,
       currentYear,
       weeklyData,
+      // 초과집행 항목 Top 3
+      topOverBudgetItems,
       // super_admin 검증용 은행잔액 정보
       lastBankBalance,
       lastBankDate,
@@ -498,6 +543,7 @@ export async function GET(request: NextRequest) {
       daysInYear: 365,
       currentYear: new Date().getFullYear(),
       weeklyData: [],
+      topOverBudgetItems: [],
       lastBankBalance: 0,
       lastBankDate: null,
     });

@@ -56,6 +56,15 @@ interface DashboardStats {
   daysPassed?: number;
   daysInYear?: number;
   currentYear?: number;
+  // 초과집행 항목 Top 3
+  topOverBudgetItems?: Array<{
+    accountCode: number;
+    accountName: string;
+    budgeted: number;
+    syncBudgeted: number;
+    executed: number;
+    executionRate: number;
+  }>;
   // super_admin 검증용 은행잔액
   lastBankBalance?: number;
   lastBankDate?: string | null;
@@ -252,7 +261,8 @@ function DashboardContent() {
         weeklyIncome={stats?.weeklyIncome || 0}
         weeklyExpense={stats?.weeklyExpense || 0}
         balance={stats?.balance || 0}
-        yearlyExecutionRate={stats?.yearlyExecutionRate || 0}
+        syncExecutionRate={stats?.syncExecutionRate || 0}
+        topOverBudgetItems={stats?.topOverBudgetItems || []}
         isLoading={isLoading}
       />
     </div>

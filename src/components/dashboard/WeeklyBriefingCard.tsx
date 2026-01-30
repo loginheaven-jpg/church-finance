@@ -4,11 +4,21 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 
+interface OverBudgetItem {
+  accountCode: number;
+  accountName: string;
+  budgeted: number;
+  syncBudgeted: number;
+  executed: number;
+  executionRate: number;
+}
+
 interface WeeklyBriefingCardProps {
   weeklyIncome: number;
   weeklyExpense: number;
   balance: number;
-  yearlyExecutionRate: number;
+  syncExecutionRate: number;
+  topOverBudgetItems?: OverBudgetItem[];
   isLoading?: boolean;
 }
 
@@ -32,7 +42,8 @@ export function WeeklyBriefingCard({
   weeklyIncome,
   weeklyExpense,
   balance,
-  yearlyExecutionRate,
+  syncExecutionRate,
+  topOverBudgetItems = [],
   isLoading = false,
 }: WeeklyBriefingCardProps) {
   // 건축 데이터 조회
@@ -69,12 +80,15 @@ export function WeeklyBriefingCard({
       : `${formatAmount(Math.abs(netFlow))} 적자`;
 
     let executionStatus = '';
-    if (yearlyExecutionRate >= 90 && yearlyExecutionRate <= 110) {
-      executionStatus = '예산 집행이 정상 범위입니다.';
-    } else if (yearlyExecutionRate < 90) {
-      executionStatus = '예산 집행률이 다소 낮습니다.';
+    if (syncExecutionRate >= 90 && syncExecutionRate <= 110) {
+      executionStatus = `예산 집행이 정상 범위입니다. (${syncExecutionRate}%)`;
+    } else if (syncExecutionRate < 90) {
+      executionStatus = `예산 집행률이 다소 낮습니다. (${syncExecutionRate}%)`;
     } else {
-      executionStatus = '예산 집행률이 다소 높습니다.';
+      // 초과집행 상태
+      const overItems = topOverBudgetItems.slice(0, 3).map(item => item.accountName);
+      const overItemsText = overItems.length > 0 ? ` 주요 초과계정: ${overItems.join(', ')}` : '';
+      executionStatus = `동기집행율이 초과집행 상태입니다. (${syncExecutionRate}%)${overItemsText}`;
     }
 
     return {

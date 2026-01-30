@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeSheets, resetCodeTables } from '@/lib/google-sheets';
+import { getServerSession } from '@/lib/auth/finance-permissions';
 
+// POST: 시트 초기화 (super_admin만)
 export async function POST(request: NextRequest) {
   try {
+    // 권한 확인 (super_admin만)
+    const session = await getServerSession();
+    if (!session || session.finance_role !== 'super_admin') {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const force = searchParams.get('force') === 'true';
 
@@ -34,7 +45,17 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// GET: 시트 연결 테스트 (super_admin만)
 export async function GET() {
+  // 권한 확인 (super_admin만)
+  const session = await getServerSession();
+  if (!session || session.finance_role !== 'super_admin') {
+    return NextResponse.json(
+      { success: false, error: '권한이 없습니다' },
+      { status: 403 }
+    );
+  }
+
   const { google } = await import('googleapis');
   const { JWT } = await import('google-auth-library');
 
@@ -61,25 +82,14 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       rowCount: response.data.values?.length || 0,
-      sample: response.data.values,
-      env: {
-        email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.substring(0, 30) + '...',
-        keyLength: process.env.GOOGLE_PRIVATE_KEY?.length || 0,
-        keyHasEscapedNewlines,
-        sheetId: process.env.FINANCE_SHEET_ID,
-      }
+      message: '시트 연결 정상',
     });
   } catch (error) {
     console.error('Sheet read test error:', error);
     return NextResponse.json({
       success: false,
-      error: String(error),
+      error: '시트 연결 실패',
       errorMessage: error instanceof Error ? error.message : 'Unknown error',
-      env: {
-        email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.substring(0, 30) + '...',
-        keyLength: process.env.GOOGLE_PRIVATE_KEY?.length || 0,
-        sheetId: process.env.FINANCE_SHEET_ID,
-      }
     }, { status: 500 });
   }
 }

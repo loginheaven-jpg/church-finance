@@ -41,20 +41,21 @@ export const MENU_MIN_ROLE: Record<string, FinanceRole> = {
   '/building': 'member',
   '/my-offering': 'member',
 
-  // REPORTS - 모든 사용자
+  // REPORTS
   '/reports': 'member',
   '/reports/weekly': 'member',
   '/reports/monthly': 'member',
   '/reports/comparison': 'member',
-  '/reports/budget': 'member',
-  '/reports/income-analysis': 'member',
-  '/reports/expense-analysis': 'member',
-  '/reports/custom': 'member',
+  '/reports/budget': 'deacon',           // deacon 이상
+  '/reports/income-analysis': 'deacon',  // deacon 이상
+  '/reports/expense-analysis': 'deacon', // deacon 이상
+  '/reports/custom': 'super_admin',      // super_admin만
 
-  // MANAGEMENTS - admin 이상
+  // MANAGEMENTS - admin 이상 (카드내역 입력은 member도 가능)
   '/expense-claim': 'admin',
   '/data-entry': 'admin',
   '/match': 'admin',
+  '/card-expense-integration': 'member', // 카드내역 입력은 member도 가능
   '/card': 'admin',
   '/donors': 'admin',
   '/settings': 'admin',
@@ -127,4 +128,25 @@ export const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 export function isCardOwnerMatch(sessionName: string, cardOwner: string | undefined): boolean {
   if (!cardOwner || !sessionName) return false;
   return sessionName.trim() === cardOwner.trim();
+}
+
+/**
+ * 서버 API Route에서 세션 가져오기
+ * cookies() 함수를 사용하여 세션 쿠키를 파싱
+ */
+export async function getServerSession(): Promise<FinanceSession | null> {
+  try {
+    // Next.js의 cookies() 함수를 동적으로 import
+    const { cookies } = await import('next/headers');
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
+
+    if (!sessionCookie) {
+      return null;
+    }
+
+    return JSON.parse(sessionCookie.value) as FinanceSession;
+  } catch {
+    return null;
+  }
 }

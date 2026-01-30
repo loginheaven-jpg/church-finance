@@ -122,11 +122,11 @@ export function PledgeEntryModal({
     try {
       const currentYear = new Date().getFullYear();
       const res = await fetch(`/api/pledges?donor_name=${encodeURIComponent(donor.donor_name)}&year=${currentYear}`);
-      const data = await res.json();
+      const result = await res.json();
 
-      if (data.success && data.pledges && data.pledges.length > 0) {
+      if (result.success && result.data?.pledges && result.data.pledges.length > 0) {
         // 기존 작정이 있음
-        setExistingPledges(data.pledges);
+        setExistingPledges(result.data.pledges);
         setStep('existing');
       } else {
         // 기존 작정이 없음 → 바로 새 작정 입력

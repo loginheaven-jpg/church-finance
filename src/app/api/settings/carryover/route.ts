@@ -5,10 +5,20 @@ import {
   setCarryoverBalance,
   getKSTDateTime,
 } from '@/lib/google-sheets';
+import { getServerSession, hasRole } from '@/lib/auth/finance-permissions';
 
-// GET: 이월잔액 조회
+// GET: 이월잔액 조회 (admin 이상)
 export async function GET(request: NextRequest) {
   try {
+    // 권한 확인 (admin 이상)
+    const session = await getServerSession();
+    if (!session || !hasRole(session.finance_role, 'admin')) {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const year = searchParams.get('year');
 
@@ -34,9 +44,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: 이월잔액 설정/수정
+// POST: 이월잔액 설정/수정 (admin 이상)
 export async function POST(request: NextRequest) {
   try {
+    // 권한 확인 (admin 이상)
+    const session = await getServerSession();
+    if (!session || !hasRole(session.finance_role, 'admin')) {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { year, balance, construction_balance, note } = body;
 
@@ -53,7 +72,7 @@ export async function POST(request: NextRequest) {
       construction_balance: Number(construction_balance) || 0,
       note: note || '',
       updated_at: getKSTDateTime(),
-      updated_by: 'admin',
+      updated_by: session.name,
     });
 
     return NextResponse.json({

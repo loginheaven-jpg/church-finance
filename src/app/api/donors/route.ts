@@ -4,12 +4,23 @@ import {
   addDonorInfo,
   updateDonorInfo,
   deleteDonorInfo,
+  getKSTDateTime,
 } from '@/lib/google-sheets';
+import { getServerSession, hasRole } from '@/lib/auth/finance-permissions';
 import type { DonorInfo } from '@/types';
 
-// GET: 헌금자 목록 조회
+// GET: 헌금자 목록 조회 (로그인 필요)
 export async function GET(request: NextRequest) {
   try {
+    // 로그인 확인
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: '로그인이 필요합니다' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search')?.toLowerCase();
 
@@ -37,9 +48,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: 헌금자 추가
+// POST: 헌금자 추가 (admin 이상)
 export async function POST(request: NextRequest) {
   try {
+    // 권한 확인 (admin 이상)
+    const session = await getServerSession();
+    if (!session || !hasRole(session.finance_role, 'admin')) {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
 
     const donor: DonorInfo = {
@@ -51,7 +71,7 @@ export async function POST(request: NextRequest) {
       phone: body.phone || '',
       email: body.email || '',
       note: body.note || '',
-      created_at: new Date().toISOString(),
+      created_at: getKSTDateTime(),
     };
 
     if (!donor.representative || !donor.donor_name) {
@@ -76,9 +96,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT: 헌금자 수정
+// PUT: 헌금자 수정 (admin 이상)
 export async function PUT(request: NextRequest) {
   try {
+    // 권한 확인 (admin 이상)
+    const session = await getServerSession();
+    if (!session || !hasRole(session.finance_role, 'admin')) {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
 
     const { representative, donor_name, updates } = body;
@@ -105,9 +134,18 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE: 헌금자 삭제
+// DELETE: 헌금자 삭제 (admin 이상)
 export async function DELETE(request: NextRequest) {
   try {
+    // 권한 확인 (admin 이상)
+    const session = await getServerSession();
+    if (!session || !hasRole(session.finance_role, 'admin')) {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const representative = searchParams.get('representative');
     const donor_name = searchParams.get('donor_name');

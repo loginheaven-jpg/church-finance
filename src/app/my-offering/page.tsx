@@ -162,7 +162,7 @@ export default function MyOfferingPage() {
         );
         if (res.ok) {
           const result = await res.json();
-          setPledgesV2(result.pledges || []);
+          setPledgesV2(result.data?.pledges || []);
         }
       } catch (err) {
         console.error('Pledge v2 조회 오류:', err);
@@ -184,7 +184,7 @@ export default function MyOfferingPage() {
       );
       if (res.ok) {
         const result = await res.json();
-        setPledgesV2(result.pledges || []);
+        setPledgesV2(result.data?.pledges || []);
       }
     } catch (err) {
       console.error('Pledge 새로고침 오류:', err);

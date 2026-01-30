@@ -5,7 +5,9 @@ import {
   initializePledgeSheets,
   getChurchPledgeStats,
   recalculateAllPledgesFulfillment,
+  getKSTDateTime,
 } from '@/lib/google-sheets';
+import { getServerSession, hasRole } from '@/lib/auth/finance-permissions';
 import type {
   OfferingType,
   PledgePeriod,
@@ -21,12 +23,21 @@ const OFFERING_CODE_MAP_LOCAL: Record<string, number> = {
 };
 
 /**
- * 작정헌금 목록 조회
+ * 작정헌금 목록 조회 (로그인 필요)
  * GET /api/pledges?year=2026&donor_name=홍길동&representative=홍길동&offering_type=building
  * representative 파라미터 사용 시 가족 단위 조회 (권장)
  */
 export async function GET(request: NextRequest) {
   try {
+    // 로그인 확인
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: '로그인이 필요합니다' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : undefined;
     const donor_name = searchParams.get('donor_name') || undefined;
@@ -36,12 +47,18 @@ export async function GET(request: NextRequest) {
     const stats = searchParams.get('stats') === 'true';
     const recalculate = searchParams.get('recalculate') === 'true';
 
-    // 교회 전체 통계 요청
+    // 교회 전체 통계 요청 (admin 이상 권한 필요)
     if (stats && year) {
+      if (!hasRole(session.finance_role, 'admin')) {
+        return NextResponse.json(
+          { success: false, error: '권한이 없습니다' },
+          { status: 403 }
+        );
+      }
       const churchStats = await getChurchPledgeStats(year);
       return NextResponse.json({
         success: true,
-        stats: churchStats,
+        data: { stats: churchStats },
       });
     }
 
@@ -67,16 +84,13 @@ export async function GET(request: NextRequest) {
       });
       return NextResponse.json({
         success: true,
-        pledges: updatedPledges,
-        count: updatedPledges.length,
-        recalculated: true,
+        data: { pledges: updatedPledges, count: updatedPledges.length, recalculated: true },
       });
     }
 
     return NextResponse.json({
       success: true,
-      pledges,
-      count: pledges.length,
+      data: { pledges, count: pledges.length },
     });
   } catch (error) {
     console.error('Pledges GET error:', error);
@@ -88,11 +102,20 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * 작정헌금 생성
+ * 작정헌금 생성 (로그인 필요)
  * POST /api/pledges
  */
 export async function POST(request: NextRequest) {
   try {
+    // 로그인 확인
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: '로그인이 필요합니다' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
 
     const {
@@ -160,6 +183,8 @@ export async function POST(request: NextRequest) {
     // 시트 초기화 (헤더 없으면 생성)
     await initializePledgeSheets();
 
+    const now = getKSTDateTime();
+
     // 작정 생성
     const pledgeId = await createPledge({
       donor_name,
@@ -174,13 +199,13 @@ export async function POST(request: NextRequest) {
       end_month,
       memo,
       status: 'active',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: now,
+      updated_at: now,
     });
 
     return NextResponse.json({
       success: true,
-      pledgeId,
+      data: { pledgeId },
       message: '작정이 등록되었습니다',
     });
   } catch (error) {
@@ -193,11 +218,20 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * 작정 누계 재계산
+ * 작정 누계 재계산 (admin 이상)
  * PUT /api/pledges?recalculate=true&year=2026
  */
 export async function PUT(request: NextRequest) {
   try {
+    // 권한 확인 (admin 이상)
+    const session = await getServerSession();
+    if (!session || !hasRole(session.finance_role, 'admin')) {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const recalculate = searchParams.get('recalculate') === 'true';
     const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : undefined;
@@ -213,7 +247,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      updatedCount,
+      data: { updatedCount },
       message: `${updatedCount}개의 작정 누계가 재계산되었습니다`,
     });
   } catch (error) {

@@ -168,10 +168,10 @@ export default function PledgeManagementPage() {
       // v2 API 호출 + recalculate로 누계 갱신
       const offeringTypeParam = selectedType !== 'all' ? `&offering_type=${selectedType}` : '';
       const res = await fetch(`/api/pledges?year=${year}${offeringTypeParam}&recalculate=true`);
-      const data = await res.json();
+      const result = await res.json();
 
-      if (data.success) {
-        setPledges(data.pledges || []);
+      if (result.success) {
+        setPledges(result.data?.pledges || []);
       }
     } catch (error) {
       console.error('Load error:', error);

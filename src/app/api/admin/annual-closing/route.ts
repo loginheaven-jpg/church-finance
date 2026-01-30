@@ -7,13 +7,22 @@ import {
   getBankTransactions,
   getKSTDateTime,
 } from '@/lib/google-sheets';
+import { getServerSession } from '@/lib/auth/finance-permissions';
 
 /**
- * 연마감 상태 확인 (이월잔액)
+ * 연마감 상태 확인 (이월잔액) - super_admin만
  * GET /api/admin/annual-closing
  */
 export async function GET() {
   try {
+    // 권한 확인 (super_admin만)
+    const session = await getServerSession();
+    if (!session || session.finance_role !== 'super_admin') {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      );
+    }
     const now = new Date();
     const currentYear = now.getFullYear();
     const month = now.getMonth() + 1;
@@ -97,7 +106,7 @@ export async function GET() {
 }
 
 /**
- * 연마감 실행 (이월잔액 저장)
+ * 연마감 실행 (이월잔액 저장) - super_admin만
  * POST /api/admin/annual-closing
  *
  * body: {
@@ -107,6 +116,15 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
+    // 권한 확인 (super_admin만)
+    const session = await getServerSession();
+    if (!session || session.finance_role !== 'super_admin') {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { targetYear, carryover } = body;
 
@@ -131,7 +149,7 @@ export async function POST(request: NextRequest) {
       construction_balance: carryover.construction_balance || 0,
       note: carryover.note || `${targetYear}년 연마감`,
       updated_at: getKSTDateTime(),
-      updated_by: 'super_admin',
+      updated_by: session.name,
     });
 
     return NextResponse.json({

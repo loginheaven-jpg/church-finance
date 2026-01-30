@@ -6,6 +6,7 @@ import {
   getBankTransactions,
 } from '@/lib/google-sheets';
 import { incrementRuleUsage } from '@/lib/matching-engine';
+import { getServerSession, hasRole } from '@/lib/auth/finance-permissions';
 import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
 
 interface MatchedIncomeItem {
@@ -20,8 +21,17 @@ interface MatchedExpenseItem {
   match: MatchingRule | null;
 }
 
-// 배치 확정 API - 수입/지출을 독립적으로 처리하여 부분 성공 허용
+// 배치 확정 API - 수입/지출을 독립적으로 처리하여 부분 성공 허용 (admin 이상)
 export async function POST(request: NextRequest) {
+  // 권한 확인 (admin 이상)
+  const session = await getServerSession();
+  if (!session || !hasRole(session.finance_role, 'admin')) {
+    return NextResponse.json(
+      { success: false, error: '권한이 없습니다' },
+      { status: 403 }
+    );
+  }
+
   const body = await request.json();
   const {
     income,

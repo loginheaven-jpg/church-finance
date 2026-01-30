@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Toaster } from 'sonner';
 import { Menu, X, CalendarCheck, AlertTriangle } from 'lucide-react';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { Button } from '@/components/ui/button';
+import { PledgePromptPopup } from '@/components/pledge';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -22,6 +23,13 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [showClosingAlert, setShowClosingAlert] = useState(false);
   const [closingTargetYear, setClosingTargetYear] = useState<number | null>(null);
   const [closingDismissed, setClosingDismissed] = useState(false);
+
+  // 작정헌금 팝업 상태
+  const [showPledgePrompt, setShowPledgePrompt] = useState(false);
+  const [pledgeStatus, setPledgeStatus] = useState<{
+    hasBuildingPledge: boolean;
+    hasMissionPledge: boolean;
+  } | null>(null);
 
   // 경로 변경 시 사이드바 닫기
   useEffect(() => {
@@ -64,6 +72,45 @@ export function MainLayout({ children }: MainLayoutProps) {
       checkAnnualClosing();
     }
   }, [session, pathname, closingDismissed]);
+
+  // member 역할일 때 작정헌금 상태 확인
+  useEffect(() => {
+    const checkPledgeStatus = async () => {
+      // member 역할만 확인, 이름이 없거나 다른 역할이면 스킵
+      if (
+        session?.finance_role !== 'member' ||
+        !session?.name
+      ) {
+        return;
+      }
+
+      try {
+        const currentYear = new Date().getFullYear();
+        const res = await fetch(`/api/pledges/check?name=${encodeURIComponent(session.name)}&year=${currentYear}`);
+        const result = await res.json();
+        if (result.success) {
+          setPledgeStatus({
+            hasBuildingPledge: result.hasBuildingPledge,
+            hasMissionPledge: result.hasMissionPledge,
+          });
+          // 둘 다 없으면 팝업 표시 (하나라도 있으면 팝업 안보임 - 단순화)
+          if (!result.isComplete) {
+            setShowPledgePrompt(true);
+          }
+        }
+      } catch (error) {
+        console.error('Pledge check error:', error);
+      }
+    };
+
+    if (session) {
+      checkPledgeStatus();
+    }
+  }, [session]);
+
+  const handlePledgeDismiss = useCallback(() => {
+    setShowPledgePrompt(false);
+  }, []);
 
   const handleDismissClosingAlert = () => {
     const dismissedKey = `annual_closing_dismissed_${new Date().getFullYear()}`;
@@ -174,6 +221,16 @@ export function MainLayout({ children }: MainLayoutProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 작정헌금 안내 팝업 (member 역할만) */}
+      {showPledgePrompt && pledgeStatus && session?.name && (
+        <PledgePromptPopup
+          userName={session.name}
+          hasBuildingPledge={pledgeStatus.hasBuildingPledge}
+          hasMissionPledge={pledgeStatus.hasMissionPledge}
+          onDismiss={handlePledgeDismiss}
+        />
       )}
 
       <Toaster position="top-right" richColors />

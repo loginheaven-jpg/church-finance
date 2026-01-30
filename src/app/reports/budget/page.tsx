@@ -174,7 +174,18 @@ function SubCategoryItem({
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50">
       <td className="py-4 pl-8 text-left text-lg">
-        {item.account_item}
+        {onExecutedClick ? (
+          <button
+            type="button"
+            onClick={() => onExecutedClick(item.account_code, item.account_item)}
+            className="hover:text-blue-600 hover:underline cursor-pointer transition-colors text-left"
+            title="클릭하여 지출 내역 보기"
+          >
+            {item.account_item}
+          </button>
+        ) : (
+          item.account_item
+        )}
       </td>
       <td className="py-4 px-4 text-right text-lg text-slate-500" title={formatFullCurrency(item.prev_executed)}>
         {formatCurrency(item.prev_executed)}
@@ -698,8 +709,8 @@ export default function BudgetExecutionPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* 고정 컬럼 헤더 */}
-          <div className="sticky top-0 z-10 bg-slate-100 border-b border-slate-300 -mx-6 px-6 py-2 -mt-4 shadow-sm">
-            <div className="flex items-center text-sm font-medium text-slate-600">
+          <div className="sticky top-0 z-10 bg-slate-100 border-b border-slate-300 -mx-6 px-6 py-3 -mt-4 shadow-sm">
+            <div className="flex items-center text-lg font-medium text-slate-600">
               <div className="flex-1 pl-12">항목명</div>
               <div className="w-28 text-right px-4">{reportData.prevYear}집행</div>
               <div className="w-28 text-right px-4">{reportData.year}예산</div>

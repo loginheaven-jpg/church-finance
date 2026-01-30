@@ -260,15 +260,6 @@ function CategoryItem({
       {isExpanded && category.accounts.length > 0 && (
         <div className="px-5 pb-5">
           <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-200 text-xl text-slate-500">
-                <th className="py-5 pl-8 text-left font-medium">항목명</th>
-                <th className="py-5 px-4 text-right font-medium w-36">{prevYear}집행</th>
-                <th className="py-5 px-4 text-right font-medium w-36">{currentYear}예산</th>
-                <th className="py-5 px-4 text-right font-medium w-36">{currentYear}집행</th>
-                <th className="py-5 px-4 text-right font-medium w-36">동기집행율</th>
-              </tr>
-            </thead>
             <tbody>
               {category.accounts.map(item => (
                 <SubCategoryItem
@@ -706,6 +697,16 @@ export default function BudgetExecutionPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* 고정 컬럼 헤더 */}
+          <div className="sticky top-0 z-10 bg-slate-100 border-b border-slate-300 -mx-6 px-6 py-3 -mt-4 shadow-sm">
+            <div className="flex items-center text-base font-medium text-slate-600">
+              <div className="flex-1 pl-12">항목명</div>
+              <div className="w-36 text-right px-4">{reportData.prevYear}집행</div>
+              <div className="w-36 text-right px-4">{reportData.year}예산</div>
+              <div className="w-36 text-right px-4">{reportData.year}집행</div>
+              <div className="w-36 text-right px-4">동기집행율</div>
+            </div>
+          </div>
           {reportData.categories.map((category, idx) => (
             <div key={category.category_code}>
               {idx > 0 && (

@@ -12,12 +12,19 @@ interface WeeklyBriefingCardProps {
   isLoading?: boolean;
 }
 
+interface BuildingHistory {
+  year: number;
+  yearlyDonation: number;
+}
+
 interface BuildingData {
   summary: {
     loanBalance: number;
-    totalDonation: number;
-    totalCost: number;
-    donationRate: number;
+    repaymentRate: number;
+  };
+  history: BuildingHistory[];
+  realTimeInterest: {
+    perYear: number;
   };
 }
 
@@ -83,10 +90,19 @@ export function WeeklyBriefingCard({
   const getBuildingStatus = () => {
     if (!buildingData?.data?.summary) return null;
 
-    const { loanBalance, donationRate } = buildingData.data.summary;
+    const { loanBalance, repaymentRate } = buildingData.data.summary;
+    const yearlyInterest = buildingData.data.realTimeInterest?.perYear || 0;
+
+    // 올해 건축헌금 누계액 (history에서 현재 연도 찾기)
+    const currentYear = new Date().getFullYear();
+    const currentYearData = buildingData.data.history?.find(h => h.year === currentYear);
+    const currentYearDonation = currentYearData?.yearlyDonation || 0;
+
     return {
       loanBalance: formatAmount(loanBalance),
-      donationRate: donationRate.toFixed(1),
+      repaymentRate: Math.round(repaymentRate),
+      yearlyInterest: formatAmount(yearlyInterest),
+      currentYearDonation: formatAmount(currentYearDonation),
     };
   };
 
@@ -136,10 +152,11 @@ export function WeeklyBriefingCard({
                 성전건축 현황
               </h3>
               <p className="text-[#6B7B8C] text-[12px] md:text-[13px] mt-1 leading-relaxed">
-                총 건축비 대비 헌금 달성률 <strong className="text-[#C9A962]">{buildingStatus.donationRate}%</strong>,
                 대출 잔액 <strong className="text-[#2C3E50]">{buildingStatus.loanBalance}</strong>
+                <span className="text-[#6B7B8C]"> ({buildingStatus.repaymentRate}% 상환)</span>
                 <br />
-                함께 기도해 주세요!
+                올해 예상 이자 <strong className="text-[#E74C3C]">{buildingStatus.yearlyInterest}</strong>,
+                올해 건축헌금 <strong className="text-[#4A9B7F]">{buildingStatus.currentYearDonation}</strong>
               </p>
             </div>
           </div>

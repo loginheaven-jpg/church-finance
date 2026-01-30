@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  getBuildingMaster,
-  isAnnualClosingNeeded,
-  performAnnualClosing,
   getIncomeRecords,
   getExpenseRecords,
   getCarryoverBalance,
@@ -12,10 +9,8 @@ import {
 } from '@/lib/google-sheets';
 
 /**
- * 연마감 상태 확인 (통합)
+ * 연마감 상태 확인 (이월잔액)
  * GET /api/admin/annual-closing
- *
- * 이월잔액 + 성전봉헌 연마감 상태를 함께 반환
  */
 export async function GET() {
   try {
@@ -26,49 +21,13 @@ export async function GET() {
     // 연마감 대상 연도: 1월이면 전년도, 아니면 현재 연도
     const targetYear = month === 1 ? currentYear - 1 : currentYear;
 
-    // 1. 성전봉헌 연마감 상태
-    const buildingMaster = await getBuildingMaster();
-    const buildingNeedsClosing = isAnnualClosingNeeded(buildingMaster.snapshotYear);
-
-    let buildingPreview = null;
-    if (buildingNeedsClosing) {
-      const startDate = `${targetYear}-01-01`;
-      const endDate = `${targetYear}-12-31`;
-
-      const [incomeRecords, expenseRecords] = await Promise.all([
-        getIncomeRecords(startDate, endDate),
-        getExpenseRecords(startDate, endDate),
-      ]);
-
-      const donation = incomeRecords
-        .filter(r => r.offering_code === 501)
-        .reduce((sum, r) => sum + (r.amount || 0), 0);
-
-      const interest = expenseRecords
-        .filter(r => r.account_code === 501)
-        .reduce((sum, r) => sum + (r.amount || 0), 0);
-
-      const principal = expenseRecords
-        .filter(r => r.account_code === 502)
-        .reduce((sum, r) => sum + (r.amount || 0), 0);
-
-      buildingPreview = {
-        targetYear,
-        donation,
-        interest,
-        principal,
-        currentLoanBalance: buildingMaster.loanBalance,
-        newLoanBalance: buildingMaster.loanBalance - principal,
-      };
-    }
-
-    // 2. 이월잔액 상태 확인
+    // 이월잔액 상태 확인
     const carryoverData = await getCarryoverBalance(targetYear);
-    const carryoverNeedsClosing = !carryoverData || carryoverData.balance === 0;
+    const needsClosing = !carryoverData || carryoverData.balance === 0;
 
-    // 이월잔액 미리보기: 전년도 마지막 은행 잔액 기준 계산
+    // 이월잔액 미리보기
     let carryoverPreview = null;
-    if (carryoverNeedsClosing) {
+    if (needsClosing) {
       // 전년도 마지막 거래의 잔액 조회
       const allBankTransactions = await getBankTransactions();
       const bankTransactions = allBankTransactions.filter(
@@ -114,27 +73,18 @@ export async function GET() {
         calculatedBalance,
         lastBankBalance,
         lastBankDate,
-        // 차액 (계산 vs 은행)
         difference: calculatedBalance - lastBankBalance,
       };
     }
-
-    // 연마감 필요 여부 (둘 중 하나라도 필요하면 true)
-    const needsClosing = buildingNeedsClosing || carryoverNeedsClosing;
 
     return NextResponse.json({
       success: true,
       needsClosing,
       targetYear,
       carryover: {
-        needsClosing: carryoverNeedsClosing,
+        needsClosing,
         currentData: carryoverData,
         preview: carryoverPreview,
-      },
-      building: {
-        needsClosing: buildingNeedsClosing,
-        snapshotYear: buildingMaster.snapshotYear,
-        preview: buildingPreview,
       },
     });
   } catch (error) {
@@ -147,19 +97,18 @@ export async function GET() {
 }
 
 /**
- * 연마감 실행 (통합)
+ * 연마감 실행 (이월잔액 저장)
  * POST /api/admin/annual-closing
  *
  * body: {
  *   targetYear: number,
- *   carryover?: { balance: number, construction_balance?: number, note?: string },
- *   building?: boolean
+ *   carryover: { balance: number, construction_balance?: number, note?: string }
  * }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { targetYear, carryover, building } = body;
+    const { targetYear, carryover } = body;
 
     if (!targetYear) {
       return NextResponse.json(
@@ -168,51 +117,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const results = {
-      carryover: null as { success: boolean; message: string } | null,
-      building: null as { success: boolean; message: string; data?: unknown } | null,
-    };
-
-    // 1. 이월잔액 저장
-    if (carryover) {
-      try {
-        await setCarryoverBalance({
-          year: targetYear,
-          balance: carryover.balance,
-          construction_balance: carryover.construction_balance || 0,
-          note: carryover.note || `${targetYear}년 연마감`,
-          updated_at: getKSTDateTime(),
-          updated_by: 'super_admin',
-        });
-        results.carryover = { success: true, message: '이월잔액이 저장되었습니다' };
-      } catch (error) {
-        results.carryover = { success: false, message: String(error) };
-      }
+    if (!carryover) {
+      return NextResponse.json(
+        { success: false, error: '이월잔액 정보가 없습니다' },
+        { status: 400 }
+      );
     }
 
-    // 2. 성전봉헌 연마감
-    if (building) {
-      try {
-        const result = await performAnnualClosing(targetYear);
-        results.building = {
-          success: result.success,
-          message: result.message,
-          data: result.data,
-        };
-      } catch (error) {
-        results.building = { success: false, message: String(error) };
-      }
-    }
-
-    // 전체 성공 여부
-    const allSuccess =
-      (!carryover || results.carryover?.success) &&
-      (!building || results.building?.success);
+    // 이월잔액 저장
+    await setCarryoverBalance({
+      year: targetYear,
+      balance: carryover.balance,
+      construction_balance: carryover.construction_balance || 0,
+      note: carryover.note || `${targetYear}년 연마감`,
+      updated_at: getKSTDateTime(),
+      updated_by: 'super_admin',
+    });
 
     return NextResponse.json({
-      success: allSuccess,
-      message: allSuccess ? '연마감이 완료되었습니다' : '일부 작업이 실패했습니다',
-      results,
+      success: true,
+      message: '이월잔액이 저장되었습니다',
     });
   } catch (error) {
     console.error('Annual closing error:', error);

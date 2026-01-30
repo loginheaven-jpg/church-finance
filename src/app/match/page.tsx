@@ -3,10 +3,18 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Wand2, RefreshCw } from 'lucide-react';
+import { Loader2, Wand2, RefreshCw, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { TransactionCard } from '@/components/match/TransactionCard';
 import { ClassificationForm } from '@/components/match/ClassificationForm';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { BankTransaction, CardTransaction, IncomeCode, ExpenseCode, MatchingRule } from '@/types';
 
 interface UnmatchedData {
@@ -22,6 +30,11 @@ export default function MatchPage() {
   const [selectedTransaction, setSelectedTransaction] = useState<(BankTransaction & { suggestions?: MatchingRule[] }) | null>(null);
   const [incomeCodes, setIncomeCodes] = useState<IncomeCode[]>([]);
   const [expenseCodes, setExpenseCodes] = useState<ExpenseCode[]>([]);
+
+  // 매칭 규칙 현황
+  const [showRules, setShowRules] = useState(false);
+  const [rules, setRules] = useState<MatchingRule[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
 
   const fetchUnmatched = async () => {
     setLoading(true);
@@ -56,6 +69,21 @@ export default function MatchPage() {
       if (expenseData.success) setExpenseCodes(expenseData.data);
     } catch (error) {
       console.error('Failed to fetch codes:', error);
+    }
+  };
+
+  const fetchRules = async () => {
+    setRulesLoading(true);
+    try {
+      const res = await fetch('/api/settings/matching-rules');
+      const data = await res.json();
+      if (data.success) {
+        setRules(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch rules:', error);
+    } finally {
+      setRulesLoading(false);
     }
   };
 
@@ -102,6 +130,17 @@ export default function MatchPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-900">거래 매칭</h1>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowRules(!showRules);
+              if (!showRules && rules.length === 0) fetchRules();
+            }}
+          >
+            <Zap className="mr-2 h-4 w-4" />
+            매칭규칙 현황
+            {showRules ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />}
+          </Button>
           <Button variant="outline" onClick={fetchUnmatched}>
             <RefreshCw className="mr-2 h-4 w-4" />
             새로고침
@@ -121,6 +160,79 @@ export default function MatchPage() {
           </Button>
         </div>
       </div>
+
+      {/* 매칭규칙 현황 패널 */}
+      {showRules && (
+        <Card>
+          <CardHeader className="py-4">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Zap className="h-5 w-5" />
+              자동 매칭 규칙
+            </CardTitle>
+            <CardDescription>
+              수동 분류 시 자동으로 학습됩니다. ({rules.length}개)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {rulesLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : rules.length === 0 ? (
+              <div className="text-center py-6 text-slate-500">
+                학습된 매칭 규칙이 없습니다
+              </div>
+            ) : (
+              <div className="max-h-[300px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>유형</TableHead>
+                      <TableHead>패턴</TableHead>
+                      <TableHead>대상 항목</TableHead>
+                      <TableHead className="text-right">신뢰도</TableHead>
+                      <TableHead className="text-right">사용</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rules.map((rule) => (
+                      <TableRow key={rule.id}>
+                        <TableCell>
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            rule.rule_type === 'bank_income'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {rule.rule_type === 'bank_income' ? '수입' : '지출'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm max-w-[150px] truncate">
+                          {rule.pattern}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div className="font-medium">{rule.target_name}</div>
+                            <div className="text-slate-500 text-xs">코드: {rule.target_code}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={`font-medium ${
+                            rule.confidence >= 0.8 ? 'text-green-600' :
+                            rule.confidence >= 0.6 ? 'text-amber-600' : 'text-slate-500'
+                          }`}>
+                            {Math.round(rule.confidence * 100)}%
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">{rule.usage_count}회</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 미매칭 거래 목록 */}

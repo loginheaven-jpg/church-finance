@@ -93,7 +93,6 @@ const menuSections: MenuSection[] = [
       { href: '/card-expense-integration', label: '카드내역 입력', icon: CreditCard, minRole: 'member' },
       { href: '/donors', label: '헌금자 관리', icon: Users },
       { href: '/donors/receipts', label: '기부금 영수증', icon: FileText },
-      { href: '/settings/matching-rules', label: '매칭 규칙', icon: Cog },
       { href: '/settings/carryover', label: '이월 잔액', icon: RefreshCw },
       { href: '/settings/pledge', label: '작정 헌금', icon: Target },
     ],

@@ -11,9 +11,27 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, Search, User, Heart, CheckCircle2, LogIn, UserPlus, X } from 'lucide-react';
+import { Loader2, Search, User, Heart, CheckCircle2, LogIn, UserPlus, X, Edit3, Plus, Building2, Globe, Calendar, ArrowLeft } from 'lucide-react';
 import { PledgeModal } from './PledgeModal';
-import type { DonorInfo } from '@/types';
+import type { DonorInfo, Pledge, OfferingType } from '@/types';
+
+const OFFERING_ICONS: Record<OfferingType, React.ReactNode> = {
+  building: <Building2 className="h-4 w-4" />,
+  mission: <Globe className="h-4 w-4" />,
+  weekly: <Calendar className="h-4 w-4" />,
+};
+
+const OFFERING_LABELS: Record<OfferingType, string> = {
+  building: '성전봉헌',
+  mission: '선교',
+  weekly: '주정',
+};
+
+const PERIOD_LABELS: Record<string, string> = {
+  weekly: '주정',
+  monthly: '월정',
+  yearly: '연간',
+};
 
 interface PledgeEntryModalProps {
   open: boolean;
@@ -29,13 +47,15 @@ export function PledgeEntryModal({
   loggedInName,
   onSuccess,
 }: PledgeEntryModalProps) {
-  const [step, setStep] = useState<'select' | 'pledge' | 'complete'>('select');
+  const [step, setStep] = useState<'select' | 'existing' | 'pledge' | 'complete'>('select');
   const [searchQuery, setSearchQuery] = useState('');
   const [donors, setDonors] = useState<DonorInfo[]>([]);
   const [filteredDonors, setFilteredDonors] = useState<DonorInfo[]>([]);
   const [selectedDonor, setSelectedDonor] = useState<DonorInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [showPledgeModal, setShowPledgeModal] = useState(false);
+  const [existingPledges, setExistingPledges] = useState<Pledge[]>([]);
+  const [editingPledge, setEditingPledge] = useState<Pledge | null>(null);
+  const [isCheckingPledges, setIsCheckingPledges] = useState(false);
 
   // 헌금자 목록 조회
   useEffect(() => {
@@ -95,9 +115,30 @@ export function PledgeEntryModal({
     }
   };
 
-  const handleDonorSelect = (donor: DonorInfo) => {
+  const handleDonorSelect = async (donor: DonorInfo) => {
     setSelectedDonor(donor);
-    setStep('pledge');
+    setIsCheckingPledges(true);
+
+    try {
+      const currentYear = new Date().getFullYear();
+      const res = await fetch(`/api/pledges?name=${encodeURIComponent(donor.donor_name)}&year=${currentYear}`);
+      const data = await res.json();
+
+      if (data.success && data.data && data.data.length > 0) {
+        // 기존 작정이 있음
+        setExistingPledges(data.data);
+        setStep('existing');
+      } else {
+        // 기존 작정이 없음 → 바로 새 작정 입력
+        setStep('pledge');
+      }
+    } catch (error) {
+      console.error('Failed to check existing pledges:', error);
+      // 에러 시에도 새 작정 입력으로 진행
+      setStep('pledge');
+    } finally {
+      setIsCheckingPledges(false);
+    }
   };
 
   const handlePledgeSuccess = () => {
@@ -109,8 +150,123 @@ export function PledgeEntryModal({
     setStep('select');
     setSelectedDonor(null);
     setSearchQuery('');
+    setExistingPledges([]);
+    setEditingPledge(null);
     onOpenChange(false);
   };
+
+  const handleEditPledge = (pledge: Pledge) => {
+    setEditingPledge(pledge);
+    setStep('pledge');
+  };
+
+  const handleAddNewPledge = () => {
+    setEditingPledge(null);
+    setStep('pledge');
+  };
+
+  const handleBackToSelect = () => {
+    setStep('select');
+    setSelectedDonor(null);
+    setExistingPledges([]);
+  };
+
+  const formatAmount = (amount: number) => {
+    return new Intl.NumberFormat('ko-KR').format(amount);
+  };
+
+  // 기존 작정 내역 화면
+  if (step === 'existing' && selectedDonor) {
+    const currentYear = new Date().getFullYear();
+
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <button
+              onClick={handleBackToSelect}
+              className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              다른 이름 선택
+            </button>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Heart className="h-5 w-5 text-rose-500" />
+              작정하신 내용이 있습니다
+            </DialogTitle>
+            <DialogDescription>
+              {selectedDonor.donor_name}님의 {currentYear}년 작정 내역입니다
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* 기존 작정 목록 */}
+            <div className="space-y-3">
+              {existingPledges.map((pledge) => (
+                <div
+                  key={pledge.id}
+                  className="flex items-center justify-between p-4 border rounded-lg bg-slate-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      pledge.offering_type === 'building'
+                        ? 'bg-amber-100 text-amber-600'
+                        : pledge.offering_type === 'mission'
+                        ? 'bg-blue-100 text-blue-600'
+                        : 'bg-green-100 text-green-600'
+                    }`}>
+                      {OFFERING_ICONS[pledge.offering_type]}
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">
+                        {OFFERING_LABELS[pledge.offering_type]}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        {PERIOD_LABELS[pledge.pledge_period]} {formatAmount(pledge.amount)}원
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {pledge.start_month}월 ~ {pledge.end_month}월
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEditPledge(pledge)}
+                    className="flex items-center gap-1"
+                  >
+                    <Edit3 className="h-3 w-3" />
+                    수정
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            {/* 새 작정 추가 버튼 */}
+            <Button
+              onClick={handleAddNewPledge}
+              variant="outline"
+              className="w-full border-dashed"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              다른 종류 작정 추가
+            </Button>
+
+            {/* 종료 버튼 */}
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="ghost"
+                onClick={handleClose}
+                className="flex-1 text-slate-500"
+              >
+                닫기
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   // 작정 모달로 전환 시
   if (step === 'pledge' && selectedDonor) {
@@ -124,6 +280,7 @@ export function PledgeEntryModal({
         }}
         donorName={selectedDonor.donor_name}
         representative={selectedDonor.representative}
+        existingPledge={editingPledge}
         onSuccess={handlePledgeSuccess}
       />
     );

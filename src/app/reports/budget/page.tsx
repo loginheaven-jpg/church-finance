@@ -329,6 +329,7 @@ export default function BudgetExecutionPage() {
   const [yearlyData, setYearlyData] = useState<YearlyChartData[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set([10, 20]));
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
+  const [excludeConstruction, setExcludeConstruction] = useState(true); // 건축제외가 기본값
 
   // 지출 상세 모달 상태
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
@@ -341,9 +342,9 @@ export default function BudgetExecutionPage() {
   };
 
   // 단일 연도 데이터 로드
-  const loadYearData = async (year: number): Promise<BudgetReportData | null> => {
+  const loadYearData = async (year: number, excludeConstr: boolean): Promise<BudgetReportData | null> => {
     try {
-      const res = await fetch(`/api/reports/budget?year=${year}`);
+      const res = await fetch(`/api/reports/budget?year=${year}&excludeConstruction=${excludeConstr}`);
       const data = await res.json();
       if (data.success) {
         return data.data;
@@ -361,12 +362,12 @@ export default function BudgetExecutionPage() {
       setLoading(true);
       try {
         // 선택 연도 데이터
-        const currentData = await loadYearData(selectedYear);
+        const currentData = await loadYearData(selectedYear, excludeConstruction);
         setReportData(currentData);
 
         // 5개년 차트 데이터
         const chartDataPromises = availableYears.map(async (year) => {
-          const data = await loadYearData(year);
+          const data = await loadYearData(year, excludeConstruction);
           if (data) {
             return {
               year,
@@ -390,7 +391,7 @@ export default function BudgetExecutionPage() {
     };
 
     loadData();
-  }, [selectedYear]);
+  }, [selectedYear, excludeConstruction]);
 
   // 인사이트 생성
   const insights = useMemo<Insight[]>(() => {
@@ -482,6 +483,31 @@ export default function BudgetExecutionPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {/* 건축제외/전체 토글 */}
+          <div className="flex items-center border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setExcludeConstruction(true)}
+              className={cn(
+                "px-3 py-1.5 text-sm font-medium transition-colors",
+                excludeConstruction
+                  ? "bg-slate-800 text-white"
+                  : "bg-white text-slate-600 hover:bg-slate-100"
+              )}
+            >
+              건축제외
+            </button>
+            <button
+              onClick={() => setExcludeConstruction(false)}
+              className={cn(
+                "px-3 py-1.5 text-sm font-medium transition-colors",
+                !excludeConstruction
+                  ? "bg-slate-800 text-white"
+                  : "bg-white text-slate-600 hover:bg-slate-100"
+              )}
+            >
+              전체 예산
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"

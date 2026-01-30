@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const yearParam = searchParams.get('year');
     const endDateParam = searchParams.get('endDate'); // 기준일 (옵션)
+    const excludeConstruction = searchParams.get('excludeConstruction') === 'true'; // 건축 제외 옵션
 
     const year = yearParam ? parseInt(yearParam) : new Date().getFullYear();
 
@@ -98,6 +99,11 @@ export async function GET(request: NextRequest) {
     }>();
 
     for (const budget of budgetData) {
+      // 건축제외 옵션이 켜져있고 건축 카테고리(500번대)인 경우 스킵
+      if (excludeConstruction && budget.category_code >= 500) {
+        continue;
+      }
+
       if (!categoryMap.has(budget.category_code)) {
         categoryMap.set(budget.category_code, {
           category_code: budget.category_code,
@@ -155,13 +161,21 @@ export async function GET(request: NextRequest) {
 
     // 전체 지출 합계 (예산 등록 여부 무관 - 실제 총 지출액)
     let totalExecuted = 0;
-    for (const amount of expenseByAccount.values()) {
+    for (const [code, amount] of expenseByAccount.entries()) {
+      // 건축제외 옵션이 켜져있고 건축 항목(500번대)인 경우 스킵
+      if (excludeConstruction && code >= 500) {
+        continue;
+      }
       totalExecuted += amount;
     }
 
     // 전년 전체 지출 합계
     let totalPrevExecutedAll = 0;
-    for (const amount of prevExpenseByAccount.values()) {
+    for (const [code, amount] of prevExpenseByAccount.entries()) {
+      // 건축제외 옵션이 켜져있고 건축 항목(500번대)인 경우 스킵
+      if (excludeConstruction && code >= 500) {
+        continue;
+      }
       totalPrevExecutedAll += amount;
     }
 

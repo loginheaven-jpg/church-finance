@@ -37,44 +37,37 @@ async function updateBuildingSheet() {
   const sheetName = '건축원장';
 
   try {
-    // 1. 현재 F-G열 데이터 읽기
+    // 1. 현재 F열 데이터 읽기 (연도 확인용)
     const readRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${sheetName}!F3:G20`,
+      range: `${sheetName}!F4:F20`,  // F4부터 (2012년부터)
     });
 
-    const currentData = readRes.data.values || [];
-    console.log('현재 F-G열 데이터:');
-    currentData.forEach((row, i) => console.log(`  Row ${i+3}: ${row.join(', ')}`));
+    const yearData = readRes.data.values || [];
+    console.log('현재 F열 연도 데이터:');
+    yearData.forEach((row, i) => console.log(`  Row ${i+4}: ${row[0]}`));
 
-    // 2. H3에 헤더 추가, H4부터 데이터 추가
-    const headerRow = ['누적원금', '누적이자', '대출잔액'];
+    // 2. H4부터 데이터 추가 (F4=2012년부터 시작)
+    const updateData = [];
 
-    // 연도별 데이터 매핑
-    const updateData = [headerRow]; // H3: 헤더
-
-    for (let i = 0; i < currentData.length; i++) {
-      const yearStr = currentData[i]?.[0];
+    for (let i = 0; i < yearData.length; i++) {
+      const yearStr = yearData[i]?.[0];
       const year = parseInt(yearStr);
 
       if (year && yearlyProgressData[year]) {
         const p = yearlyProgressData[year];
         updateData.push([p.principalPaid, p.interestPaid, p.loanBalance]);
-      } else if (yearStr === '연도' || yearStr === '') {
-        // 헤더 행이거나 빈 행
-        updateData.push(['', '', '']);
+        console.log(`  ${year}년: 원금=${p.principalPaid}, 이자=${p.interestPaid}, 잔액=${p.loanBalance}`);
       } else {
         updateData.push(['', '', '']);
+        console.log(`  ${yearStr}: 데이터 없음`);
       }
     }
 
-    console.log('\n업데이트할 H-J열 데이터:');
-    updateData.forEach((row, i) => console.log(`  Row ${i+3}: ${row.join(', ')}`));
-
-    // 3. H열에 데이터 쓰기
+    // 3. H4부터 데이터 쓰기
     const updateRes = await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `${sheetName}!H3:J${3 + updateData.length - 1}`,
+      range: `${sheetName}!H4:J${4 + updateData.length - 1}`,
       valueInputOption: 'RAW',
       requestBody: {
         values: updateData,

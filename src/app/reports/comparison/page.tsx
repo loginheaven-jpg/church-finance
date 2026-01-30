@@ -190,9 +190,6 @@ export default function ComparisonReportPage() {
     return item;
   });
 
-  // 차트 높이 결정 (카테고리별 표시시 2배)
-  const chartHeight = chartMode === 'all' ? 350 : 600;
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -226,31 +223,31 @@ export default function ComparisonReportPage() {
 
       {/* Yearly Comparison - Chart/Table Toggle */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
+        <CardHeader className="pb-2 sm:pb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
               연도별비교
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {/* Chart/Table Toggle */}
-              <div className="flex items-center gap-1 mr-2">
+              <div className="flex items-center gap-1">
                 <Button
                   variant={viewMode === 'chart' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setViewMode('chart')}
-                  className="h-8"
+                  className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3"
                 >
-                  <BarChart3 className="h-4 w-4 mr-1" />
+                  <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                   차트
                 </Button>
                 <Button
                   variant={viewMode === 'table' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setViewMode('table')}
-                  className="h-8"
+                  className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3"
                 >
-                  <TableIcon className="h-4 w-4 mr-1" />
+                  <TableIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                   테이블
                 </Button>
               </div>
@@ -261,7 +258,7 @@ export default function ComparisonReportPage() {
                     variant={chartMode === 'income' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setChartMode('income')}
-                    className={chartMode === 'income' ? 'bg-green-600 hover:bg-green-700' : ''}
+                    className={`h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 ${chartMode === 'income' ? 'bg-green-600 hover:bg-green-700' : ''}`}
                   >
                     수입
                   </Button>
@@ -269,7 +266,7 @@ export default function ComparisonReportPage() {
                     variant={chartMode === 'expense' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setChartMode('expense')}
-                    className={chartMode === 'expense' ? 'bg-red-600 hover:bg-red-700' : ''}
+                    className={`h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 ${chartMode === 'expense' ? 'bg-red-600 hover:bg-red-700' : ''}`}
                   >
                     지출
                   </Button>
@@ -277,6 +274,7 @@ export default function ComparisonReportPage() {
                     variant={chartMode === 'all' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setChartMode('all')}
+                    className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3"
                   >
                     모두
                   </Button>
@@ -287,7 +285,8 @@ export default function ComparisonReportPage() {
         </CardHeader>
         <CardContent>
           {viewMode === 'chart' ? (
-            <ResponsiveContainer width="100%" height={chartHeight}>
+            <div className={chartMode === 'all' ? 'h-[250px] sm:h-[350px]' : 'h-[400px] sm:h-[600px]'}>
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={yearlyChartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" />
@@ -313,6 +312,7 @@ export default function ComparisonReportPage() {
                 )}
               </BarChart>
             </ResponsiveContainer>
+            </div>
           ) : (
             /* Table View - 7 years */
             <div className="overflow-x-auto">
@@ -400,14 +400,15 @@ export default function ComparisonReportPage() {
       {/* Monthly Income Trend Chart (3개년) */}
       <Card>
         <CardHeader>
-          <CardTitle>월별 수입 추이 (3개년)</CardTitle>
+          <CardTitle className="text-base sm:text-lg">월별 수입 추이 (3개년)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
+          <div className="h-[220px] sm:h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={monthlyChartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={formatAmount} />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={formatAmount} tick={{ fontSize: 11 }} />
               <Tooltip
                 formatter={(value) => formatFullAmount(Number(value) || 0)}
               />
@@ -424,20 +425,22 @@ export default function ComparisonReportPage() {
               ))}
             </LineChart>
           </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 
       {/* Monthly Expense Trend Chart (3개년) */}
       <Card>
         <CardHeader>
-          <CardTitle>월별 지출 추이 (3개년)</CardTitle>
+          <CardTitle className="text-base sm:text-lg">월별 지출 추이 (3개년)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
+          <div className="h-[220px] sm:h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={monthlyChartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={formatAmount} />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={formatAmount} tick={{ fontSize: 11 }} />
               <Tooltip
                 formatter={(value) => formatFullAmount(Number(value) || 0)}
               />
@@ -454,6 +457,7 @@ export default function ComparisonReportPage() {
               ))}
             </LineChart>
           </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
     </div>

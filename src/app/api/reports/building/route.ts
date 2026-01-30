@@ -227,31 +227,34 @@ export async function GET(request: NextRequest) {
       currentYearRepayment = currentYearPrincipal + currentYearInterest;
     }
 
-    // 3. 히스토리 데이터 구성 (earlyHistoryData + yearlyProgressData 고정 사용)
+    // 3. 히스토리 데이터 구성 (earlyHistoryData + master.history)
     const historyData: BuildingHistory[] = [];
 
-    // 2003~2011 초기 히스토리 (마일스톤 포함)
+    // 2003~2011 초기 히스토리 (마일스톤 포함, 시트에 없음)
     historyData.push(...earlyHistoryData);
 
-    // 2012~스냅샷연도 히스토리 추가 (yearlyProgressData 기반)
+    // 2012~스냅샷연도 히스토리 추가 (master.history에서 읽음)
+    // master.history를 연도 기준 Map으로 변환
+    const historyByYear = new Map(master.history.map(h => [h.year, h]));
     let prevCumulativeDonation = 3200000000; // 2011년 누적
+
     for (let year = 2012; year <= master.snapshotYear; year++) {
-      const yearlyDonation = yearlyDonationFallback[year] || 0;
+      const historyItem = historyByYear.get(year);
+      const yearlyDonation = historyItem?.donation || yearlyDonationFallback[year] || 0;
       prevCumulativeDonation += yearlyDonation;
 
-      const progress = yearlyProgressData[year] || {
-        principalPaid: 0,
-        interestPaid: 0,
-        loanBalance: 2100000000,
-      };
+      // master.history에 누적 데이터가 있으면 사용, 없으면 폴백
+      const principalPaid = historyItem?.principal || yearlyProgressData[year]?.principalPaid || 0;
+      const interestPaid = historyItem?.interest || yearlyProgressData[year]?.interestPaid || 0;
+      const yearLoanBalance = historyItem?.loanBalance || yearlyProgressData[year]?.loanBalance || 2100000000;
 
       historyData.push({
         year,
         yearlyDonation,
         cumulativeDonation: prevCumulativeDonation,
-        principalPaid: progress.principalPaid,
-        interestPaid: progress.interestPaid,
-        loanBalance: year === master.snapshotYear ? master.loanBalance : progress.loanBalance,
+        principalPaid,
+        interestPaid,
+        loanBalance: year === master.snapshotYear ? master.loanBalance : yearLoanBalance,
         ...(year === master.snapshotYear && {
           milestone: {
             title: '스냅샷',

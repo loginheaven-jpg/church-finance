@@ -1980,10 +1980,10 @@ export async function getBuildingMaster(): Promise<BuildingMasterData> {
   const cumulativePrincipal = parseNum(rows[16]?.[3]);   // D17: 누적 원금 상환
   const loanBalance = parseNum(rows[17]?.[3]);           // D18: 대출잔금
 
-  // 히스토리 (F-G열: 연도별 헌금)
-  // F4~F17에 연도, G4~G17에 헌금액
+  // 히스토리 (F-J열: 연도별 데이터)
+  // F: 연도, G: 헌금, H: 누적원금, I: 누적이자, J: 잔액
   const history: BuildingYearlyHistory[] = [];
-  for (let i = 3; i <= 17; i++) {  // Row 4-18 (index 3-17)
+  for (let i = 3; i <= 20; i++) {  // Row 4-21 (index 3-20)
     const row = rows[i];
     if (!row) continue;
 
@@ -1991,14 +1991,17 @@ export async function getBuildingMaster(): Promise<BuildingMasterData> {
     const year = parseInt(yearStr);
     if (isNaN(year) || year < 2003) continue;
 
-    const donation = parseNum(row[6]);  // G열 (index 6)
+    const donation = parseNum(row[6]);      // G열: 헌금
+    const principal = parseNum(row[7]);     // H열: 누적 원금 상환
+    const interest = parseNum(row[8]);      // I열: 누적 이자 지출
+    const historyLoanBalance = parseNum(row[9]);  // J열: 대출 잔액
 
     history.push({
       year,
       donation,
-      principal: 0,  // 연도별 원금 데이터는 시트에 없음 (폴백 사용)
-      interest: 0,   // 연도별 이자 데이터는 시트에 없음 (폴백 사용)
-      loanBalance: 0, // 연도별 잔액 데이터는 시트에 없음 (폴백 사용)
+      principal,
+      interest,
+      loanBalance: historyLoanBalance,
     });
   }
 
@@ -2087,29 +2090,52 @@ export async function performAnnualClosing(targetYear: number): Promise<{
     const newCumulativeInterest = master.cumulativeInterest + yearInterest;
     const newLoanBalance = master.loanBalance - yearPrincipal;
 
-    // 6. 시트 업데이트
-    const rows = await readSheet(FINANCE_CONFIG.sheets.buildingMaster, 'A:E');
+    // 6. 시트 업데이트 (실제 시트 구조에 맞게)
+    // 셀 위치:
+    // - B13: 스냅샷 연도
+    // - D11: 누적헌금(12년~)
+    // - D16: 누적이자지출
+    // - D17: 누적원금상환
+    // - D18: 대출잔금
+    // - F-G열: 연도별 헌금 히스토리
 
-    // 스냅샷 섹션 업데이트 (행 8-13, 0-indexed: 7-12)
-    rows[7] = ['스냅샷기준일', `${targetYear}-12-31`, ''];
-    rows[9] = ['누적헌금(2012~)', newCumulativeDonation.toString(), ''];
-    rows[10] = ['누적원금상환', newCumulativePrincipal.toString(), ''];
-    rows[11] = ['누적이자지출', newCumulativeInterest.toString(), ''];
-    rows[12] = ['대출잔액', newLoanBalance.toString(), ''];
+    const rows = await readSheet(FINANCE_CONFIG.sheets.buildingMaster, 'A:K');
 
-    // 히스토리에 새 연도 추가 (마지막 행)
-    const newHistoryRow = [
-      targetYear.toString(),
-      yearDonation.toString(),
-      yearPrincipal.toString(),
-      yearInterest.toString(),
-      newLoanBalance.toString(),
-      '',
-    ];
-    rows.push(newHistoryRow);
+    // 스냅샷 연도 업데이트 (B13, index [12][1])
+    if (!rows[12]) rows[12] = [];
+    rows[12][1] = targetYear.toString();
 
-    // 시트에 쓰기 (전체 범위)
-    const range = `A1:F${rows.length}`;
+    // 누적헌금(12년~) 업데이트 (D11, index [10][3])
+    if (!rows[10]) rows[10] = [];
+    rows[10][3] = newCumulativeDonation.toString();
+
+    // 누적이자지출 업데이트 (D16, index [15][3])
+    if (!rows[15]) rows[15] = [];
+    rows[15][3] = newCumulativeInterest.toString();
+
+    // 누적원금상환 업데이트 (D17, index [16][3])
+    if (!rows[16]) rows[16] = [];
+    rows[16][3] = newCumulativePrincipal.toString();
+
+    // 대출잔금 업데이트 (D18, index [17][3])
+    if (!rows[17]) rows[17] = [];
+    rows[17][3] = newLoanBalance.toString();
+
+    // 히스토리에 새 연도 추가 (F-J열의 다음 빈 행)
+    // F4~(index 3~)에 기존 연도들이 있으므로 다음 빈 행 찾기
+    let historyRowIndex = 3; // F4부터 시작
+    while (historyRowIndex < 30 && rows[historyRowIndex]?.[5]) {
+      historyRowIndex++;
+    }
+    if (!rows[historyRowIndex]) rows[historyRowIndex] = [];
+    rows[historyRowIndex][5] = targetYear.toString();           // F열: 연도
+    rows[historyRowIndex][6] = yearDonation.toString();         // G열: 헌금
+    rows[historyRowIndex][7] = newCumulativePrincipal.toString(); // H열: 누적 원금
+    rows[historyRowIndex][8] = newCumulativeInterest.toString();  // I열: 누적 이자
+    rows[historyRowIndex][9] = newLoanBalance.toString();         // J열: 잔액
+
+    // 시트에 쓰기 (A1:K까지)
+    const range = `A1:K${Math.max(rows.length, historyRowIndex + 1)}`;
     await updateSheet(FINANCE_CONFIG.sheets.buildingMaster, range, rows);
 
     return {

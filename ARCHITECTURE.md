@@ -65,7 +65,7 @@ src/
 | 주간 요약 | `/reports/weekly` | member | |
 | 연간 요약 | `/reports/monthly` | member | |
 | 연간 비교 | `/reports/comparison` | member | |
-| 예산 집행 | `/reports/budget` | member | |
+| 예산 집행 | `/reports/budget` | **deacon** | 예산 대비 집행 현황 |
 | 수입 분석 | `/reports/income-analysis` | **deacon** | 상세 수입 분석 |
 | 지출 분석 | `/reports/expense-analysis` | **deacon** | 상세 지출 분석 |
 | 커스텀 보고서 | `/reports/custom` | **super_admin** | 맞춤 보고서 생성 |

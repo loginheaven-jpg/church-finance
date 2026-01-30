@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,8 +39,8 @@ const OFFERING_TYPES: { value: OfferingType; label: string; icon: React.ReactNod
 ];
 
 const PLEDGE_PERIODS: { value: PledgePeriod; label: string; multiplier: number; amountLabel: string }[] = [
-  { value: 'weekly', label: '주정 (매주)', multiplier: 52, amountLabel: '주별 작정금액' },
-  { value: 'monthly', label: '월정 (매월)', multiplier: 12, amountLabel: '월별 작정금액' },
+  { value: 'weekly', label: '주정', multiplier: 52, amountLabel: '주별 작정금액' },
+  { value: 'monthly', label: '월정', multiplier: 12, amountLabel: '월별 작정금액' },
   { value: 'yearly', label: '연간', multiplier: 1, amountLabel: '연간 작정금액' },
 ];
 
@@ -206,7 +205,7 @@ export function PledgeModal({
           </div>
 
           {/* 작정 주기 */}
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label className="text-sm font-medium">작정 주기</Label>
             <div className="flex gap-2">
               {PLEDGE_PERIODS.map((period) => (
@@ -214,7 +213,7 @@ export function PledgeModal({
                   key={period.value}
                   type="button"
                   onClick={() => setPledgePeriod(period.value)}
-                  className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
+                  className={`flex-1 py-1.5 px-2 rounded-lg border-2 text-sm font-medium transition-all ${
                     pledgePeriod === period.value
                       ? 'border-green-600 bg-green-50 text-green-700'
                       : 'border-slate-200 hover:border-slate-300 text-slate-600'
@@ -227,7 +226,7 @@ export function PledgeModal({
           </div>
 
           {/* 작정 금액 */}
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label className="text-sm font-medium">{amountLabel}</Label>
             <div className="relative">
               <Input
@@ -242,7 +241,7 @@ export function PledgeModal({
           </div>
 
           {/* 작정 기간 */}
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label className="text-sm font-medium">작정 기간</Label>
             <div className="flex items-center gap-2">
               <Select
@@ -325,18 +324,19 @@ export function PledgeModal({
           )}
         </div>
 
-        <DialogFooter className="pt-1">
+        <div className="flex gap-2 pt-2">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
+            className="flex-1"
           >
             취소
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="bg-green-600 hover:bg-green-700"
+            className="flex-1 bg-green-600 hover:bg-green-700"
           >
             {isSubmitting ? (
               <>
@@ -350,7 +350,7 @@ export function PledgeModal({
               </>
             )}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

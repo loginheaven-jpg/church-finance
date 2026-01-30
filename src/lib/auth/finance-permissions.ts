@@ -34,8 +34,11 @@ export const ROLE_LABELS: Record<FinanceRole, string> = {
   'member': '회원',
 };
 
-// 메뉴별 최소 필요 역할
+// 메뉴별 최소 필요 역할 (화이트리스트 기반 - 여기 없는 경로는 기본 차단)
 export const MENU_MIN_ROLE: Record<string, FinanceRole> = {
+  // ROOT - 대시보드로 리다이렉트
+  '/': 'member',
+
   // MAIN - 모든 사용자
   '/dashboard': 'member',
   '/building': 'member',
@@ -49,6 +52,7 @@ export const MENU_MIN_ROLE: Record<string, FinanceRole> = {
   '/reports/budget': 'deacon',           // deacon 이상
   '/reports/income-analysis': 'deacon',  // deacon 이상
   '/reports/expense-analysis': 'deacon', // deacon 이상
+  '/reports/donor-analysis': 'admin',    // admin 이상 (상세 헌금자 분석)
   '/reports/custom': 'super_admin',      // super_admin만
 
   // MANAGEMENTS - admin 이상 (카드내역 입력은 member도 가능)
@@ -56,6 +60,7 @@ export const MENU_MIN_ROLE: Record<string, FinanceRole> = {
   '/data-entry': 'admin',
   '/match': 'admin',
   '/card-expense-integration': 'member', // 카드내역 입력은 member도 가능
+  '/card-details': 'member',             // 카드 상세 입력 (카드내역 입력 흐름)
   '/card': 'admin',
   '/donors': 'admin',
   '/settings': 'admin',
@@ -73,6 +78,7 @@ export function hasRole(userRole: FinanceRole, requiredRole: FinanceRole): boole
 
 /**
  * 사용자가 특정 경로에 접근 가능한지 확인
+ * (화이트리스트 기반: MENU_MIN_ROLE에 정의되지 않은 경로는 기본 차단)
  */
 export function canAccessPath(path: string, userRole: FinanceRole): boolean {
   // 정확한 경로 매칭 먼저 시도
@@ -90,8 +96,8 @@ export function canAccessPath(path: string, userRole: FinanceRole): boolean {
     segments.pop();
   }
 
-  // 정의되지 않은 경로는 기본적으로 허용 (로그인된 사용자에게)
-  return true;
+  // 정의되지 않은 경로는 기본적으로 차단 (화이트리스트 기반 보안)
+  return false;
 }
 
 /**

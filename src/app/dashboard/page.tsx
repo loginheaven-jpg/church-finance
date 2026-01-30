@@ -14,7 +14,7 @@ import {
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries';
-import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails, BudgetExecutionCard } from '@/components/dashboard';
+import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails, BudgetExecutionCard, WeeklyBriefingCard } from '@/components/dashboard';
 import { addWeeks, format, subDays } from 'date-fns';
 
 interface CategoryDetail {
@@ -247,22 +247,14 @@ function DashboardContent() {
         isLoading={isLoading}
       />
 
-      {/* Info Card */}
-      <Card className="border-0 shadow-soft bg-[#F5EFE0]">
-        <CardContent className="p-4 md:p-6">
-          <div className="flex items-start gap-3 md:gap-4">
-            <div className="text-xl md:text-2xl">💡</div>
-            <div>
-              <h3 className="font-semibold text-[#2C3E50] text-[14px] md:text-[15px]">시작하기</h3>
-              <p className="text-[#6B7B8C] text-[12px] md:text-[13px] mt-1 leading-relaxed">
-                1. <strong className="text-[#2C3E50]">데이터 입력</strong>에서 현금헌금을 동기화하거나 은행/카드 파일을 업로드하세요.<br />
-                2. <strong className="text-[#2C3E50]">거래 매칭</strong>에서 미분류된 거래를 수입/지출로 분류하세요.<br />
-                3. <strong className="text-[#2C3E50]">보고서</strong>에서 주간/월간 재정 현황을 확인하세요.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Weekly Briefing Card */}
+      <WeeklyBriefingCard
+        weeklyIncome={stats?.weeklyIncome || 0}
+        weeklyExpense={stats?.weeklyExpense || 0}
+        balance={stats?.balance || 0}
+        yearlyExecutionRate={stats?.yearlyExecutionRate || 0}
+        isLoading={isLoading}
+      />
     </div>
   );
 }

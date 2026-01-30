@@ -321,8 +321,15 @@ export async function GET(request: NextRequest) {
     // 이월잔액
     const carryoverBalance = carryoverData?.balance || 0;
 
-    // 현재 잔액 = 이월잔액 + 연간총수입 - 연간총지출 (계산 기반)
-    const balance = carryoverBalance + yearlyTotalIncome - yearlyTotalExpense;
+    // 현재 잔액 = 이월잔액 + 선택주까지의 수입 - 선택주까지의 지출
+    // (차트와 일치하도록 endDate 기준)
+    const balanceIncome = yearlyIncomeRecords
+      .filter(r => r.date <= endDate)
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    const balanceExpense = yearlyExpenseRecords
+      .filter(r => r.date <= endDate)
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    const balance = carryoverBalance + balanceIncome - balanceExpense;
 
     // 은행원장의 마지막 잔액 (super_admin 검증용)
     // transaction_date + time 을 합쳐서 가장 늦은 시간의 balance 선택

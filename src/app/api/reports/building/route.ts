@@ -199,12 +199,16 @@ export async function GET(request: NextRequest) {
     // 2003~2011 초기 히스토리 (마일스톤 포함)
     historyData.push(...earlyHistoryData);
 
-    // 2012~ 히스토리 (시트에서 읽음, 당년 포함)
-    const historyByYear = new Map(master.history.map(h => [h.year, h]));
+    // 2012~ 히스토리 (시트에서 읽음, 현재 연도까지만 포함)
+    // 미래 연도 데이터 필터링
+    const filteredHistory = master.history.filter(h => h.year <= currentYear);
+    const historyByYear = new Map(filteredHistory.map(h => [h.year, h]));
     let prevCumulativeDonation = 3200000000; // 2011년 누적
-    const latestYear = Math.max(...master.history.map(h => h.year));
+    const latestYear = filteredHistory.length > 0
+      ? Math.max(...filteredHistory.map(h => h.year))
+      : currentYear;
 
-    for (const h of master.history.sort((a, b) => a.year - b.year)) {
+    for (const h of filteredHistory.sort((a, b) => a.year - b.year)) {
       prevCumulativeDonation += h.donation;
 
       historyData.push({

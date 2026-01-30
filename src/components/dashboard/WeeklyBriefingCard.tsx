@@ -62,10 +62,10 @@ export function WeeklyBriefingCard({
       return `${(amount / 100000000).toFixed(1)}억원`;
     }
     if (amount >= 10000000) {
-      return `${Math.round(amount / 10000)}만원`;
+      return `${Math.round(amount / 10000).toLocaleString()}만원`;
     }
     if (amount >= 1000000) {
-      return `${Math.round(amount / 10000)}만원`;
+      return `${Math.round(amount / 10000).toLocaleString()}만원`;
     }
     return `${amount.toLocaleString()}원`;
   };

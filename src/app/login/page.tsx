@@ -135,9 +135,6 @@ export default function LoginPage() {
                       <h3 className="font-semibold text-lg text-slate-800">
                         재정시스템 로그인
                       </h3>
-                      <p className="text-sm text-slate-500 mt-1">
-                        재정부 관계자 전용
-                      </p>
                     </div>
                   </div>
                 </button>

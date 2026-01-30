@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Dialog,
   DialogContent,
@@ -10,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Loader2, Search, User, Heart, CheckCircle2 } from 'lucide-react';
+import { Loader2, Search, User, Heart, CheckCircle2, LogIn, UserPlus, X } from 'lucide-react';
 import { PledgeModal } from './PledgeModal';
 import type { DonorInfo } from '@/types';
 
@@ -130,10 +131,13 @@ export function PledgeEntryModal({
 
   // 완료 화면
   if (step === 'complete') {
+    // 비로그인 사용자: 선택 옵션 표시
+    const isNonLoggedIn = !loggedInName;
+
     return (
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-[400px]">
-          <div className="text-center py-8">
+          <div className="text-center py-6">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-green-600" />
             </div>
@@ -143,9 +147,35 @@ export function PledgeEntryModal({
             <p className="text-slate-600 mb-6">
               감사합니다. 귀한 헌금으로 하나님 나라를 세워갑니다.
             </p>
-            <Button onClick={handleClose} className="bg-green-600 hover:bg-green-700">
-              확인
-            </Button>
+
+            {isNonLoggedIn ? (
+              <div className="space-y-3">
+                <Link href="/login" className="block">
+                  <Button className="w-full bg-[#2C3E50] hover:bg-[#1a2a3a]">
+                    <LogIn className="w-4 h-4 mr-2" />
+                    재정시스템 로그인
+                  </Button>
+                </Link>
+                <Link href="/register" className="block">
+                  <Button variant="outline" className="w-full">
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    회원가입
+                  </Button>
+                </Link>
+                <Button
+                  variant="ghost"
+                  onClick={handleClose}
+                  className="w-full text-slate-500"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  종료
+                </Button>
+              </div>
+            ) : (
+              <Button onClick={handleClose} className="bg-green-600 hover:bg-green-700">
+                확인
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

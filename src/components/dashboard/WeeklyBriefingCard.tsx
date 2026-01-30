@@ -82,14 +82,13 @@ export function WeeklyBriefingCard({
     let executionStatus = '';
     if (syncExecutionRate >= 90 && syncExecutionRate <= 110) {
       executionStatus = `예산 집행이 정상 범위입니다. (${syncExecutionRate}%)`;
-    } else if (syncExecutionRate < 90) {
-      executionStatus = `예산 집행률이 다소 낮습니다. (${syncExecutionRate}%)`;
-    } else {
+    } else if (syncExecutionRate > 110) {
       // 초과집행 상태
       const overItems = topOverBudgetItems.slice(0, 3).map(item => item.accountName);
       const overItemsText = overItems.length > 0 ? ` 주요 초과계정: ${overItems.join(', ')}` : '';
       executionStatus = `동기집행율이 초과집행 상태입니다. (${syncExecutionRate}%)${overItemsText}`;
     }
+    // 미달(90% 미만)일 때는 언급하지 않음
 
     return {
       income: incomeFormatted,
@@ -151,8 +150,12 @@ export function WeeklyBriefingCard({
               <br />
               주간 수지는 <strong className="text-[#2C3E50]">{briefing.netFlow}</strong>이며,
               현재 잔액은 <strong className="text-[#2C3E50]">{briefing.balance}</strong>입니다.
-              <br />
-              <span className="text-[#6B7B8C]">{briefing.executionStatus}</span>
+              {briefing.executionStatus && (
+                <>
+                  <br />
+                  <span className="text-[#6B7B8C]">{briefing.executionStatus}</span>
+                </>
+              )}
             </p>
           </div>
         </div>

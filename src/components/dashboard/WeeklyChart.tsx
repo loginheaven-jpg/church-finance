@@ -9,9 +9,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  LineChart,
   Line,
   CartesianGrid,
+  ComposedChart,
 } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 
@@ -19,6 +19,7 @@ interface WeekData {
   date: string;
   income: number;
   expense: number;
+  balance: number;
 }
 
 interface WeeklyChartProps {
@@ -30,11 +31,13 @@ interface WeeklyChartProps {
 const COLORS = {
   income: '#4A9B7F',
   expense: '#E74C3C',
+  balance: '#D4DAE0',
 };
 
 const LABELS = {
   income: '수입',
   expense: '지출',
+  balance: '잔액',
 };
 
 // 주차별 세그먼트에 색상 음영 적용 (오래된 주 = 연한색, 최근 주 = 진한색)
@@ -114,11 +117,11 @@ export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartPr
           </div>
         </div>
 
-        {/* 1. 꺾은선 그래프 - 수입/지출 추이 */}
+        {/* 1. 꺾은선 그래프 - 수입/지출 추이 + 잔액 막대그래프 */}
         <div className="h-[180px] md:h-[240px] mb-6">
           <p className="text-[12px] md:text-[13px] text-[#6B7B8C] mb-2 font-medium">주간 추이</p>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 10, right: 15, left: 5, bottom: 5 }}>
+            <ComposedChart data={data} margin={{ top: 10, right: 55, left: 5, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E8ECF0" />
               <XAxis
                 dataKey="date"
@@ -127,9 +130,19 @@ export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartPr
                 tick={{ fontSize: 11, fill: '#6B7B8C' }}
               />
               <YAxis
+                yAxisId="left"
                 axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 11, fill: '#6B7B8C' }}
+                tickFormatter={(v) => formatAmount(v)}
+                width={50}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: '#9CA3AF' }}
                 tickFormatter={(v) => formatAmount(v)}
                 width={50}
               />
@@ -152,7 +165,16 @@ export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartPr
                   );
                 }}
               />
+              {/* 잔액 막대그래프 (뒤에 배치, 연한색) */}
+              <Bar
+                yAxisId="right"
+                dataKey="balance"
+                fill={COLORS.balance}
+                radius={[4, 4, 0, 0]}
+                barSize={20}
+              />
               <Line
+                yAxisId="left"
                 type="monotone"
                 dataKey="income"
                 stroke={COLORS.income}
@@ -161,6 +183,7 @@ export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartPr
                 activeDot={{ r: 5.5, strokeWidth: 2, stroke: '#fff' }}
               />
               <Line
+                yAxisId="left"
                 type="monotone"
                 dataKey="expense"
                 stroke={COLORS.expense}
@@ -168,7 +191,7 @@ export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartPr
                 dot={{ r: 3.5, fill: COLORS.expense, strokeWidth: 0 }}
                 activeDot={{ r: 5.5, strokeWidth: 2, stroke: '#fff' }}
               />
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
 

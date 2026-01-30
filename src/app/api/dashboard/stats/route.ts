@@ -372,8 +372,18 @@ export async function GET(request: NextRequest) {
       getExpenseRecords(eightWeekStart, endDate),
     ]);
 
-    // 주별로 집계
-    const weeklyData: Array<{ date: string; income: number; expense: number }> = [];
+    // 주별로 집계 (잔액 포함)
+    const weeklyData: Array<{ date: string; income: number; expense: number; balance: number }> = [];
+
+    // 8주 전까지의 수입/지출 합계 계산 (잔액 시작점)
+    const beforeEightWeeksIncome = yearlyIncomeRecords
+      .filter(r => r.date < eightWeekStart)
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    const beforeEightWeeksExpense = yearlyExpenseRecords
+      .filter(r => r.date < eightWeekStart)
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    let runningBalance = carryoverBalance + beforeEightWeeksIncome - beforeEightWeeksExpense;
+
     for (let i = 0; i < 8; i++) {
       const weekMonday = new Date(eightWeeksAgo);
       weekMonday.setDate(eightWeeksAgo.getDate() + i * 7);
@@ -391,6 +401,9 @@ export async function GET(request: NextRequest) {
         .filter(r => r.date >= weekStart && r.date <= weekEnd)
         .reduce((sum, r) => sum + (r.amount || 0), 0);
 
+      // 잔액 누적 계산
+      runningBalance = runningBalance + weekIncome - weekExpense;
+
       // 주의 일요일 날짜를 M/d 형식으로
       const displayDate = `${weekSunday.getMonth() + 1}/${weekSunday.getDate()}`;
 
@@ -398,6 +411,7 @@ export async function GET(request: NextRequest) {
         date: displayDate,
         income: weekIncome,
         expense: weekExpense,
+        balance: runningBalance,
       });
     }
 

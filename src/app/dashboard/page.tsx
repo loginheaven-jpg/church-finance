@@ -15,7 +15,7 @@ import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries';
 import { DashboardHeader, StatsCard, WeeklyChart, TransactionDetails, BudgetExecutionCard } from '@/components/dashboard';
-import { endOfWeek, addWeeks, format } from 'date-fns';
+import { addWeeks, format, subDays } from 'date-fns';
 
 interface CategoryDetail {
   code: number;
@@ -40,6 +40,7 @@ interface DashboardStats {
     date: string;
     income: number;
     expense: number;
+    balance: number;
   }>;
   // 동기집행률 관련
   yearlyIncome?: number;
@@ -66,10 +67,11 @@ function DashboardContent() {
   const session = useFinanceSession();
   const isSuperAdmin = session?.finance_role === 'super_admin';
 
-  // 현재 주의 일요일 계산 (월~일 기준, API와 일치)
+  // 지나간 가장 최근 일요일 계산 (오늘이 일요일이면 오늘)
   const today = new Date();
-  const currentSunday = endOfWeek(today, { weekStartsOn: 1 });
-  const targetSunday = addWeeks(currentSunday, weekOffset);
+  const dayOfWeek = today.getDay(); // 0 = 일요일
+  const lastSunday = dayOfWeek === 0 ? today : subDays(today, dayOfWeek);
+  const targetSunday = addWeeks(lastSunday, weekOffset);
 
   const [selectedCard, setSelectedCard] = useState<'income' | 'expense' | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -116,6 +118,7 @@ function DashboardContent() {
       date: format(date, 'M/d'),
       income: 0,
       expense: 0,
+      balance: 0,
     };
   });
 

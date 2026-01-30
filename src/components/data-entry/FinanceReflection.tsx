@@ -261,6 +261,8 @@ export function FinanceReflection() {
           amount: totalAmount,
         });
         setUnifiedIncome([]);
+        // 캐시 무효화
+        fetch('/api/cache/invalidate', { method: 'POST' });
       }
       if (!result.incomeSuccess) {
         toast.error(result.error || '수입 반영 중 오류가 발생했습니다');
@@ -334,6 +336,8 @@ export function FinanceReflection() {
           amount: totalAmount,
         });
         setUnifiedExpense([]);
+        // 캐시 무효화
+        fetch('/api/cache/invalidate', { method: 'POST' });
       }
       if (!result.expenseSuccess) {
         toast.error(result.error || '지출 반영 중 오류가 발생했습니다');

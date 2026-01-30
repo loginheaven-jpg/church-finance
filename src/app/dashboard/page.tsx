@@ -100,11 +100,15 @@ function DashboardContent() {
     return new Intl.NumberFormat('ko-KR').format(amount) + '원';
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    refetch().finally(() => {
+    try {
+      // 캐시 무효화 후 데이터 새로고침
+      await fetch('/api/cache/invalidate', { method: 'POST' });
+      await refetch();
+    } finally {
       setTimeout(() => setIsRefreshing(false), 500);
-    });
+    }
   };
 
   const handleCardClick = (type: 'income' | 'expense') => {

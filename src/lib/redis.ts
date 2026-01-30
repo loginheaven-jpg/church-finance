@@ -12,12 +12,13 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
 }
 
 // 캐시 TTL 설정 (초 단위)
+// 수동 새로고침으로 캐시 무효화 가능하므로 3일로 설정
 export const CACHE_TTL = {
-  DASHBOARD: 300,      // 대시보드: 5분
-  REPORTS: 600,        // 보고서: 10분
-  DONORS: 300,         // 헌금자 목록: 5분
-  CODES: 3600,         // 코드 데이터: 1시간
-  BUDGET: 600,         // 예산 데이터: 10분
+  DASHBOARD: 259200,   // 대시보드: 3일
+  REPORTS: 259200,     // 보고서: 3일
+  DONORS: 259200,      // 헌금자 목록: 3일
+  CODES: 604800,       // 코드 데이터: 7일 (거의 변경 안됨)
+  BUDGET: 259200,      // 예산 데이터: 3일
 } as const;
 
 // 캐시 키 생성 헬퍼

@@ -91,6 +91,12 @@ export default function CardDetailsPage() {
     }
   };
 
+  const handleRefresh = async () => {
+    // 캐시 무효화 후 데이터 새로고침
+    await fetch('/api/cache/invalidate', { method: 'POST' });
+    await fetchData();
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -165,7 +171,7 @@ export default function CardDetailsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-900">카드내역 상세입력</h1>
-        <Button variant="outline" onClick={fetchData}>
+        <Button variant="outline" onClick={handleRefresh}>
           <RefreshCw className="mr-2 h-4 w-4" />
           새로고침
         </Button>

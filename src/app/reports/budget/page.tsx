@@ -293,7 +293,7 @@ function CategoryItem({
           </table>
           {(category.syncRate ?? 0) > 100 && (
             <div className="text-base text-red-600 mt-2 pl-8">
-              동기예산 초과: +{formatFullCurrency(Math.round(((category.syncRate ?? 0) - 100) * (category.budget ?? 0) / 100))}
+              동기예산 초과: +{formatFullCurrency(Math.round((category.executed ?? 0) * ((category.syncRate ?? 0) - 100) / (category.syncRate ?? 1)))}
             </div>
           )}
         </div>

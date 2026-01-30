@@ -39,12 +39,82 @@ src/
 
 ## 권한 체계
 
-| 역할 | 설명 | 접근 범위 |
-|------|------|----------|
-| super_admin | 수퍼어드민 | 모든 기능 + 시스템 설정, 연마감, 커스텀 보고서 |
-| admin | 관리자 | 대부분 기능 (시스템 설정 제외) |
-| deacon | 제직 | 보고서 + 수입/지출 분석 |
-| member | 성도 | 대시보드, 내 헌금, 기본 보고서 |
+### 역할 정의
+
+| 역할 | 한글명 | 우선순위 | 설명 |
+|------|--------|----------|------|
+| super_admin | 수퍼어드민 | 4 (최고) | 시스템 전체 관리자 |
+| admin | 관리자 | 3 | 재정부 담당자 |
+| deacon | 제직 | 2 | 재정 집사/권사 |
+| member | 성도 | 1 (최저) | 일반 성도 |
+
+### 메뉴별 접근 권한
+
+#### MAIN (기본 메뉴)
+
+| 메뉴 | 경로 | 최소 권한 | 비고 |
+|------|------|----------|------|
+| 대시보드 | `/dashboard` | member | |
+| 성전 봉헌 | `/building` | member | |
+| 내 헌금 | `/my-offering` | member | |
+
+#### REPORTS (보고서)
+
+| 메뉴 | 경로 | 최소 권한 | 비고 |
+|------|------|----------|------|
+| 주간 요약 | `/reports/weekly` | member | |
+| 연간 요약 | `/reports/monthly` | member | |
+| 연간 비교 | `/reports/comparison` | member | |
+| 예산 집행 | `/reports/budget` | member | |
+| 수입 분석 | `/reports/income-analysis` | **deacon** | 상세 수입 분석 |
+| 지출 분석 | `/reports/expense-analysis` | **deacon** | 상세 지출 분석 |
+| 커스텀 보고서 | `/reports/custom` | **super_admin** | 맞춤 보고서 생성 |
+
+#### MANAGEMENTS (관리)
+
+| 메뉴 | 경로 | 최소 권한 | 비고 |
+|------|------|----------|------|
+| 지출청구 | `/expense-claim` | admin | |
+| 데이터 입력 | `/data-entry` | admin | 수입/지출 직접 입력 |
+| 거래 매칭 | `/match` | admin | 미분류 거래 분류 |
+| 카드내역 입력 | `/card-expense-integration` | **member** | 카드 사용 내역 업로드 |
+| 헌금자 관리 | `/donors` | admin | |
+| 기부금 영수증 | `/donors/receipts` | admin | |
+| 매칭 규칙 | `/settings/matching-rules` | admin | 자동 매칭 규칙 조회 |
+| 이월 잔액 | `/settings/carryover` | admin | |
+| 작정 헌금 | `/settings/pledge` | admin | 작정 관리 |
+
+#### ADMIN (시스템 관리)
+
+| 메뉴 | 경로 | 최소 권한 | 비고 |
+|------|------|----------|------|
+| 연마감 | `/admin/annual-closing` | super_admin | 연도 마감 처리 |
+| 시스템 설정 | `/admin/settings` | super_admin | |
+| 사용자 관리 | `/admin/users` | super_admin | 사용자 역할 부여 |
+
+### 권한 검사 로직
+
+```typescript
+// src/components/layout/Sidebar.tsx
+const ROLE_PRIORITY: Record<FinanceRole, number> = {
+  'super_admin': 4,
+  'admin': 3,
+  'deacon': 2,
+  'member': 1,
+};
+
+function hasAccess(userRole: FinanceRole, requiredRole: FinanceRole): boolean {
+  return ROLE_PRIORITY[userRole] >= ROLE_PRIORITY[requiredRole];
+}
+```
+
+### 특수 권한 동작
+
+| 기능 | 대상 역할 | 동작 |
+|------|----------|------|
+| 작정헌금 독려 팝업 | member | 미작정 시 팝업 표시 |
+| 연마감 알림 | super_admin | 연말에 마감 안내 표시 |
+| 지출 상세 보기 | deacon 이상 | 예산집행 페이지에서 클릭 가능 |
 
 ## 데이터 구조 (Google Sheets)
 

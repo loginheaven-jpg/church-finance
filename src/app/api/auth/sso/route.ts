@@ -23,6 +23,9 @@ interface SaintRecordSession {
   isLoggedIn: boolean;
 }
 
+// SSO를 위한 쿠키 도메인 (프로덕션: .yebom.org)
+const COOKIE_DOMAIN = process.env.NODE_ENV === 'production' ? '.yebom.org' : undefined;
+
 // 교적부 세션 쿠키 설정 (동일한 SECRET 사용)
 const saintRecordSessionOptions: SessionOptions = {
   password: process.env.SESSION_SECRET || 'complex_password_at_least_32_characters_long_change_this_in_production',
@@ -32,6 +35,7 @@ const saintRecordSessionOptions: SessionOptions = {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
+    domain: COOKIE_DOMAIN,
   },
 };
 
@@ -78,6 +82,7 @@ export async function GET(request: NextRequest) {
       sameSite: 'lax',
       maxAge: SESSION_MAX_AGE,
       path: '/',
+      domain: COOKIE_DOMAIN,
     });
 
     return response;

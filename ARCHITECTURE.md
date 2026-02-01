@@ -8,9 +8,9 @@ Next.js 기반 교회 재정 관리 시스템으로, Google Sheets를 데이터�
 
 | 영역 | 기술 |
 |------|------|
-| Frontend | Next.js 14 (App Router), React 18, TypeScript |
+| Frontend | Next.js 16 (App Router), React 18, TypeScript |
 | Styling | Tailwind CSS, shadcn/ui |
-| 데이터 저장 | Google Sheets API |
+| 데이터 저장 | Google Sheets API, Supabase (교적부) |
 | 인증 | Session 기반 (쿠키) |
 | 차트 | Recharts |
 | 상태관리 | React Query (TanStack Query) |
@@ -186,6 +186,45 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
 ---
 
 ## 최근 변경사항
+
+### 2025-02 업데이트 (연말정산 정보입력 기능)
+
+1. **연말정산 정보입력 기능 추가**
+   - 로그인 페이지: 작정헌금 / 연말정산 정보입력 / 로그인 3가지 선택
+   - 로그인 후 member 역할: 미입력 시 독려 팝업 표시
+   - 수집 정보: 주민등록번호 (13자리), 주민등록 주소
+   - 저장 전 확인 팝업: "정보가 정확하십니까?"
+   - 데이터는 Supabase `members` 테이블에 저장
+
+2. **이름 검색 UX 개선**
+   - 작정헌금, 연말정산 정보입력 시 이름 검색 방식 변경
+   - 기존: 전체 목록 로드 → 필터링 선택
+   - 변경: 이름 입력 → 검색 버튼 클릭 → 정확히 일치하는 이름만 허용
+   - 미등록 이름 검색 시: "교적부에서 성함이 발견되지 않습니다. 먼저 등록해 주시기 바랍니다."
+
+3. **관련 컴포넌트**
+   ```
+   src/components/pledge/
+   ├── TaxInfoModal.tsx          # 로그인 사용자용 연말정산 정보 모달
+   ├── TaxInfoEntryModal.tsx     # 비로그인 사용자용 연말정산 정보 모달 (이름 검색 포함)
+   ├── PledgeEntryModal.tsx      # 작정헌금 입력 모달 (이름 검색 포함)
+   ├── PledgePromptPopup.tsx     # 작정/연말정산 독려 팝업 (카드 선택 UI)
+   └── index.ts                  # 컴포넌트 export
+   ```
+
+4. **관련 API**
+   | 경로 | 메서드 | 용도 |
+   |------|--------|------|
+   | `/api/members/tax-info` | GET | 연말정산 정보 입력 여부 확인 |
+   | `/api/members/tax-info` | POST | 연말정산 정보 저장 (주민번호, 주소) |
+   | `/api/donors/public` | GET | 헌금자 목록 조회 (로그인 불필요, 이름만 반환) |
+   | `/api/donors/lookup` | GET | 헌금자 상세 정보 조회 (기존 데이터 로드용) |
+
+5. **Supabase 연동**
+   - `src/lib/supabase.ts`에 함수 추가:
+     - `updateMemberTaxInfo(name, residentId, address)`: 교인 정보 업데이트
+     - `hasMemberTaxInfo(name)`: 연말정산 정보 존재 여부 확인
+   - `members` 테이블 `resident_id` 컬럼: varchar(14) (하이픈 포함 13자리)
 
 ### 2024-01 업데이트
 

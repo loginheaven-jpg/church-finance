@@ -29,6 +29,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [pledgeStatus, setPledgeStatus] = useState<{
     hasBuildingPledge: boolean;
     hasMissionPledge: boolean;
+    hasTaxInfo: boolean;
   } | null>(null);
 
   // 경로 변경 시 사이드바 닫기
@@ -73,9 +74,9 @@ export function MainLayout({ children }: MainLayoutProps) {
     }
   }, [session, pathname, closingDismissed]);
 
-  // member 역할일 때 작정헌금 상태 확인
+  // member 역할일 때 작정헌금 및 연말정산 정보 상태 확인
   useEffect(() => {
-    const checkPledgeStatus = async () => {
+    const checkMemberStatus = async () => {
       // member 역할만 확인, 이름이 없거나 다른 역할이면 스킵
       if (
         session?.finance_role !== 'member' ||
@@ -86,25 +87,38 @@ export function MainLayout({ children }: MainLayoutProps) {
 
       try {
         const currentYear = new Date().getFullYear();
-        const res = await fetch(`/api/pledges/check?name=${encodeURIComponent(session.name)}&year=${currentYear}`);
-        const result = await res.json();
-        if (result.success) {
+
+        // 작정헌금 상태와 연말정산 정보를 병렬로 조회
+        const [pledgeRes, taxInfoRes] = await Promise.all([
+          fetch(`/api/pledges/check?name=${encodeURIComponent(session.name)}&year=${currentYear}`),
+          fetch(`/api/members/tax-info?name=${encodeURIComponent(session.name)}`),
+        ]);
+
+        const pledgeResult = await pledgeRes.json();
+        const taxInfoResult = await taxInfoRes.json();
+
+        const hasTaxInfo = taxInfoResult.success ? taxInfoResult.hasTaxInfo : false;
+
+        if (pledgeResult.success) {
           setPledgeStatus({
-            hasBuildingPledge: result.hasBuildingPledge,
-            hasMissionPledge: result.hasMissionPledge,
+            hasBuildingPledge: pledgeResult.hasBuildingPledge,
+            hasMissionPledge: pledgeResult.hasMissionPledge,
+            hasTaxInfo,
           });
-          // 둘 다 없으면 팝업 표시 (하나라도 있으면 팝업 안보임 - 단순화)
-          if (!result.isComplete) {
+
+          // 작정헌금 미완료 또는 연말정산 정보 미입력이면 팝업 표시
+          const isPledgeComplete = pledgeResult.hasBuildingPledge && pledgeResult.hasMissionPledge;
+          if (!isPledgeComplete || !hasTaxInfo) {
             setShowPledgePrompt(true);
           }
         }
       } catch (error) {
-        console.error('Pledge check error:', error);
+        console.error('Member status check error:', error);
       }
     };
 
     if (session) {
-      checkPledgeStatus();
+      checkMemberStatus();
     }
   }, [session]);
 
@@ -223,12 +237,13 @@ export function MainLayout({ children }: MainLayoutProps) {
         </div>
       )}
 
-      {/* 작정헌금 안내 팝업 (member 역할만) */}
+      {/* 작정헌금/연말정산 안내 팝업 (member 역할만) */}
       {showPledgePrompt && pledgeStatus && session?.name && (
         <PledgePromptPopup
           userName={session.name}
           hasBuildingPledge={pledgeStatus.hasBuildingPledge}
           hasMissionPledge={pledgeStatus.hasMissionPledge}
+          hasTaxInfo={pledgeStatus.hasTaxInfo}
           onDismiss={handlePledgeDismiss}
         />
       )}

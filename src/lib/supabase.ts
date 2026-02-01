@@ -85,3 +85,52 @@ export async function getMembersByNames(names: string[]): Promise<Map<string, Me
 
   return result;
 }
+
+// 교인 연말정산 정보 업데이트 (주민번호, 주소)
+export async function updateMemberTaxInfo(
+  name: string,
+  residentId: string,
+  address: string
+): Promise<{ success: boolean; error?: string }> {
+  // Service Role 클라이언트 사용 (서버 사이드 전용)
+  if (!supabaseAdmin) {
+    console.warn('Supabase Admin not configured - cannot update member');
+    return { success: false, error: 'Supabase가 설정되지 않았습니다' };
+  }
+
+  try {
+    const { error } = await supabaseAdmin
+      .from('members')
+      .update({
+        resident_id: residentId,
+        address: address,
+      })
+      .eq('name', name);
+
+    if (error) {
+      console.error('Update member error:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Update member exception:', error);
+    return { success: false, error: '업데이트 중 오류가 발생했습니다' };
+  }
+}
+
+// 교인 연말정산 정보 존재 여부 확인
+export async function hasMemberTaxInfo(name: string): Promise<boolean> {
+  if (!supabase) {
+    return false;
+  }
+
+  const { data } = await supabase
+    .from('members')
+    .select('resident_id, address')
+    .eq('name', name)
+    .single();
+
+  // 주민번호와 주소 둘 다 있어야 완료
+  return !!(data?.resident_id && data?.address);
+}

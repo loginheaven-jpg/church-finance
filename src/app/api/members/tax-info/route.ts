@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Supabase 교적부 업데이트
+    // Supabase 교적부 업데이트 (13자리 전체 저장)
     const result = await updateMemberTaxInfo(name, resident_id, address);
 
     if (!result.success) {

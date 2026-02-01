@@ -72,14 +72,14 @@ export function TaxInfoModal({
       if (result.success && result.data) {
         const { resident_id, address } = result.data;
 
-        // 주민번호 분리 (YYMMDD-SXXXXXX 형식)
+        // 주민번호 분리 - 앞 6자리만 표시, 뒷자리는 빈칸으로 (재입력 필요)
         if (resident_id) {
           const parts = resident_id.replace(/\s/g, '').split('-');
           if (parts.length === 2) {
             setFormData(prev => ({
               ...prev,
               residentId1: parts[0],
-              residentId2: parts[1],
+              residentId2: '', // 뒷자리는 보안상 빈칸으로 재입력
               address: address || '',
             }));
           } else if (resident_id.length >= 6) {
@@ -87,7 +87,7 @@ export function TaxInfoModal({
             setFormData(prev => ({
               ...prev,
               residentId1: resident_id.substring(0, 6),
-              residentId2: resident_id.substring(6) || '',
+              residentId2: '', // 뒷자리는 보안상 빈칸으로 재입력
               address: address || '',
             }));
           }

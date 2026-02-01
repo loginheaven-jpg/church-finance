@@ -21,9 +21,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, User, FileText, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Loader2, Search, FileText, CheckCircle2, ArrowLeft, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import type { DonorInfo } from '@/types';
 
 interface TaxInfoEntryModalProps {
   open: boolean;
@@ -48,10 +47,9 @@ export function TaxInfoEntryModal({
 }: TaxInfoEntryModalProps) {
   const [step, setStep] = useState<'select' | 'input' | 'complete'>('select');
   const [searchQuery, setSearchQuery] = useState('');
-  const [donors, setDonors] = useState<DonorInfo[]>([]);
-  const [filteredDonors, setFilteredDonors] = useState<DonorInfo[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [formData, setFormData] = useState<TaxInfoData>({
@@ -63,60 +61,49 @@ export function TaxInfoEntryModal({
 
   const residentId2Ref = useRef<HTMLInputElement>(null);
 
-  // 헌금자 목록 조회
+  // 로그인 사용자의 경우 자동으로 이름 검색
   useEffect(() => {
-    if (open) {
-      fetchDonors();
+    if (open && loggedInName) {
+      setSearchQuery(loggedInName);
+      handleSearch(loggedInName);
     }
-  }, [open]);
+  }, [open, loggedInName]);
 
-  // 로그인 사용자의 경우 자동으로 이름 선택
-  useEffect(() => {
-    if (loggedInName && donors.length > 0) {
-      const found = donors.find(
-        d => d.donor_name === loggedInName || d.representative === loggedInName
-      );
-      if (found) {
-        handleNameSelect(found.donor_name);
-      }
+  // 이름 검색 함수
+  const handleSearch = async (nameToSearch?: string) => {
+    const name = nameToSearch || searchQuery.trim();
+    if (!name) {
+      setSearchError('이름을 입력해주세요');
+      return;
     }
-  }, [loggedInName, donors]);
 
-  // 검색어 필터링
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      setFilteredDonors(
-        donors.filter(
-          d =>
-            d.donor_name.toLowerCase().includes(query) ||
-            d.representative.toLowerCase().includes(query)
-        )
-      );
-    } else {
-      setFilteredDonors(donors);
-    }
-  }, [searchQuery, donors]);
+    setIsSearching(true);
+    setSearchError(null);
 
-  const fetchDonors = async () => {
-    setIsLoading(true);
     try {
-      // 공개 API 사용 (로그인 불필요)
-      const res = await fetch('/api/donors/public');
+      const res = await fetch(`/api/donors/public?search=${encodeURIComponent(name)}`);
       const data = await res.json();
-      if (data.success) {
-        const uniqueNames = new Map<string, DonorInfo>();
-        for (const d of data.data) {
-          if (!uniqueNames.has(d.donor_name)) {
-            uniqueNames.set(d.donor_name, d);
-          }
+
+      if (data.success && data.data) {
+        // 정확히 일치하는 이름 찾기
+        const exactMatch = data.data.find(
+          (d: { donor_name: string; representative: string }) =>
+            d.donor_name === name || d.representative === name
+        );
+
+        if (exactMatch) {
+          handleNameSelect(exactMatch.donor_name);
+        } else {
+          setSearchError('교적부에서 성함이 발견되지 않습니다. 먼저 등록해 주시기 바랍니다.');
         }
-        setDonors(Array.from(uniqueNames.values()));
+      } else {
+        setSearchError('교적부에서 성함이 발견되지 않습니다. 먼저 등록해 주시기 바랍니다.');
       }
     } catch (error) {
-      console.error('Failed to fetch donors:', error);
+      console.error('Search error:', error);
+      setSearchError('검색 중 오류가 발생했습니다');
     } finally {
-      setIsLoading(false);
+      setIsSearching(false);
     }
   };
 
@@ -235,6 +222,7 @@ export function TaxInfoEntryModal({
     setStep('select');
     setSelectedName(null);
     setSearchQuery('');
+    setSearchError(null);
     setFormData({ name: '', residentId1: '', residentId2: '', address: '' });
     onOpenChange(false);
   };
@@ -242,6 +230,7 @@ export function TaxInfoEntryModal({
   const handleBackToSelect = () => {
     setStep('select');
     setSelectedName(null);
+    setSearchError(null);
   };
 
   const getMaskedResidentId = () => {
@@ -430,7 +419,7 @@ export function TaxInfoEntryModal({
     );
   }
 
-  // 이름 선택 화면
+  // 이름 검색 화면
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[420px]">
@@ -440,62 +429,55 @@ export function TaxInfoEntryModal({
             연말정산 정보입력
           </DialogTitle>
           <DialogDescription>
-            이름을 선택해주세요
+            이름을 입력하고 검색해주세요
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* 검색 입력 */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              type="text"
-              placeholder="이름 검색..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+          {/* 이름 검색 입력 */}
+          <div className="space-y-2">
+            <Label>이름</Label>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                placeholder="이름을 입력하세요"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSearchError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSearch();
+                  }
+                }}
+                disabled={isSearching}
+              />
+              <Button
+                onClick={() => handleSearch()}
+                disabled={isSearching || !searchQuery.trim()}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isSearching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
 
-          {/* 헌금자 목록 */}
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-            </div>
-          ) : (
-            <div className="h-[200px] sm:h-[300px] border rounded-lg overflow-y-auto">
-              {filteredDonors.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
-                  {searchQuery ? '검색 결과가 없습니다' : '등록된 헌금자가 없습니다'}
-                </div>
-              ) : (
-                <div className="p-2">
-                  {filteredDonors.map((donor, index) => (
-                    <button
-                      key={`${donor.donor_name}-${index}`}
-                      onClick={() => handleNameSelect(donor.donor_name)}
-                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 transition-colors text-left"
-                    >
-                      <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                        <User className="h-4 w-4 text-slate-500" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-900">{donor.donor_name}</p>
-                        {donor.representative !== donor.donor_name && (
-                          <p className="text-xs text-slate-500">
-                            대표: {donor.representative}
-                          </p>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+          {/* 에러 메시지 */}
+          {searchError && (
+            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-600">{searchError}</p>
             </div>
           )}
 
           <p className="text-xs text-slate-500 text-center">
-            ※ 목록에 이름이 없으면 재정부에 문의해주세요
+            ※ 교적부에 등록된 이름으로 검색해주세요
           </p>
         </div>
       </DialogContent>

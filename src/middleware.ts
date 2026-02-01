@@ -9,6 +9,9 @@ import {
 // 인증이 필요 없는 경로
 const publicPaths = ['/login', '/register', '/api/auth'];
 
+// 교적부 세션 쿠키 이름 (SSO 연동용)
+const SAINT_RECORD_COOKIE_NAME = 'saint_record_session';
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -25,6 +28,14 @@ export function middleware(request: NextRequest) {
   // 세션 쿠키 확인
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
   const authToken = request.cookies.get('auth-token');
+  const saintRecordCookie = request.cookies.get(SAINT_RECORD_COOKIE_NAME);
+
+  // 재정부 세션 없지만 교적부 세션 있으면 SSO 처리
+  if (!sessionCookie && saintRecordCookie) {
+    const ssoUrl = new URL('/api/auth/sso', request.url);
+    ssoUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(ssoUrl);
+  }
 
   // 인증 확인 (기존 auth-token 또는 새로운 finance-session)
   if (!authToken && !sessionCookie) {

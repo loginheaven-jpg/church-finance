@@ -101,7 +101,8 @@ export function TaxInfoEntryModal({
   const fetchDonors = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/donors');
+      // 공개 API 사용 (로그인 불필요)
+      const res = await fetch('/api/donors/public');
       const data = await res.json();
       if (data.success) {
         const uniqueNames = new Map<string, DonorInfo>();

@@ -96,7 +96,8 @@ export function PledgeEntryModal({
   const fetchDonors = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/donors');
+      // 공개 API 사용 (로그인 불필요)
+      const res = await fetch('/api/donors/public');
       const data = await res.json();
       if (data.success) {
         // 중복 제거된 대표자 + 헌금자 목록

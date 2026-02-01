@@ -6,14 +6,15 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { LogIn, UserPlus, AlertCircle, Heart, ArrowLeft, Building2, Globe } from 'lucide-react';
-import { PledgeEntryModal } from '@/components/pledge';
+import { LogIn, UserPlus, AlertCircle, Heart, ArrowLeft, Building2, Globe, FileText } from 'lucide-react';
+import { PledgeEntryModal, TaxInfoEntryModal } from '@/components/pledge';
 
 type PageMode = 'choice' | 'login';
 
 export default function LoginPage() {
   const [mode, setMode] = useState<PageMode>('choice');
   const [showPledgeModal, setShowPledgeModal] = useState(false);
+  const [showTaxInfoModal, setShowTaxInfoModal] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -122,6 +123,29 @@ export default function LoginPage() {
                   </div>
                 </button>
 
+                {/* 연말정산 정보입력 버튼 */}
+                <button
+                  onClick={() => setShowTaxInfoModal(true)}
+                  className="w-full p-5 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition-all text-left group"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-500 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                      <FileText className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg text-blue-800">
+                        연말정산 정보입력
+                      </h3>
+                      <p className="text-sm text-blue-600 mt-1">
+                        기부금영수증 자동발행을 원하시는 분은 입력하십시오.
+                      </p>
+                      <p className="text-xs text-blue-500 mt-1">
+                        수집정보: 주민번호, 주민등록 주소
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
                 {/* 재정시스템 로그인 버튼 */}
                 <button
                   onClick={() => setMode('login')}
@@ -147,6 +171,12 @@ export default function LoginPage() {
         <PledgeEntryModal
           open={showPledgeModal}
           onOpenChange={setShowPledgeModal}
+        />
+
+        {/* 연말정산 정보입력 모달 */}
+        <TaxInfoEntryModal
+          open={showTaxInfoModal}
+          onOpenChange={setShowTaxInfoModal}
         />
       </div>
     );

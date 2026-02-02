@@ -995,7 +995,19 @@ export function FinanceReflection() {
           <DialogHeader>
             <DialogTitle>입력 교차 검증</DialogTitle>
             <DialogDescription>
-              은행원장 엑셀 파일을 업로드하여 입력 데이터를 검증합니다.
+              {verificationResult ? (
+                verificationResult.success ? (
+                  verificationResult.income?.match && verificationResult.expense?.match && verificationResult.balance?.match ? (
+                    <span className="text-green-600 font-medium">✓ 모든 항목이 일치합니다. 입력 데이터가 정확합니다.</span>
+                  ) : (
+                    <span className="text-red-600 font-medium">⚠ 일부 항목이 불일치합니다. 아래 상세 내역을 확인하세요.</span>
+                  )
+                ) : (
+                  <span className="text-red-600">{verificationResult.error || '검증 중 오류가 발생했습니다.'}</span>
+                )
+              ) : (
+                '은행원장 엑셀 파일을 업로드하여 입력 데이터를 검증합니다.'
+              )}
             </DialogDescription>
           </DialogHeader>
 

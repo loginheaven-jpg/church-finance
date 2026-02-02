@@ -4,14 +4,28 @@
 
 Next.js 기반 교회 재정 관리 시스템으로, Google Sheets를 데이터베이스로 활용합니다.
 
+### 프로덕션 URL
+
+- **재정부**: https://finance.yebom.org
+- **교적부 (연동)**: https://saint.yebom.org
+
+### SSO 연동
+
+교적부(saint-record-v2)와 SSO(Single Sign-On) 연동되어 있습니다.
+- 교적부에서 로그인하면 재정부에 자동 로그인됩니다
+- `saint_record_session` 쿠키를 감지하여 자동 세션 생성
+- 쿠키 도메인: `.yebom.org` (서브도메인 간 공유)
+- 교적부 `users.finance_role` 필드로 재정부 권한 관리
+- iron-session 라이브러리로 쿠키 암호화/복호화
+
 ## 기술 스택
 
 | 영역 | 기술 |
 |------|------|
-| Frontend | Next.js 16 (App Router), React 18, TypeScript |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript |
 | Styling | Tailwind CSS, shadcn/ui |
-| 데이터 저장 | Google Sheets API, Supabase (교적부) |
-| 인증 | Session 기반 (쿠키) |
+| 데이터 저장 | Google Sheets API, Supabase (교적부 연동) |
+| 인증 | iron-session (SSO), Session 기반 (쿠키) |
 | 차트 | Recharts |
 | 상태관리 | React Query (TanStack Query) |
 
@@ -34,8 +48,30 @@ src/
 ├── lib/                   # 유틸리티
 │   ├── google-sheets.ts  # Google Sheets 연동
 │   └── auth/             # 인증 관련
+│       ├── finance-permissions.ts  # 권한 정의 및 체크
+│       └── use-finance-session.ts  # 세션 훅
+├── middleware.ts          # SSO 감지 및 리다이렉트
 └── types/                 # TypeScript 타입 정의
 ```
+
+### SSO 관련 주요 파일
+
+| 파일 | 설명 |
+|------|------|
+| `src/middleware.ts` | 교적부 세션 쿠키 감지 및 SSO API로 리다이렉트 |
+| `src/app/api/auth/sso/route.ts` | iron-session으로 교적부 세션 복호화 → 재정부 세션 생성 |
+| `src/lib/auth/finance-permissions.ts` | 재정부 권한 정의 (FinanceRole, MENU_MIN_ROLE 등) |
+| `src/lib/auth/use-finance-session.ts` | 클라이언트용 세션 훅 |
+
+## 환경 변수
+
+| 변수명 | 설명 | 필수 여부 |
+|--------|------|----------|
+| `SESSION_SECRET` | iron-session 암호화 키 (교적부와 동일해야 함, 32자 이상) | ✅ 필수 |
+| `GOOGLE_SHEETS_PRIVATE_KEY` | Google Sheets API 서비스 계정 키 | ✅ 필수 |
+| `GOOGLE_SHEETS_CLIENT_EMAIL` | Google Sheets API 서비스 계정 이메일 | ✅ 필수 |
+| `SUPABASE_URL` | Supabase 프로젝트 URL | ✅ 필수 |
+| `SUPABASE_ANON_KEY` | Supabase Anon 키 | ✅ 필수 |
 
 ## 권한 체계
 
@@ -186,6 +222,23 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
 ---
 
 ## 최근 변경사항
+
+### 2026-02-01 업데이트 (SSO 연동)
+
+1. **교적부-재정부 SSO 통합**
+   - iron-session 패키지 추가 (v8.0.4)
+   - 교적부 세션 자동 인식 및 재정부 세션 생성
+   - 쿠키 도메인 `.yebom.org`로 설정 (서브도메인 간 공유)
+   - middleware에서 `saint_record_session` 쿠키 감지
+   - `/api/auth/sso` API로 세션 변환 처리
+
+2. **관련 파일**
+   - `src/middleware.ts`: SSO 감지 로직 추가
+   - `src/app/api/auth/sso/route.ts`: SSO API 신규 생성
+   - `package.json`: iron-session 의존성 추가
+
+3. **환경 변수**
+   - `SESSION_SECRET`: 교적부와 동일한 값 필수
 
 ### 2025-02 업데이트 (연말정산 정보입력 기능)
 

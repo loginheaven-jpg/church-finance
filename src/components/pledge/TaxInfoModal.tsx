@@ -21,7 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, FileText, CheckCircle2 } from 'lucide-react';
+import { Loader2, FileText, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TaxInfoModalProps {
@@ -47,6 +47,7 @@ export function TaxInfoModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showResidentId2, setShowResidentId2] = useState(true); // 입력 중에는 보이기
   const [formData, setFormData] = useState<TaxInfoData>({
     name: userName,
     residentId1: '',
@@ -176,12 +177,10 @@ export function TaxInfoModal({
     }
   };
 
-  // 마스킹된 주민번호 표시
-  const getMaskedResidentId = () => {
+  // 확인 팝업용 주민번호 표시 (전체 숫자 노출)
+  const getFullResidentId = () => {
     const front = formData.residentId1 || '______';
-    const back = formData.residentId2
-      ? formData.residentId2.charAt(0) + '******'
-      : '_______';
+    const back = formData.residentId2 || '_______';
     return `${front}-${back}`;
   };
 
@@ -229,16 +228,32 @@ export function TaxInfoModal({
                     maxLength={6}
                   />
                   <span className="text-xl text-slate-400">-</span>
-                  <Input
-                    ref={residentId2Ref}
-                    type="password"
-                    inputMode="numeric"
-                    placeholder="0000000"
-                    value={formData.residentId2}
-                    onChange={(e) => handleResidentId2Change(e.target.value)}
-                    className="text-center tracking-wider"
-                    maxLength={7}
-                  />
+                  <div className="relative flex-1">
+                    <Input
+                      ref={residentId2Ref}
+                      type={showResidentId2 ? "text" : "password"}
+                      inputMode="numeric"
+                      placeholder="0000000"
+                      value={formData.residentId2}
+                      onChange={(e) => handleResidentId2Change(e.target.value)}
+                      onFocus={() => setShowResidentId2(true)}
+                      onBlur={() => setShowResidentId2(false)}
+                      className="text-center tracking-wider pr-10"
+                      maxLength={7}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResidentId2(!showResidentId2)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      tabIndex={-1}
+                    >
+                      {showResidentId2 ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <p className="text-xs text-slate-500">
                   주민등록번호는 암호화되어 안전하게 보관됩니다.
@@ -297,7 +312,7 @@ export function TaxInfoModal({
             <AlertDialogDescription asChild>
               <div className="space-y-3 pt-2">
                 <p className="text-slate-600">입력하신 정보가 정확한지 확인해주세요.</p>
-                <div className="bg-slate-50 rounded-lg p-4 space-y-2 text-sm">
+                <div className="bg-slate-50 rounded-lg p-4 space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-500">이름</span>
                     <span className="font-medium text-slate-800">{userName}</span>
@@ -305,12 +320,12 @@ export function TaxInfoModal({
                   <div className="flex justify-between">
                     <span className="text-slate-500">주민등록번호</span>
                     <span className="font-medium text-slate-800 font-mono">
-                      {getMaskedResidentId()}
+                      {getFullResidentId()}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex flex-col gap-1">
                     <span className="text-slate-500">주소</span>
-                    <span className="font-medium text-slate-800 text-right max-w-[200px] truncate">
+                    <span className="font-medium text-slate-800 break-all">
                       {formData.address}
                     </span>
                   </div>

@@ -553,7 +553,7 @@ export default function BuildingPage() {
                 </Bar>
                 <Bar dataKey="일반예산" stackId="income" fill="#166534" name="일반예산">
                   <LabelList dataKey="일반예산" position="center" formatter={(v) => { const n = Number(v); return n > 0.3 ? `${Math.round(n * 100)}` : ''; }} style={{ fill: '#fff', fontSize: 18, fontWeight: 'bold' }} />
-                  <LabelList dataKey="합계" position="top" formatter={(v) => `${Number(v).toFixed(1)}억`} style={{ fill: '#334155', fontSize: 14, fontWeight: 'bold' }} />
+                  <LabelList dataKey="합계" position="top" formatter={(v) => `${Number(v).toFixed(1)}억`} style={{ fill: '#334155', fontSize: 11, fontWeight: 'bold' }} />
                 </Bar>
                 {/* 건축지출 스택 */}
                 <Bar dataKey="원금상환" stackId="expense" fill="#f97316" name="원금상환">

@@ -16,8 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Heart, Calendar, TrendingUp, Loader2, ChevronLeft, ChevronRight, Users, Wallet, Plus } from 'lucide-react';
-import { PledgeStatusCard } from '@/components/pledge';
+import { Heart, Calendar, TrendingUp, Loader2, ChevronLeft, ChevronRight, Users, Wallet, Plus, FileText } from 'lucide-react';
+import { PledgeStatusCard, TaxInfoModal } from '@/components/pledge';
 import type { Pledge, PledgeMilestone } from '@/types';
 import {
   LineChart,
@@ -126,6 +126,9 @@ export default function MyOfferingPage() {
   const [pledgesV2, setPledgesV2] = useState<Pledge[]>([]);
   const [milestonesV2, setMilestonesV2] = useState<PledgeMilestone[]>([]);
   const [pledgesLoading, setPledgesLoading] = useState(false);
+
+  // TaxInfoModal 상태
+  const [showTaxInfoModal, setShowTaxInfoModal] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -395,16 +398,27 @@ export default function MyOfferingPage() {
         {/* 카드 3: 헌금 횟수 */}
         <Card>
           <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Calendar className="h-6 w-6 text-blue-600" />
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-blue-100 rounded-full">
+                  <Calendar className="h-6 w-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600">{year}년 헌금 횟수</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {data.totalCount}회
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-slate-600">{year}년 헌금 횟수</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {data.totalCount}회
-                </p>
-              </div>
+              <Button
+                onClick={() => setShowTaxInfoModal(true)}
+                variant="outline"
+                size="sm"
+                className="w-full text-xs border-blue-200 hover:bg-blue-50 hover:border-blue-300"
+              >
+                <FileText className="h-3 w-3 mr-1" />
+                연말정산용 기부금 자동발행을 위한 정보입력
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -701,6 +715,14 @@ export default function MyOfferingPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 연말정산 정보입력 모달 */}
+      <TaxInfoModal
+        open={showTaxInfoModal}
+        onOpenChange={setShowTaxInfoModal}
+        userName={data.userName}
+        onSuccess={() => setShowTaxInfoModal(false)}
+      />
     </div>
   );
 }

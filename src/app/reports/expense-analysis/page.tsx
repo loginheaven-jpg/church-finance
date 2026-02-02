@@ -272,14 +272,14 @@ export default function ExpenseAnalysisPage() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={85}
+                  outerRadius={100}
                   innerRadius={0}
                   label={({ cx, cy, midAngle, outerRadius, name, percent }) => {
                     const RADIAN = Math.PI / 180;
                     const cxNum = Number(cx) || 0;
                     const cyNum = Number(cy) || 0;
                     const angle = midAngle ?? 0;
-                    const radius = (outerRadius ?? 85) * 1.25;
+                    const radius = (outerRadius ?? 100) * 1.15;
                     const x = cxNum + radius * Math.cos(-angle * RADIAN);
                     const y = cyNum + radius * Math.sin(-angle * RADIAN);
                     return (

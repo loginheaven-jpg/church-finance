@@ -340,17 +340,67 @@ async function getSheetTabs(spreadsheetId: string): Promise<string[]> {
 }
 
 /**
- * 탭명이 날짜 형식인지 확인 (YYYY/MM/DD)
+ * 유연한 탭 이름 형식을 표준 날짜 문자열로 변환
+ *
+ * 지원 형식:
+ * - "2026/02/01" (2자리 고정)
+ * - "2026/2/1" (1자리 허용)
+ * - "2026/02/1" (혼합)
+ *
+ * @param tabName - 탭 이름
+ * @returns "YYYY-MM-DD" 형식 날짜 또는 null (유효하지 않을 경우)
  */
-function isDateTabName(tabName: string): boolean {
-  return /^\d{4}\/\d{2}\/\d{2}$/.test(tabName);
+function parseTabNameToDate(tabName: string): string | null {
+  // YYYY/M/D 또는 YYYY/MM/DD 형식 매칭
+  const match = tabName.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+
+  if (!match) return null;
+
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+
+  // 범위 검증
+  if (year < 2000 || year > 2100) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+
+  // 실제 날짜 존재 여부 검증 (윤년, 월별 일수 등)
+  const testDate = new Date(year, month - 1, day);
+  if (testDate.getFullYear() !== year ||
+      testDate.getMonth() !== month - 1 ||
+      testDate.getDate() !== day) {
+    return null;
+  }
+
+  // 0으로 패딩된 표준 형식 반환
+  const monthStr = month.toString().padStart(2, '0');
+  const dayStr = day.toString().padStart(2, '0');
+  return `${year}-${monthStr}-${dayStr}`;
 }
 
 /**
- * 탭명을 날짜 문자열로 변환 (2026/01/18 → 2026-01-18)
+ * 탭 이름이 유효한 날짜 형식인지 확인
+ */
+function isDateTabName(tabName: string): boolean {
+  return parseTabNameToDate(tabName) !== null;
+}
+
+/**
+ * 탭 이름을 표준 날짜 문자열로 변환
+ * @throws Error 유효하지 않은 형식일 경우
  */
 function tabNameToDate(tabName: string): string {
-  return tabName.replace(/\//g, '-');
+  const normalized = parseTabNameToDate(tabName);
+
+  if (!normalized) {
+    throw new Error(
+      `Invalid tab name format: "${tabName}". ` +
+      `Expected YYYY/M/D or YYYY/MM/DD (e.g., "2026/2/1" or "2026/02/01")`
+    );
+  }
+
+  return normalized;
 }
 
 export async function fetchCashOfferings(
@@ -362,12 +412,38 @@ export async function fetchCashOfferings(
 
   // 1. 모든 탭 목록 조회
   const allTabs = await getSheetTabs(spreadsheetId);
+  console.log(`[fetchCashOfferings] Found ${allTabs.length} total tabs`);
 
-  // 2. 날짜 형식 탭만 필터링 (YYYY/MM/DD)
-  const dateTabs = allTabs.filter(isDateTabName);
+  // 2. 날짜 형식 탭 분석 및 필터링
+  const validTabs: string[] = [];
+  const invalidTabs: string[] = [];
+
+  for (const tabName of allTabs) {
+    if (isDateTabName(tabName)) {
+      const normalized = tabNameToDate(tabName);
+      validTabs.push(tabName);
+      console.log(`[fetchCashOfferings] ✓ Recognized: "${tabName}" → ${normalized}`);
+    } else {
+      invalidTabs.push(tabName);
+    }
+  }
+
+  console.log(
+    `[fetchCashOfferings] Summary: ${validTabs.length} date tabs, ` +
+    `${invalidTabs.length} other tabs`
+  );
+
+  if (invalidTabs.length > 0) {
+    console.log(`[fetchCashOfferings] Ignored tabs: ${invalidTabs.join(', ')}`);
+  }
+
+  const dateTabs = validTabs;
 
   if (dateTabs.length === 0) {
-    console.warn('날짜 형식 탭이 없습니다. 기존 헌금함 탭 시도...');
+    console.warn(
+      '[fetchCashOfferings] ⚠️ No date format tabs found. ' +
+      'Attempting fallback to legacy "헌금함" tab...'
+    );
     // 폴백: 기존 헌금함 탭 시도
     try {
       const response = await sheets.spreadsheets.values.get({
@@ -402,9 +478,14 @@ export async function fetchCashOfferings(
       const tabDate = tabNameToDate(tabName);
       return tabDate >= startDate && tabDate <= endDate;
     });
+    console.log(
+      `[fetchCashOfferings] Filtered to ${targetTabs.length} tabs ` +
+      `in range ${startDate} to ${endDate}`
+    );
   }
 
   if (targetTabs.length === 0) {
+    console.warn('[fetchCashOfferings] ⚠️ No tabs in date range');
     return [];
   }
 
@@ -413,13 +494,18 @@ export async function fetchCashOfferings(
 
   for (const tabName of targetTabs) {
     try {
+      console.log(`[fetchCashOfferings] Reading tab: "${tabName}"`);
+
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: `'${tabName}'!A:H`, // 탭명에 /가 있으므로 따옴표 필요
       });
 
       const rows = response.data.values;
-      if (!rows || rows.length <= 1) continue;
+      if (!rows || rows.length <= 1) {
+        console.log(`[fetchCashOfferings] Tab "${tabName}" has no data`);
+        continue;
+      }
 
       const tabDate = tabNameToDate(tabName); // 탭명에서 날짜 추출
       const data = rows.slice(1);
@@ -439,11 +525,20 @@ export async function fetchCashOfferings(
         }));
 
       allOfferings.push(...offerings);
+      console.log(`[fetchCashOfferings] ✓ Loaded ${offerings.length} offerings from "${tabName}"`);
     } catch (error) {
-      console.warn(`탭 '${tabName}' 읽기 실패:`, error);
+      console.error(
+        `[fetchCashOfferings] ✗ Failed to read tab "${tabName}":`,
+        error instanceof Error ? error.message : error
+      );
       continue;
     }
   }
+
+  console.log(
+    `[fetchCashOfferings] ✓ Complete: ${allOfferings.length} total offerings ` +
+    `from ${targetTabs.length} tabs`
+  );
 
   return allOfferings;
 }

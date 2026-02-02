@@ -21,7 +21,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Trash2 } from 'lucide-react';
+import { Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Trash2, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule, IncomeCode, ExpenseCode } from '@/types';
@@ -79,6 +80,31 @@ interface UnifiedExpenseItem {
   suggestions?: MatchingRule[];
 }
 
+// 검증 결과 타입
+interface VerificationResult {
+  success: boolean;
+  referenceDate: string | null;
+  income: {
+    dbAmount: number;
+    excelAmount: number;
+    match: boolean;
+    difference: number;
+  } | null;
+  expense: {
+    dbAmount: number;
+    excelAmount: number;
+    match: boolean;
+    difference: number;
+  } | null;
+  balance: {
+    dbAmount: number;
+    excelAmount: number;
+    match: boolean;
+    difference: number;
+  } | null;
+  error?: string;
+}
+
 export function FinanceReflection() {
   const [loading, setLoading] = useState(false);
   const [confirmingIncome, setConfirmingIncome] = useState(false);
@@ -96,6 +122,11 @@ export function FinanceReflection() {
   } | null>(null);
   const [incomeCodeMap, setIncomeCodeMap] = useState<Map<number, string>>(new Map());
   const [expenseCodeMap, setExpenseCodeMap] = useState<Map<number, string>>(new Map());
+
+  // 입력 교차 검증 상태
+  const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
 
   // 코드 매핑 로드
   const loadCodeMappings = useCallback(async () => {
@@ -258,6 +289,47 @@ export function FinanceReflection() {
     setUnifiedExpense(prev => prev.filter((_, i) => i !== index));
   };
 
+  // 입력 교차 검증
+  const handleVerifyFile = async (file: File) => {
+    setVerifying(true);
+    setVerificationResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/verify/crosscheck', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result: VerificationResult = await res.json();
+
+      setVerificationResult(result);
+
+      if (!result.success) {
+        toast.error(result.error || '검증 실패');
+      } else if (result.income?.match && result.expense?.match && result.balance?.match) {
+        toast.success('모든 항목이 일치합니다!');
+      } else {
+        toast.warning('일부 항목이 불일치합니다');
+      }
+    } catch (error) {
+      console.error('검증 오류:', error);
+      toast.error('검증 중 오류가 발생했습니다');
+      setVerificationResult({
+        success: false,
+        referenceDate: null,
+        income: null,
+        expense: null,
+        balance: null,
+        error: error instanceof Error ? error.message : '검증 중 오류가 발생했습니다',
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   // 수입부 반영
   const handleConfirmIncome = async () => {
     if (confirmingIncome) return;
@@ -418,25 +490,38 @@ export function FinanceReflection() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-4 pt-0">
-        {/* 데이터 불러오기 버튼 */}
-        <Button
-          onClick={loadPendingTransactions}
-          disabled={loading}
-          className="w-full"
-          variant="outline"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              불러오는 중...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              미반영 항목 불러오기
-            </>
-          )}
-        </Button>
+        {/* 상단 버튼 그룹 */}
+        <div className="flex gap-2 mb-4">
+          {/* 데이터 불러오기 버튼 */}
+          <Button
+            onClick={loadPendingTransactions}
+            disabled={loading}
+            className="flex-1"
+            variant="outline"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                불러오는 중...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                미반영 항목 불러오기
+              </>
+            )}
+          </Button>
+
+          {/* 입력 교차 검증 버튼 */}
+          <Button
+            onClick={() => setVerificationDialogOpen(true)}
+            variant="outline"
+            className="border-blue-200 hover:bg-blue-50 hover:border-blue-300"
+          >
+            <CheckCircle className="mr-2 h-4 w-4" />
+            입력 교차 검증
+          </Button>
+        </div>
 
         {/* 결과 없음 표시 */}
         {pendingCount === 0 && !loading && (
@@ -903,6 +988,203 @@ export function FinanceReflection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 입력 교차 검증 Dialog */}
+      <Dialog open={verificationDialogOpen} onOpenChange={setVerificationDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>입력 교차 검증</DialogTitle>
+            <DialogDescription>
+              은행원장 엑셀 파일을 업로드하여 입력 데이터를 검증합니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* 파일 업로드 */}
+            {!verificationResult && (
+              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".xls,.xlsx"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleVerifyFile(file);
+                    }
+                  }}
+                  disabled={verifying}
+                  className="hidden"
+                  id="verify-file-input"
+                />
+                <label
+                  htmlFor="verify-file-input"
+                  className={`cursor-pointer ${verifying ? 'opacity-50' : ''}`}
+                >
+                  {verifying ? (
+                    <Loader2 className="h-12 w-12 mx-auto mb-2 animate-spin text-blue-500" />
+                  ) : (
+                    <FileSpreadsheet className="h-12 w-12 mx-auto mb-2 text-slate-400" />
+                  )}
+                  <div className="text-sm text-slate-600">
+                    {verifying ? '검증 중...' : '엑셀 파일을 선택하거나 여기에 드롭하세요'}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    .xls, .xlsx 파일만 지원합니다
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {/* 검증 결과 */}
+            {verificationResult && (
+              <div className="space-y-4">
+                {verificationResult.success ? (
+                  <>
+                    {/* 기준일 */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="text-sm text-blue-700">
+                        <span className="font-semibold">기준일:</span> {verificationResult.referenceDate}
+                      </div>
+                    </div>
+
+                    {/* 검증 결과 목록 */}
+                    <div className="space-y-2">
+                      {/* 수입부 */}
+                      {verificationResult.income && (
+                        <div className={`border rounded-lg p-4 ${verificationResult.income.match ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-2">
+                              {verificationResult.income.match ? (
+                                <CheckCircle className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <XCircle className="h-5 w-5 text-red-600" />
+                              )}
+                              <span className="font-semibold text-slate-900">수입부</span>
+                            </div>
+                            <div className="text-right">
+                              <div className={`font-bold ${verificationResult.income.match ? 'text-green-700' : 'text-red-700'}`}>
+                                {verificationResult.income.dbAmount.toLocaleString()}원
+                              </div>
+                              {!verificationResult.income.match && (
+                                <div className="text-sm text-red-600 mt-1">
+                                  차액: {verificationResult.income.difference > 0 ? '+' : ''}{verificationResult.income.difference.toLocaleString()}원
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {!verificationResult.income.match && (
+                            <div className="mt-2 text-sm text-red-600">
+                              → 엑셀: {verificationResult.income.excelAmount.toLocaleString()}원
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 지출부 */}
+                      {verificationResult.expense && (
+                        <div className={`border rounded-lg p-4 ${verificationResult.expense.match ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-2">
+                              {verificationResult.expense.match ? (
+                                <CheckCircle className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <XCircle className="h-5 w-5 text-red-600" />
+                              )}
+                              <span className="font-semibold text-slate-900">지출부</span>
+                            </div>
+                            <div className="text-right">
+                              <div className={`font-bold ${verificationResult.expense.match ? 'text-green-700' : 'text-red-700'}`}>
+                                {verificationResult.expense.dbAmount.toLocaleString()}원
+                              </div>
+                              {!verificationResult.expense.match && (
+                                <div className="text-sm text-red-600 mt-1">
+                                  차액: {verificationResult.expense.difference > 0 ? '+' : ''}{verificationResult.expense.difference.toLocaleString()}원
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {!verificationResult.expense.match && (
+                            <div className="mt-2 text-sm text-red-600">
+                              → 엑셀: {verificationResult.expense.excelAmount.toLocaleString()}원
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 현재잔액 */}
+                      {verificationResult.balance && (
+                        <div className={`border rounded-lg p-4 ${verificationResult.balance.match ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-2">
+                              {verificationResult.balance.match ? (
+                                <CheckCircle className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <XCircle className="h-5 w-5 text-red-600" />
+                              )}
+                              <span className="font-semibold text-slate-900">현재잔액</span>
+                            </div>
+                            <div className="text-right">
+                              <div className={`font-bold ${verificationResult.balance.match ? 'text-green-700' : 'text-red-700'}`}>
+                                {verificationResult.balance.dbAmount.toLocaleString()}원
+                              </div>
+                              {!verificationResult.balance.match && (
+                                <div className="text-sm text-red-600 mt-1">
+                                  차액: {verificationResult.balance.difference > 0 ? '+' : ''}{verificationResult.balance.difference.toLocaleString()}원
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {!verificationResult.balance.match && (
+                            <div className="mt-2 text-sm text-red-600">
+                              → 엑셀: {verificationResult.balance.excelAmount.toLocaleString()}원
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 다시 검증 버튼 */}
+                    <Button
+                      onClick={() => {
+                        setVerificationResult(null);
+                        const input = document.getElementById('verify-file-input') as HTMLInputElement;
+                        if (input) input.value = '';
+                      }}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      다른 파일로 다시 검증
+                    </Button>
+                  </>
+                ) : (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                      <div>
+                        <div className="font-semibold text-red-700">검증 실패</div>
+                        <div className="text-sm text-red-600 mt-1">
+                          {verificationResult.error}
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        setVerificationResult(null);
+                        const input = document.getElementById('verify-file-input') as HTMLInputElement;
+                        if (input) input.value = '';
+                      }}
+                      variant="outline"
+                      className="w-full mt-3"
+                    >
+                      다시 시도
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

@@ -312,7 +312,7 @@ export function TaxInfoEntryModal({
               {/* 주민등록번호 */}
               <div className="space-y-2">
                 <Label>주민등록번호</Label>
-                <div className="flex items-center gap-2">
+                <div className="grid grid-cols-[6fr_auto_7fr] items-center gap-2">
                   <Input
                     type="text"
                     inputMode="numeric"
@@ -323,7 +323,7 @@ export function TaxInfoEntryModal({
                     maxLength={6}
                   />
                   <span className="text-xl text-slate-400">-</span>
-                  <div className="relative flex-1">
+                  <div className="relative">
                     <Input
                       ref={residentId2Ref}
                       type={showResidentId2 ? "text" : "password"}

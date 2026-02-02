@@ -86,26 +86,41 @@ function extractAmountFromE11(cellValue: any): number | null {
 }
 
 /**
- * 현재 잔액 계산
- * 공식: 이월잔액 + 누적 수입 - 누적 지출
+ * 현재 잔액 계산 (주간보고와 동일한 로직)
+ * 공식: 전년도 이월잔액 + 누적 수입(자본이동 제외) - 누적 지출(자본이동 제외)
  */
 async function calculateCurrentBalance(referenceDate: string): Promise<number> {
   const year = new Date(referenceDate).getFullYear();
 
-  // 이월잔액 조회
-  const carryover = await getCarryoverBalance(year);
-  const carryoverBalance = carryover?.balance || 0;
+  // 전년도 이월잔액 조회 (주간보고와 동일)
+  const carryover = await getCarryoverBalance(year - 1);
+  const yearStartBalance = carryover?.balance || 0;
 
-  // 해당 기준일까지의 누적 수입
+  // 해당 기준일까지의 누적 수입/지출
   const startOfYear = `${year}-01-01`;
   const incomeRecords = await getIncomeRecords(startOfYear, referenceDate);
-  const totalIncome = incomeRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
-
-  // 해당 기준일까지의 누적 지출
   const expenseRecords = await getExpenseRecords(startOfYear, referenceDate);
-  const totalExpense = expenseRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
 
-  return carryoverBalance + totalIncome - totalExpense;
+  // 자본이동 제외하고 합산 (주간보고와 동일)
+  let totalIncome = 0;
+  for (const r of incomeRecords) {
+    const code = r.offering_code;
+    // 자본수입(40번대) 제외
+    if (!(code >= 40 && code < 50)) {
+      totalIncome += r.amount || 0;
+    }
+  }
+
+  let totalExpense = 0;
+  for (const r of expenseRecords) {
+    const accountCode = r.account_code;
+    // 자본지출(92, 93) 제외
+    if (accountCode !== 92 && accountCode !== 93) {
+      totalExpense += r.amount || 0;
+    }
+  }
+
+  return yearStartBalance + totalIncome - totalExpense;
 }
 
 export async function POST(request: NextRequest) {
@@ -208,63 +223,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 엑셀에서 해당 기준일의 입금/출금 총액 계산
-    const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-    // 헤더 찾기 (농협 은행 원장 형식)
-    let headerRowIndex = -1;
-    for (let i = 0; i < Math.min(20, rawData.length); i++) {
-      const row = rawData[i];
-      const rowStr = row.map(cell => String(cell || '').toLowerCase()).join(' ');
-      if (rowStr.includes('거래일') && (rowStr.includes('입금') || rowStr.includes('출금'))) {
-        headerRowIndex = i;
-        break;
-      }
-    }
-
-    if (headerRowIndex === -1) {
-      return NextResponse.json<VerificationResult>({
-        success: false,
-        referenceDate,
-        income: null,
-        expense: null,
-        balance: null,
-        error: '엑셀 파일에서 거래 헤더를 찾을 수 없습니다.',
-      });
-    }
-
-    const headers = rawData[headerRowIndex];
-
-    // 컬럼 인덱스 찾기
-    const findColumn = (candidates: string[]): number => {
-      for (let i = 0; i < headers.length; i++) {
-        const header = String(headers[i] || '').toLowerCase();
-        for (const candidate of candidates) {
-          if (header.includes(candidate.toLowerCase())) {
-            return i;
-          }
-        }
-      }
-      return -1;
-    };
-
-    const colIndex = {
-      date: findColumn(['거래일시', '거래일자', '거래일']),
-      withdrawal: findColumn(['출금액', '출금금액', '출금']),
-      deposit: findColumn(['입금액', '입금금액', '입금']),
-    };
-
-    if (colIndex.date === -1 || colIndex.withdrawal === -1 || colIndex.deposit === -1) {
-      return NextResponse.json<VerificationResult>({
-        success: false,
-        referenceDate,
-        income: null,
-        expense: null,
-        balance: null,
-        error: '필수 컬럼(거래일, 입금액, 출금액)을 찾을 수 없습니다.',
-      });
-    }
-
+    // 엑셀에서 C11~끝(지출), D11~끝(수입) 전체 합산
     // 헬퍼 함수: 금액 파싱
     const parseAmount = (value: any): number => {
       if (value === null || value === undefined || value === '') return 0;
@@ -274,45 +233,32 @@ export async function POST(request: NextRequest) {
       return isNaN(num) ? 0 : num;
     };
 
-    // 헬퍼 함수: 날짜 파싱
-    const parseDate = (value: any): string => {
-      if (!value) return '';
+    // 시트의 마지막 행 찾기
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+    const lastRow = range.e.r;
 
-      // Excel serial number
-      if (typeof value === 'number') {
-        const excelDate = XLSX.SSF.parse_date_code(value);
-        if (excelDate) {
-          return `${excelDate.y}-${String(excelDate.m).padStart(2, '0')}-${String(excelDate.d).padStart(2, '0')}`;
-        }
+    let excelExpense = 0;  // C열: 지출
+    let excelIncome = 0;   // D열: 수입
+
+    // C11부터 끝까지 (지출)
+    for (let row = 10; row <= lastRow; row++) {  // Excel row 11 = index 10
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 2 });  // C열 = column 2
+      const cell = worksheet[cellAddress];
+      if (cell && cell.v !== null && cell.v !== undefined && cell.v !== '') {
+        excelExpense += parseAmount(cell.v);
       }
-
-      // String 형식
-      const str = String(value);
-      const match = str.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
-      if (match) {
-        return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-      }
-
-      return '';
-    };
-
-    // 해당 기준일의 입금/출금 합계 계산
-    let excelIncome = 0;
-    let excelExpense = 0;
-
-    for (let i = headerRowIndex + 1; i < rawData.length; i++) {
-      const row = rawData[i];
-      if (!row || row.length === 0) continue;
-
-      const transactionDate = parseDate(row[colIndex.date]);
-      if (transactionDate !== referenceDate) continue;
-
-      const deposit = parseAmount(row[colIndex.deposit]);
-      const withdrawal = parseAmount(row[colIndex.withdrawal]);
-
-      excelIncome += deposit;
-      excelExpense += withdrawal;
     }
+
+    // D11부터 끝까지 (수입)
+    for (let row = 10; row <= lastRow; row++) {  // Excel row 11 = index 10
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 3 });  // D열 = column 3
+      const cell = worksheet[cellAddress];
+      if (cell && cell.v !== null && cell.v !== undefined && cell.v !== '') {
+        excelIncome += parseAmount(cell.v);
+      }
+    }
+
+    console.log('[Crosscheck] Excel parsing - Income:', excelIncome, 'Expense:', excelExpense);
 
     // 해당 기준일의 수입부 총액 조회 (DB)
     const incomeRecords = await getIncomeRecords(referenceDate, referenceDate);
@@ -324,6 +270,9 @@ export async function POST(request: NextRequest) {
 
     // 현재 잔액 계산 (DB 기준)
     const dbBalance = await calculateCurrentBalance(referenceDate);
+
+    console.log('[Crosscheck] DB query - Income:', dbIncome, 'Expense:', dbExpense);
+    console.log('[Crosscheck] Balance - Excel:', excelBalance, 'DB:', dbBalance);
 
     // 비교 결과 생성
     const result: VerificationResult = {

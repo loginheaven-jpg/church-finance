@@ -272,11 +272,29 @@ export default function ExpenseAnalysisPage() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={110}
+                  outerRadius={85}
                   innerRadius={0}
-                  label={({ name, value, percent }) =>
-                    `${name} ${formatAmount(value)} (${((percent ?? 0) * 100).toFixed(0)}%)`
-                  }
+                  label={({ cx, cy, midAngle, outerRadius, name, percent }) => {
+                    const RADIAN = Math.PI / 180;
+                    const cxNum = Number(cx) || 0;
+                    const cyNum = Number(cy) || 0;
+                    const angle = midAngle ?? 0;
+                    const radius = (outerRadius ?? 85) * 1.25;
+                    const x = cxNum + radius * Math.cos(-angle * RADIAN);
+                    const y = cyNum + radius * Math.sin(-angle * RADIAN);
+                    return (
+                      <text
+                        x={x}
+                        y={y}
+                        fill="#374151"
+                        fontSize={10}
+                        textAnchor={x > cxNum ? 'start' : 'end'}
+                        dominantBaseline="central"
+                      >
+                        {`${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+                      </text>
+                    );
+                  }}
                   labelLine={{ strokeWidth: 1 }}
                 >
                   {categoryPieData.map((_, idx) => (

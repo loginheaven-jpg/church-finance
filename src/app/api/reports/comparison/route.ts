@@ -1,6 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords, getExpenseRecords, getIncomeCodes, getExpenseCodes } from '@/lib/google-sheets';
 
+// 카테고리 이름 정의 (fallback용)
+const INCOME_CATEGORY_NAMES: Record<number, string> = {
+  10: '일반헌금',
+  20: '목적헌금',
+  30: '잡수입',
+  40: '자본수입',
+  500: '건축헌금',
+};
+
+const EXPENSE_CATEGORY_NAMES: Record<number, string> = {
+  10: '사례비',
+  20: '예배비',
+  30: '선교비',
+  40: '교육비',
+  50: '봉사비',
+  60: '관리비',
+  70: '운영비',
+  80: '상회비',
+  90: '기타비용',
+  100: '예비비',
+  500: '건축비',
+};
+
 interface YearlyData {
   year: number;
   totalIncome: number;
@@ -57,7 +80,7 @@ export async function GET(request: NextRequest) {
         const categoryCode = Math.floor(r.offering_code / 10) * 10;
         if (!incomeByCategory[categoryCode]) {
           incomeByCategory[categoryCode] = {
-            name: incomeCategoryMap.get(categoryCode) || `카테고리${categoryCode}`,
+            name: incomeCategoryMap.get(categoryCode) || INCOME_CATEGORY_NAMES[categoryCode] || `카테고리${categoryCode}`,
             amount: 0,
           };
         }
@@ -70,7 +93,7 @@ export async function GET(request: NextRequest) {
         const categoryCode = r.category_code || Math.floor(r.account_code / 10) * 10;
         if (!expenseByCategory[categoryCode]) {
           expenseByCategory[categoryCode] = {
-            name: expenseCategoryMap.get(categoryCode) || `카테고리${categoryCode}`,
+            name: expenseCategoryMap.get(categoryCode) || EXPENSE_CATEGORY_NAMES[categoryCode] || `카테고리${categoryCode}`,
             amount: 0,
           };
         }

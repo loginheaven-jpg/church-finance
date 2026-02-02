@@ -24,7 +24,7 @@ import {
 import { Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
+import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule, IncomeCode, ExpenseCode } from '@/types';
 
 // 매칭 결과 타입
 interface MatchedIncomeItem {
@@ -94,6 +94,41 @@ export function FinanceReflection() {
     suppressedCount: number;
     amount: number;
   } | null>(null);
+  const [incomeCodeMap, setIncomeCodeMap] = useState<Map<number, string>>(new Map());
+  const [expenseCodeMap, setExpenseCodeMap] = useState<Map<number, string>>(new Map());
+
+  // 코드 매핑 로드
+  const loadCodeMappings = useCallback(async () => {
+    try {
+      const [incomeRes, expenseRes] = await Promise.all([
+        fetch('/api/codes/income'),
+        fetch('/api/codes/expense'),
+      ]);
+
+      const [incomeData, expenseData] = await Promise.all([
+        incomeRes.json(),
+        expenseRes.json(),
+      ]);
+
+      if (incomeData.success && incomeData.data) {
+        const incomeMap = new Map<number, string>();
+        incomeData.data.forEach((code: IncomeCode) => {
+          incomeMap.set(code.code, code.item);
+        });
+        setIncomeCodeMap(incomeMap);
+      }
+
+      if (expenseData.success && expenseData.data) {
+        const expenseMap = new Map<number, string>();
+        expenseData.data.forEach((code: ExpenseCode) => {
+          expenseMap.set(code.code, code.item);
+        });
+        setExpenseCodeMap(expenseMap);
+      }
+    } catch (error) {
+      console.error('코드 매핑 로드 오류:', error);
+    }
+  }, []);
 
   // 통합 리스트 생성
   const buildUnifiedLists = useCallback((result: MatchPreviewResult) => {
@@ -123,6 +158,9 @@ export function FinanceReflection() {
   const loadPendingTransactions = useCallback(async () => {
     setLoading(true);
     try {
+      // 코드 매핑 로드
+      await loadCodeMappings();
+
       // pending 상태의 은행거래 조회 및 자동 매칭
       const res = await fetch('/api/match/auto', {
         method: 'POST',
@@ -154,7 +192,7 @@ export function FinanceReflection() {
     } finally {
       setLoading(false);
     }
-  }, [buildUnifiedLists]);
+  }, [buildUnifiedLists, loadCodeMappings]);
 
   // 수입 레코드 수정
   const handleUnifiedIncomeChange = (index: number, field: keyof IncomeRecord, value: string | number) => {
@@ -475,10 +513,11 @@ export function FinanceReflection() {
                         <TableHead className="w-[80px]">이체일</TableHead>
                         <TableHead className="w-[70px]">입금경로</TableHead>
                         <TableHead className="w-[60px]">코드</TableHead>
-                        <TableHead className="w-[80px]">헌금자</TableHead>
-                        <TableHead className="w-[80px]">대표자</TableHead>
-                        <TableHead className="w-[90px] text-right">금액</TableHead>
-                        <TableHead className="w-[280px]">비고</TableHead>
+                        <TableHead className="w-[100px]">분류</TableHead>
+                        <TableHead className="w-[70px]">헌금자</TableHead>
+                        <TableHead className="w-[70px]">대표자</TableHead>
+                        <TableHead className="w-[80px] text-right">금액</TableHead>
+                        <TableHead className="w-[240px]">비고</TableHead>
                         <TableHead className="w-[40px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -527,6 +566,13 @@ export function FinanceReflection() {
                               />
                             )}
                           </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {item.type === 'suppressed' ? (
+                              <span className="text-red-500">-</span>
+                            ) : (
+                              <span>{incomeCodeMap.get(item.record?.offering_code || 0) || '-'}</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             {item.type === 'suppressed' ? (
                               <span className="text-sm text-red-600">{item.transaction.memo || item.transaction.detail || '-'}</span>
@@ -534,7 +580,7 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.donor_name || ''}
                                 onChange={(e) => handleUnifiedIncomeChange(index, 'donor_name', e.target.value)}
-                                className="h-6 text-sm w-20"
+                                className="h-6 text-sm w-16"
                               />
                             )}
                           </TableCell>
@@ -545,7 +591,7 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.representative || ''}
                                 onChange={(e) => handleUnifiedIncomeChange(index, 'representative', e.target.value)}
-                                className="h-6 text-sm w-28"
+                                className="h-6 text-sm w-16"
                               />
                             )}
                           </TableCell>
@@ -568,7 +614,7 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.note || ''}
                                 onChange={(e) => handleUnifiedIncomeChange(index, 'note', e.target.value)}
-                                className="h-6 text-sm w-64"
+                                className="h-6 text-sm w-56"
                               />
                             )}
                           </TableCell>
@@ -605,11 +651,12 @@ export function FinanceReflection() {
                         <TableHead className="w-[90px]">기준일</TableHead>
                         <TableHead className="w-[80px]">이체일</TableHead>
                         <TableHead className="w-[70px]">결제방법</TableHead>
-                        <TableHead className="w-[100px]">거래처</TableHead>
-                        <TableHead className="w-[120px]">적요</TableHead>
+                        <TableHead className="w-[90px]">거래처</TableHead>
+                        <TableHead className="w-[110px]">적요</TableHead>
                         <TableHead className="w-[90px] text-right">금액</TableHead>
                         <TableHead className="w-[60px]">계정</TableHead>
-                        <TableHead className="w-[200px]">비고</TableHead>
+                        <TableHead className="w-[100px]">분류</TableHead>
+                        <TableHead className="w-[180px]">비고</TableHead>
                         <TableHead className="w-[40px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -662,13 +709,13 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.vendor || item.transaction.memo || item.transaction.detail || ''}
                                 onChange={(e) => handleUnifiedExpenseChange(index, 'vendor', e.target.value)}
-                                className="h-6 text-sm w-24 bg-amber-50"
+                                className="h-6 text-sm w-20 bg-amber-50"
                               />
                             ) : (
                               <Input
                                 value={item.record?.vendor || ''}
                                 onChange={(e) => handleUnifiedExpenseChange(index, 'vendor', e.target.value)}
-                                className="h-6 text-sm w-24"
+                                className="h-6 text-sm w-20"
                               />
                             )}
                           </TableCell>
@@ -679,13 +726,13 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.description || item.transaction.description || ''}
                                 onChange={(e) => handleUnifiedExpenseChange(index, 'description', e.target.value)}
-                                className="h-6 text-sm w-28 bg-amber-50"
+                                className="h-6 text-sm w-24 bg-amber-50"
                               />
                             ) : (
                               <Input
                                 value={item.record?.description || ''}
                                 onChange={(e) => handleUnifiedExpenseChange(index, 'description', e.target.value)}
-                                className="h-6 text-sm w-28"
+                                className="h-6 text-sm w-24"
                               />
                             )}
                           </TableCell>
@@ -727,6 +774,15 @@ export function FinanceReflection() {
                               />
                             )}
                           </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {item.type === 'suppressed' ? (
+                              <span className="text-red-500">-</span>
+                            ) : item.type === 'needsReview' ? (
+                              <span>{expenseCodeMap.get(item.record?.account_code || item.suggestions?.[0]?.target_code || 0) || '-'}</span>
+                            ) : (
+                              <span>{expenseCodeMap.get(item.record?.account_code || 0) || '-'}</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             {item.type === 'suppressed' ? (
                               <span className="text-sm text-red-500">{item.transaction.description}</span>
@@ -736,7 +792,7 @@ export function FinanceReflection() {
                               <Input
                                 value={item.record?.note || ''}
                                 onChange={(e) => handleUnifiedExpenseChange(index, 'note', e.target.value)}
-                                className="h-6 text-sm w-48"
+                                className="h-6 text-sm w-40"
                               />
                             )}
                           </TableCell>

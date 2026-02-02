@@ -56,16 +56,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 주민번호 형식 검증 (XXXXXX-XXXXXXX)
-    const residentIdPattern = /^\d{6}-\d{7}$/;
+    // 주민번호 형식 검증 (13자리 숫자, 하이픈 없음)
+    const residentIdPattern = /^\d{13}$/;
     if (!residentIdPattern.test(resident_id)) {
       return NextResponse.json(
-        { success: false, error: '주민등록번호 형식이 올바르지 않습니다' },
+        { success: false, error: '주민등록번호 형식이 올바르지 않습니다 (13자리 숫자)' },
         { status: 400 }
       );
     }
 
-    // Supabase 교적부 업데이트 (13자리 전체 저장)
+    // Supabase 교적부 업데이트 (하이픈 없이 13자리 저장)
     const result = await updateMemberTaxInfo(name, resident_id, address);
 
     if (!result.success) {

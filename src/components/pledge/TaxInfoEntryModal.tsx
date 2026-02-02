@@ -123,18 +123,12 @@ export function TaxInfoEntryModal({
 
           if (resident_id) {
             // 기존 주민번호가 있으면 앞 6자리만 표시, 뒷자리는 빈칸으로 (재입력 필요)
-            const parts = resident_id.replace(/\s/g, '').split('-');
-            if (parts.length === 2) {
+            // DB에는 하이픈 없이 13자리로 저장됨
+            const cleanId = resident_id.replace(/[^0-9]/g, '');
+            if (cleanId.length >= 6) {
               setFormData(prev => ({
                 ...prev,
-                residentId1: parts[0],
-                residentId2: '', // 뒷자리는 보안상 빈칸으로 재입력
-                address: address || '',
-              }));
-            } else if (resident_id.length >= 6) {
-              setFormData(prev => ({
-                ...prev,
-                residentId1: resident_id.substring(0, 6),
+                residentId1: cleanId.substring(0, 6),
                 residentId2: '', // 뒷자리는 보안상 빈칸으로 재입력
                 address: address || '',
               }));
@@ -201,7 +195,8 @@ export function TaxInfoEntryModal({
     setSaving(true);
 
     try {
-      const residentId = `${formData.residentId1}-${formData.residentId2}`;
+      // 하이픈 없이 13자리로 저장 (DB VARCHAR(13) 제약)
+      const residentId = `${formData.residentId1}${formData.residentId2}`;
 
       const res = await fetch('/api/members/tax-info', {
         method: 'POST',

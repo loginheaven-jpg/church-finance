@@ -149,7 +149,8 @@ export function TaxInfoModal({
     setSaving(true);
 
     try {
-      const residentId = `${formData.residentId1}-${formData.residentId2}`;
+      // 하이픈 없이 13자리로 저장 (DB VARCHAR(13) 제약)
+      const residentId = `${formData.residentId1}${formData.residentId2}`;
 
       const res = await fetch('/api/members/tax-info', {
         method: 'POST',

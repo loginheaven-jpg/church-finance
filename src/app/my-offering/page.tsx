@@ -342,6 +342,18 @@ export default function MyOfferingPage() {
         </div>
       </div>
 
+      {/* 연말정산 정보입력 버튼 */}
+      <div className="flex justify-center">
+        <Button
+          onClick={() => setShowTaxInfoModal(true)}
+          variant="outline"
+          className="border-blue-200 hover:bg-blue-50 hover:border-blue-300 text-sm"
+        >
+          <FileText className="h-4 w-4 mr-2" />
+          연말정산용 기부금 자동발행을 위한 정보입력
+        </Button>
+      </div>
+
       {/* 요약 카드 (3개) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* 카드 1: 헌금 그룹 */}
@@ -398,27 +410,16 @@ export default function MyOfferingPage() {
         {/* 카드 3: 헌금 횟수 */}
         <Card>
           <CardContent className="p-6">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-100 rounded-full">
-                  <Calendar className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600">{year}년 헌금 횟수</p>
-                  <p className="text-2xl font-bold text-blue-600">
-                    {data.totalCount}회
-                  </p>
-                </div>
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-100 rounded-full">
+                <Calendar className="h-6 w-6 text-blue-600" />
               </div>
-              <Button
-                onClick={() => setShowTaxInfoModal(true)}
-                variant="outline"
-                size="sm"
-                className="w-full text-xs border-blue-200 hover:bg-blue-50 hover:border-blue-300"
-              >
-                <FileText className="h-3 w-3 mr-1" />
-                연말정산용 기부금 자동발행을 위한 정보입력
-              </Button>
+              <div>
+                <p className="text-sm text-slate-600">{year}년 헌금 횟수</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {data.totalCount}회
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

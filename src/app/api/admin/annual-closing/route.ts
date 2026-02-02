@@ -27,8 +27,23 @@ export async function GET() {
     const currentYear = now.getFullYear();
     const month = now.getMonth() + 1;
 
-    // 연마감 대상 연도: 1월이면 전년도, 아니면 현재 연도
-    const targetYear = month === 1 ? currentYear - 1 : currentYear;
+    // 연마감은 1월에만 확인 (전년도 마감)
+    // 예: 2027년 1월에 2026년 마감
+    if (month !== 1) {
+      return NextResponse.json({
+        success: true,
+        needsClosing: false,
+        targetYear: null,
+        carryover: {
+          needsClosing: false,
+          currentData: null,
+          preview: null,
+        },
+      });
+    }
+
+    // 1월인 경우 전년도 마감 확인
+    const targetYear = currentYear - 1;
 
     // 이월잔액 상태 확인
     const carryoverData = await getCarryoverBalance(targetYear);

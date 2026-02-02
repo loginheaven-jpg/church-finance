@@ -112,41 +112,51 @@ export function TaxInfoEntryModal({
     setSelectedName(name);
     setFormData(prev => ({ ...prev, name }));
 
-    // 기존 데이터 로드
-    try {
-      const res = await fetch(`/api/donors/lookup?name=${encodeURIComponent(name)}`);
-      const result = await res.json();
+    // 본인 데이터만 로드 (보안: 다른 사람의 주민번호/주소 노출 방지)
+    if (loggedInName && name === loggedInName) {
+      try {
+        const res = await fetch(`/api/donors/lookup?name=${encodeURIComponent(name)}`);
+        const result = await res.json();
 
-      if (result.success && result.data) {
-        const { resident_id, address } = result.data;
+        if (result.success && result.data) {
+          const { resident_id, address } = result.data;
 
-        if (resident_id) {
-          // 기존 주민번호가 있으면 앞 6자리만 표시, 뒷자리는 빈칸으로 (재입력 필요)
-          const parts = resident_id.replace(/\s/g, '').split('-');
-          if (parts.length === 2) {
+          if (resident_id) {
+            // 기존 주민번호가 있으면 앞 6자리만 표시, 뒷자리는 빈칸으로 (재입력 필요)
+            const parts = resident_id.replace(/\s/g, '').split('-');
+            if (parts.length === 2) {
+              setFormData(prev => ({
+                ...prev,
+                residentId1: parts[0],
+                residentId2: '', // 뒷자리는 보안상 빈칸으로 재입력
+                address: address || '',
+              }));
+            } else if (resident_id.length >= 6) {
+              setFormData(prev => ({
+                ...prev,
+                residentId1: resident_id.substring(0, 6),
+                residentId2: '', // 뒷자리는 보안상 빈칸으로 재입력
+                address: address || '',
+              }));
+            }
+          } else {
             setFormData(prev => ({
               ...prev,
-              residentId1: parts[0],
-              residentId2: '', // 뒷자리는 보안상 빈칸으로 재입력
-              address: address || '',
-            }));
-          } else if (resident_id.length >= 6) {
-            setFormData(prev => ({
-              ...prev,
-              residentId1: resident_id.substring(0, 6),
-              residentId2: '', // 뒷자리는 보안상 빈칸으로 재입력
               address: address || '',
             }));
           }
-        } else {
-          setFormData(prev => ({
-            ...prev,
-            address: address || '',
-          }));
         }
+      } catch (error) {
+        console.error('Load existing data error:', error);
       }
-    } catch (error) {
-      console.error('Load existing data error:', error);
+    } else {
+      // 다른 사람 이름 검색 시 빈칸으로 시작 (개인정보 보호)
+      setFormData(prev => ({
+        ...prev,
+        residentId1: '',
+        residentId2: '',
+        address: '',
+      }));
     }
 
     setStep('input');

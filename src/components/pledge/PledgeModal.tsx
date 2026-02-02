@@ -173,7 +173,7 @@ export function PledgeModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Heart className="h-5 w-5 text-rose-500" />
-            {existingPledge ? '작정 수정하기' : '헌금 작정하기'}
+            {existingPledge ? `${donorName}님 작정 수정` : `${donorName}님 헌금작정`}
           </DialogTitle>
           <DialogDescription className="text-sm text-slate-500 italic">
             "각각 그 마음에 정한 대로 할 것이요 인색함으로나 억지로 하지 말지니<br />

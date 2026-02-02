@@ -289,14 +289,19 @@ export default function IncomeAnalysisPage() {
                   cy="50%"
                   outerRadius={100}
                   innerRadius={0}
-                  label={({ cx, cy, midAngle, outerRadius, name, percent }) => {
+                  label={({ cx, cy, midAngle, outerRadius, name, percent, index }) => {
                     const RADIAN = Math.PI / 180;
                     const cxNum = Number(cx) || 0;
                     const cyNum = Number(cy) || 0;
                     const angle = midAngle ?? 0;
-                    const radius = (outerRadius ?? 100) * 1.15;
+                    const pct = (percent ?? 0) * 100;
+                    // 비율이 작을수록 더 바깥으로 (최소 1.2, 최대 1.5)
+                    const radiusMultiplier = pct < 5 ? 1.5 : pct < 10 ? 1.35 : 1.2;
+                    const radius = (outerRadius ?? 100) * radiusMultiplier;
+                    // 작은 슬라이스는 수직 오프셋 추가 (겹침 방지)
+                    const verticalOffset = pct < 5 ? ((index ?? 0) % 3 - 1) * 12 : 0;
                     const x = cxNum + radius * Math.cos(-angle * RADIAN);
-                    const y = cyNum + radius * Math.sin(-angle * RADIAN);
+                    const y = cyNum + radius * Math.sin(-angle * RADIAN) + verticalOffset;
                     return (
                       <text
                         x={x}
@@ -306,11 +311,11 @@ export default function IncomeAnalysisPage() {
                         textAnchor={x > cxNum ? 'start' : 'end'}
                         dominantBaseline="central"
                       >
-                        {`${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+                        {`${name} (${pct.toFixed(0)}%)`}
                       </text>
                     );
                   }}
-                  labelLine={{ strokeWidth: 1 }}
+                  labelLine={false}
                 >
                   {categoryPieData.map((_, idx) => (
                     <Cell key={idx} fill={COLORS[idx % COLORS.length]} />

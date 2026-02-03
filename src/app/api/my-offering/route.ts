@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getIncomeRecords, getIncomeCodes, getDonorInfo, getPledgeDonations } from '@/lib/google-sheets';
 import { FinanceSession, SESSION_COOKIE_NAME } from '@/lib/auth/finance-permissions';
+import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 
 // 가족 그룹 멤버 조회
 async function getFamilyGroup(userName: string): Promise<{
@@ -152,6 +153,7 @@ export async function GET(request: NextRequest) {
     const year = searchParams.get('year') || new Date().getFullYear().toString();
     const mode = searchParams.get('mode') || 'personal'; // 'personal' | 'family'
     const includeHistory = searchParams.get('includeHistory') === 'true';
+    const noCache = searchParams.get('nocache') === 'true';
 
     const yearNum = parseInt(year);
     const startDate = `${year}-01-01`;
@@ -159,6 +161,26 @@ export async function GET(request: NextRequest) {
 
     // 사용자 이름
     const userName = session.name;
+
+    // 캐시 확인 (noCache 파라미터로 캐시 무시 가능)
+    if (!noCache && process.env.UPSTASH_REDIS_REST_URL) {
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redisClient = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+        });
+        const cacheKey = cacheKeys.myOffering(userName, yearNum, mode, includeHistory);
+        const cached = await redisClient.get(cacheKey);
+        if (cached) {
+          console.log(`[Cache HIT] ${cacheKey}`);
+          return NextResponse.json(cached);
+        }
+        console.log(`[Cache MISS] ${cacheKey}`);
+      } catch (e) {
+        console.error('[Redis GET Error]', e);
+      }
+    }
 
     // 가족 그룹 조회
     const familyGroup = await getFamilyGroup(userName);
@@ -247,21 +269,36 @@ export async function GET(request: NextRequest) {
     });
 
     // === 연도별 히스토리 (2003년~현재) ===
+    // 최적화: N+1 쿼리 제거 - 전체 데이터 1회 조회 후 메모리에서 연도별 집계
     let yearlyHistory: Array<{ year: number; totalAmount: number }> | undefined;
     if (includeHistory) {
-      yearlyHistory = [];
       const currentYear = new Date().getFullYear();
 
+      // 전체 수입부 데이터 1회 조회 (기존: 22+회 → 1회)
+      const allIncomeRecords = await getIncomeRecords();
+
+      // 대상자 헌금만 필터링
+      const targetOfferings = allIncomeRecords.filter(record =>
+        targetNames.includes(record.donor_name)
+      );
+
+      // 연도별 집계 (메모리에서 처리)
+      const yearlyMap = new Map<number, number>();
       for (let y = 2003; y <= currentYear; y++) {
-        const yStart = `${y}-01-01`;
-        const yEnd = `${y}-12-31`;
-        const yRecords = await getIncomeRecords(yStart, yEnd);
-        const yOfferings = yRecords.filter(record =>
-          targetNames.includes(record.donor_name)
-        );
-        const yTotal = yOfferings.reduce((sum, r) => sum + r.amount, 0);
-        yearlyHistory.push({ year: y, totalAmount: yTotal });
+        yearlyMap.set(y, 0); // 모든 연도 초기화
       }
+
+      for (const record of targetOfferings) {
+        const recordYear = parseInt(record.date.substring(0, 4), 10);
+        if (recordYear >= 2003 && recordYear <= currentYear) {
+          yearlyMap.set(recordYear, (yearlyMap.get(recordYear) || 0) + record.amount);
+        }
+      }
+
+      // 배열로 변환
+      yearlyHistory = Array.from(yearlyMap.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([year, totalAmount]) => ({ year, totalAmount }));
     }
 
     // === 최근 8주 주간 데이터 ===
@@ -351,7 +388,7 @@ export async function GET(request: NextRequest) {
       },
     ];
 
-    return NextResponse.json({
+    const responseData = {
       year: yearNum,
       userName,
       mode,
@@ -366,7 +403,25 @@ export async function GET(request: NextRequest) {
       yearlyHistory,
       pledgeStatus,
       weeklyData,
-    });
+    };
+
+    // 캐시 저장 (noCache가 아닐 때만)
+    if (!noCache && process.env.UPSTASH_REDIS_REST_URL) {
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redisClient = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+        });
+        const cacheKey = cacheKeys.myOffering(userName, yearNum, mode, includeHistory);
+        await redisClient.set(cacheKey, responseData, { ex: CACHE_TTL.MY_OFFERING });
+        console.log(`[Cache SET] ${cacheKey}`);
+      } catch (e) {
+        console.error('[Redis SET Error]', e);
+      }
+    }
+
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error('My offering API error:', error);
     return NextResponse.json(

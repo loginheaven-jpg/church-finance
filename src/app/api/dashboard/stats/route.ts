@@ -423,11 +423,27 @@ export async function GET(request: NextRequest) {
     eightWeeksAgo.setDate(monday.getDate() - 7 * 7); // 7주 전 월요일
     const eightWeekStart = eightWeeksAgo.toISOString().split('T')[0];
 
-    // 8주간 데이터 조회
-    const [eightWeekIncomeRecords, eightWeekExpenseRecords] = await Promise.all([
-      getIncomeRecords(eightWeekStart, endDate),
-      getExpenseRecords(eightWeekStart, endDate),
-    ]);
+    // 최적화: 8주 범위가 연간 데이터에 포함되면 별도 조회 불필요 (기존: 2회 API 호출)
+    let eightWeekIncomeRecords: typeof yearlyIncomeRecords;
+    let eightWeekExpenseRecords: typeof yearlyExpenseRecords;
+
+    if (eightWeekStart >= yearStart) {
+      // 8주 데이터가 연간 범위 내: 이미 로드된 데이터에서 필터링
+      eightWeekIncomeRecords = yearlyIncomeRecords.filter(
+        r => r.date >= eightWeekStart && r.date <= endDate
+      );
+      eightWeekExpenseRecords = yearlyExpenseRecords.filter(
+        r => r.date >= eightWeekStart && r.date <= endDate
+      );
+    } else {
+      // 8주 범위가 전년도까지 포함: 별도 조회 필요 (연초에만 발생)
+      const [fetchedIncome, fetchedExpense] = await Promise.all([
+        getIncomeRecords(eightWeekStart, endDate),
+        getExpenseRecords(eightWeekStart, endDate),
+      ]);
+      eightWeekIncomeRecords = fetchedIncome;
+      eightWeekExpenseRecords = fetchedExpense;
+    }
 
     // 주별로 집계 (잔액은 역산 방식으로 계산)
     // 1단계: 8주간의 수입/지출 데이터 수집

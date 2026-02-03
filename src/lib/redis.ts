@@ -19,6 +19,7 @@ export const CACHE_TTL = {
   DONORS: 259200,      // 헌금자 목록: 3일
   CODES: 604800,       // 코드 데이터: 7일 (거의 변경 안됨)
   BUDGET: 259200,      // 예산 데이터: 3일
+  MY_OFFERING: 3600,   // 개인헌금: 1시간 (개인별 조회, 자주 변경 안됨)
 } as const;
 
 // 캐시 키 생성 헬퍼
@@ -47,6 +48,9 @@ export const cacheKeys = {
     `finance:budget:${year}`,
   building: () =>
     `finance:building`,
+  // 개인헌금 캐시 (사용자별, 연도별, 모드별)
+  myOffering: (userName: string, year: number, mode: string, includeHistory: boolean) =>
+    `finance:my-offering:${encodeURIComponent(userName)}:${year}:${mode}:${includeHistory}`,
 };
 
 // 캐시 조회 with 폴백

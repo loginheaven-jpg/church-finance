@@ -223,6 +223,28 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
 
 ## 최근 변경사항
 
+### 2026-02-03 업데이트 (성능 최적화)
+
+1. **my-offering API N+1 쿼리 제거**
+   - 기존: 연도별 22+회 API 호출 (2003~현재)
+   - 변경: 전체 데이터 1회 조회 → 메모리에서 연도별 집계
+   - 파일: `src/app/api/my-offering/route.ts`
+
+2. **dashboard/stats API 8주 데이터 중복 조회 제거**
+   - 기존: 연간 데이터 로드 후 8주 데이터 별도 조회 (2회 추가)
+   - 변경: 8주 범위가 연간 범위 내이면 이미 로드된 데이터에서 필터링
+   - 파일: `src/app/api/dashboard/stats/route.ts`
+
+3. **Redis 캐시 TTL 추가**
+   - `MY_OFFERING`: 3600초 (1시간) - 개인별 헌금 데이터
+   - 캐시 키: `myOffering(userName, year, mode, includeHistory)`
+   - 파일: `src/lib/redis.ts`
+
+4. **my-offering API 캐싱 적용**
+   - 캐시 히트 시 즉시 반환
+   - `nocache` 쿼리 파라미터로 캐시 무시 가능
+   - 파일: `src/app/api/my-offering/route.ts`
+
 ### 2026-02-01 업데이트 (SSO 연동)
 
 1. **교적부-재정부 SSO 통합**

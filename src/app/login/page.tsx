@@ -73,9 +73,9 @@ export default function LoginPage() {
           <Card className="border-0 shadow-xl overflow-hidden">
             <CardContent className="p-0">
               {/* Header */}
-              <div className="text-center py-8 bg-gradient-to-br from-[#f8f6f0] to-[#f0ebe0]">
+              <div className="text-center py-4 bg-gradient-to-br from-[#f8f6f0] to-[#f0ebe0]">
                 <div
-                  className="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl mx-auto mb-4"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl mx-auto mb-2"
                   style={{
                     background: 'linear-gradient(135deg, #C9A962 0%, #D4B87A 100%)',
                     boxShadow: '0 4px 16px rgba(201, 169, 98, 0.3)'
@@ -83,39 +83,29 @@ export default function LoginPage() {
                 >
                   ⛪
                 </div>
-                <h1 className="font-semibold text-2xl text-[#2C3E50]">
+                <h1 className="font-semibold text-xl text-[#2C3E50]">
                   예봄교회 재정시스템
                 </h1>
               </div>
 
               {/* Choice Buttons */}
-              <div className="p-6 space-y-4">
+              <div className="p-3 space-y-2">
                 {/* 작정헌금 입력 버튼 */}
                 <button
                   onClick={() => setShowPledgeModal(true)}
-                  className="w-full p-5 rounded-xl border-2 border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-300 transition-all text-left group"
+                  className="w-full p-3 rounded-xl border-2 border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-300 transition-all text-left group"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-green-500 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                      <Heart className="w-6 h-6 text-white" />
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-green-500 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                      <Heart className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg text-green-800">
+                      <h3 className="font-semibold text-base text-green-800">
                         작정헌금 입력
                       </h3>
-                      <p className="text-sm text-green-600 mt-1">
+                      <p className="text-xs text-green-600">
                         성전봉헌, 선교헌금
                       </p>
-                      <div className="flex gap-2 mt-2">
-                        <span className="inline-flex items-center gap-1 text-xs bg-green-200 text-green-700 px-2 py-0.5 rounded-full">
-                          <Building2 className="w-3 h-3" />
-                          건축
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-xs bg-green-200 text-green-700 px-2 py-0.5 rounded-full">
-                          <Globe className="w-3 h-3" />
-                          선교
-                        </span>
-                      </div>
                     </div>
                   </div>
                 </button>
@@ -123,20 +113,17 @@ export default function LoginPage() {
                 {/* 연말정산 정보입력 버튼 */}
                 <button
                   onClick={() => setShowTaxInfoModal(true)}
-                  className="w-full p-5 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition-all text-left group"
+                  className="w-full p-3 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 transition-all text-left group"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-blue-500 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                      <FileText className="w-6 h-6 text-white" />
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                      <FileText className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg text-blue-800">
+                      <h3 className="font-semibold text-base text-blue-800">
                         연말정산 정보입력
                       </h3>
-                      <p className="text-sm text-blue-600 mt-1">
-                        을 원하시는 분은 입력하십시오.
-                      </p>
-                      <p className="text-xs text-blue-500 mt-1">
+                      <p className="text-xs text-blue-500">
                         수집정보: 주민번호, 주민등록 주소
                       </p>
                     </div>
@@ -146,14 +133,14 @@ export default function LoginPage() {
                 {/* 재정시스템 로그인 버튼 */}
                 <button
                   onClick={() => setMode('login')}
-                  className="w-full p-5 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all text-left group"
+                  className="w-full p-3 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all text-left group"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-[#2C3E50] flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                      <LogIn className="w-6 h-6 text-white" />
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-[#2C3E50] flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                      <LogIn className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg text-slate-800">
+                      <h3 className="font-semibold text-base text-slate-800">
                         재정시스템 로그인
                       </h3>
                     </div>

@@ -169,7 +169,7 @@ export function PledgeModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[480px] pt-10">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Heart className="h-5 w-5 text-rose-500" />
@@ -315,7 +315,7 @@ export function PledgeModal({
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
               placeholder="감사의 마음으로 드립니다..."
-              className="resize-none h-10"
+              className="resize-none h-6"
             />
           </div>
 
@@ -324,7 +324,7 @@ export function PledgeModal({
           )}
         </div>
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-2 pt-1">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

@@ -86,9 +86,6 @@ export default function LoginPage() {
                 <h1 className="font-semibold text-2xl text-[#2C3E50]">
                   예봄교회 재정시스템
                 </h1>
-                <p className="text-gray-500 text-sm mt-2">
-                  무엇을 도와드릴까요?
-                </p>
               </div>
 
               {/* Choice Buttons */}
@@ -107,7 +104,7 @@ export default function LoginPage() {
                         작정헌금 입력
                       </h3>
                       <p className="text-sm text-green-600 mt-1">
-                        성전봉헌, 선교헌금 작정
+                        성전봉헌, 선교헌금
                       </p>
                       <div className="flex gap-2 mt-2">
                         <span className="inline-flex items-center gap-1 text-xs bg-green-200 text-green-700 px-2 py-0.5 rounded-full">
@@ -137,7 +134,7 @@ export default function LoginPage() {
                         연말정산 정보입력
                       </h3>
                       <p className="text-sm text-blue-600 mt-1">
-                        기부금영수증 자동발행을 원하시는 분은 입력하십시오.
+                        을 원하시는 분은 입력하십시오.
                       </p>
                       <p className="text-xs text-blue-500 mt-1">
                         수집정보: 주민번호, 주민등록 주소

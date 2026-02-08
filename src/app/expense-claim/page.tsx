@@ -13,8 +13,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Download, FileSpreadsheet, Save, Loader2, RefreshCw } from 'lucide-react';
+import { Download, FileSpreadsheet, Save, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useFinanceSession } from '@/lib/auth/use-finance-session';
 
 interface ExpenseClaimData {
   rowIndex: number;
@@ -30,6 +31,8 @@ interface ExpenseClaimData {
 }
 
 export default function ExpenseClaimPage() {
+  const session = useFinanceSession();
+  const isSuperAdmin = session?.finance_role === 'super_admin';
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [data, setData] = useState<ExpenseClaimData[]>([]);
@@ -187,6 +190,15 @@ export default function ExpenseClaimPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-900">지출청구</h1>
         <div className="flex gap-2">
+          {isSuperAdmin && (
+            <Button
+              variant="outline"
+              onClick={() => window.open('https://docs.google.com/spreadsheets/d/1Ap1me_my23FKgOLQFcfz0IrGEzCOBSrk56e-rHzsays/edit?gid=542803123#gid=542803123', '_blank')}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              원장보기
+            </Button>
+          )}
           <Button
             onClick={handleLoadData}
             disabled={loading}

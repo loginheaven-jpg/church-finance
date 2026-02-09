@@ -46,10 +46,10 @@ export const MENU_MIN_ROLE: Record<string, FinanceRole> = {
 
   // REPORTS
   '/reports': 'member',
-  '/reports/weekly': 'member',
-  '/reports/monthly': 'member',
-  '/reports/comparison': 'member',
-  '/reports/budget': 'deacon',           // deacon 이상
+  '/reports/weekly': 'deacon',            // deacon 이상
+  '/reports/monthly': 'deacon',           // deacon 이상
+  '/reports/comparison': 'deacon',        // deacon 이상
+  '/reports/budget': 'member',            // 모든 사용자
   '/reports/income-analysis': 'deacon',  // deacon 이상
   '/reports/expense-analysis': 'deacon', // deacon 이상
   '/reports/donor-analysis': 'admin',    // admin 이상 (상세 헌금자 분석)

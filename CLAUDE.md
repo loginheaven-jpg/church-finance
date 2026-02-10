@@ -4,46 +4,33 @@
 
 이 워크스페이스는 **교적부**와 **재정부** 두 개의 독립적인 프로젝트를 동시에 관리합니다.
 
-### 프로젝트 경로 및 Git 리포지토리
+### 프로젝트 명명 및 경로
 
-| 프로젝트 | 경로 | Git 리포지토리 | 기본 브랜치 |
-|----------|------|---------------|------------|
-| **교적부** | `/workspaces/saint-record-v2` | https://github.com/loginheaven-jpg/saint-record-v2 | main |
-| **재정부** | `/workspaces/church-finance` | https://github.com/loginheaven-jpg/church-finance | master |
+| 약칭 | 저장소 | 로컬 경로 | Git 리포지토리 | 기본 브랜치 |
+|------|--------|-----------|---------------|------------|
+| **교적부** | saint-record-v2 | `c:\dev\yebom\saint-record-v2` | https://github.com/loginheaven-jpg/saint-record-v2 | main |
+| **재정부** | church-finance | `c:\dev\yebom\church-finance` | https://github.com/loginheaven-jpg/church-finance | master |
+
+### 현재 프로젝트: 재정부 (church-finance)
+- Git 리포지토리: https://github.com/loginheaven-jpg/church-finance
+- 기본 브랜치: master
 
 ### Git 작업 시 필수 규칙
 
 1. **커밋/푸시 전 반드시 확인**:
    ```bash
-   # 현재 디렉토리 확인
    pwd
-   # 리모트 확인
    git remote -v
    ```
 
-2. **교적부 작업 시**:
-   ```bash
-   cd /workspaces/saint-record-v2
-   git push origin main
-   ```
-
-3. **재정부 작업 시**:
-   ```bash
-   cd /workspaces/church-finance
-   git push origin master
-   ```
-
+2. **교적부 작업 시**: `cd "c:\dev\yebom\saint-record-v2" && git push origin main`
+3. **재정부 작업 시**: `cd "c:\dev\yebom\church-finance" && git push origin master`
 4. **절대 금지**: 리모트 확인 없이 push 실행
-
-### 현재 프로젝트: 재정부 (church-finance)
-- 이 파일은 재정부 프로젝트의 CLAUDE.md입니다
-- Git 리포지토리: https://github.com/loginheaven-jpg/church-finance
-- 기본 브랜치: master
 
 ### 프로젝트별 아키텍처 문서
 
-- 교적부: `/workspaces/saint-record-v2/ARCHITECTURE.md`
-- 재정부: `/workspaces/church-finance/ARCHITECTURE.md`
+- 교적부: `c:\dev\yebom\saint-record-v2\ARCHITECTURE.md`
+- 재정부: `c:\dev\yebom\church-finance\ARCHITECTURE.md`
 
 ---
 

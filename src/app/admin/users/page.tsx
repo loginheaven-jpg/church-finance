@@ -82,39 +82,36 @@ export default function AdminUsersPage() {
     if (session && sessionChecked) loadUsers();
   }, [session, sessionChecked, loadUsers]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const approveUser = async (userId: string) => {
     if (!session || !supabase) return;
     setActionLoading(userId);
     try {
-      const { error } = await (supabase.from('users') as any).update({ is_approved: true, finance_role: 'member' }).eq('user_id', userId);
+      const { error } = await supabase.from('users').update({ is_approved: true, finance_role: 'member' }).eq('user_id', userId);
       if (error && error.message?.includes('finance_role')) {
-        await (supabase.from('users') as any).update({ is_approved: true }).eq('user_id', userId);
+        await supabase.from('users').update({ is_approved: true }).eq('user_id', userId);
       }
       await loadUsers();
     } catch (e) { console.error(e); alert('오류'); }
     setActionLoading(null);
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rejectUser = async (userId: string) => {
     if (!confirm('거부하시겠습니까?')) return;
     if (!supabase) return;
     setActionLoading(userId);
     try {
-      await (supabase.from('users') as any).delete().eq('user_id', userId);
+      await supabase.from('users').delete().eq('user_id', userId);
       await loadUsers();
     } catch (e) { console.error(e); }
     setActionLoading(null);
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const changeFinanceRole = async (userId: string, newRole: FinanceRole) => {
     if (!confirm('변경하시겠습니까?')) return;
     if (!supabase) return;
     setActionLoading(userId);
     try {
-      await (supabase.from('users') as any).update({ finance_role: newRole }).eq('user_id', userId);
+      await supabase.from('users').update({ finance_role: newRole }).eq('user_id', userId);
       await loadUsers();
     } catch (e) { console.error(e); alert('오류'); }
     setActionLoading(null);

@@ -23,23 +23,37 @@ Next.js 기반 교회 재정 관리 시스템으로, Google Sheets를 데이터�
 | 영역 | 기술 |
 |------|------|
 | Frontend | Next.js 16 (App Router), React 19, TypeScript |
-| Styling | Tailwind CSS, shadcn/ui |
+| Styling | Tailwind CSS v4, shadcn/ui |
 | 데이터 저장 | Google Sheets API, Supabase (교적부 연동) |
-| 인증 | iron-session (SSO), Session 기반 (쿠키) |
+| 인증 | iron-session (SSO), Session 기반 (쿠키), bcryptjs |
 | 차트 | Recharts |
 | 상태관리 | React Query (TanStack Query) |
+| PDF | jspdf + jspdf-autotable, @react-pdf/renderer |
+| 엑셀 | xlsx |
+| 캐싱 | Upstash Redis |
+| 날짜 | date-fns, react-day-picker |
+| 알림 | Sonner (Toast UI) |
 
 ## 폴더 구조
 
 ```
 src/
 ├── app/                    # Next.js App Router 페이지
-│   ├── api/               # API Route Handlers
+│   ├── api/               # API Route Handlers (62+ 라우트)
 │   ├── dashboard/         # 대시보드
 │   ├── reports/           # 보고서 (weekly, monthly, budget 등)
-│   ├── settings/          # 설정 페이지
-│   ├── admin/             # 관리자 페이지
-│   └── building/          # 성전 봉헌
+│   ├── settings/          # 설정 페이지 (pledge, carryover, codes, matching-rules, budget)
+│   ├── admin/             # 관리자 페이지 (annual-closing, users)
+│   ├── building/          # 성전 봉헌
+│   ├── my-offering/       # 내 헌금
+│   ├── data-entry/        # 수입/지출 입력
+│   ├── match/             # 거래 매칭
+│   ├── expense-claim/     # 지출청구
+│   ├── card-expense-integration/  # 카드내역 입력
+│   ├── card-details/      # 카드 상세 입력
+│   ├── donors/            # 헌금자 관리 (receipts 포함)
+│   ├── login/             # 로그인
+│   └── register/          # 회원가입
 ├── components/            # 재사용 컴포넌트
 │   ├── ui/               # shadcn/ui 컴포넌트
 │   ├── layout/           # 레이아웃 (Sidebar, MainLayout)
@@ -47,11 +61,19 @@ src/
 │   └── pledge/           # 작정헌금 관련
 ├── lib/                   # 유틸리티
 │   ├── google-sheets.ts  # Google Sheets 연동
+│   ├── supabase.ts       # Supabase 클라이언트 (교적부 DB 연동)
+│   ├── redis.ts          # Upstash Redis 캐싱
+│   ├── matching-engine.ts # 자동 매칭 엔진
+│   ├── queries.ts        # 공통 쿼리 함수
+│   ├── utils.ts          # 공통 유틸
+│   ├── receipt-pdf.tsx   # PDF 영수증 렌더링
+│   ├── pdf/              # PDF 관련
+│   │   └── donation-receipt.tsx  # 기부금 영수증 PDF
 │   └── auth/             # 인증 관련
 │       ├── finance-permissions.ts  # 권한 정의 및 체크
 │       └── use-finance-session.ts  # 세션 훅
 ├── middleware.ts          # SSO 감지 및 리다이렉트
-└── types/                 # TypeScript 타입 정의
+└── types/                 # TypeScript 타입 정의 (index.ts)
 ```
 
 ### SSO 관련 주요 파일
@@ -98,12 +120,13 @@ src/
 
 | 메뉴 | 경로 | 최소 권한 | 비고 |
 |------|------|----------|------|
-| 주간 요약 | `/reports/weekly` | member | |
-| 연간 요약 | `/reports/monthly` | member | |
-| 연간 비교 | `/reports/comparison` | member | |
-| 예산 집행 | `/reports/budget` | **deacon** | 예산 대비 집행 현황 |
+| 예산 집행 | `/reports/budget` | member | 예산 대비 집행 현황 |
+| 주간 요약 | `/reports/weekly` | **deacon** | |
+| 연간 요약 | `/reports/monthly` | **deacon** | |
+| 연간 비교 | `/reports/comparison` | **deacon** | |
 | 수입 분석 | `/reports/income-analysis` | **deacon** | 상세 수입 분석 |
 | 지출 분석 | `/reports/expense-analysis` | **deacon** | 상세 지출 분석 |
+| 헌금자 분석 | `/reports/donor-analysis` | **admin** | 상세 헌금자 분석 |
 | 커스텀 보고서 | `/reports/custom` | **super_admin** | 맞춤 보고서 생성 |
 
 #### MANAGEMENTS (관리)
@@ -114,18 +137,20 @@ src/
 | 데이터 입력 | `/data-entry` | admin | 수입/지출 직접 입력 |
 | 거래 매칭 | `/match` | admin | 미분류 거래 분류 |
 | 카드내역 입력 | `/card-expense-integration` | **member** | 카드 사용 내역 업로드 |
+| 카드 상세 입력 | `/card-details` | **member** | 카드 거래 상세 입력 |
 | 헌금자 관리 | `/donors` | admin | |
 | 기부금 영수증 | `/donors/receipts` | admin | |
 | 매칭 규칙 | `/settings/matching-rules` | admin | 자동 매칭 규칙 조회 |
 | 이월 잔액 | `/settings/carryover` | admin | |
 | 작정 헌금 | `/settings/pledge` | admin | 작정 관리 |
+| 계정과목 | `/settings/codes` | admin | 계정과목 관리 |
+| 예산 관리 | `/settings/budget` | admin | 연간 예산 설정 |
 
 #### ADMIN (시스템 관리)
 
 | 메뉴 | 경로 | 최소 권한 | 비고 |
 |------|------|----------|------|
 | 연마감 | `/admin/annual-closing` | super_admin | 연도 마감 처리 |
-| 시스템 설정 | `/admin/settings` | super_admin | |
 | 사용자 관리 | `/admin/users` | super_admin | 사용자 역할 부여 |
 
 ### 권한 검사 로직
@@ -222,6 +247,24 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
 ---
 
 ## 최근 변경사항
+
+### 2026-02-10 업데이트 (문서 정비 + 코드 클린징)
+
+1. **ARCHITECTURE.md 문서-코드 불일치 8건 수정 (D1~D8)**
+   - D1~D3: REPORTS 권한 테이블 수정 (weekly/monthly/comparison → deacon, budget → member, donor-analysis 추가)
+   - D4: 카드 상세 입력(/card-details) 메뉴 누락 보완
+   - D5: 존재하지 않는 /admin/settings 메뉴 제거
+   - D6: 계정과목(/settings/codes), 예산 관리(/settings/budget) 메뉴 추가
+   - D7: 폴더 구조 전면 재작성 (실제 코드와 일치)
+   - D8: 기술 스택 테이블에 PDF/Excel/캐시/날짜/토스트 추가
+
+2. **C3: 미사용 의존성 8개 제거**
+   - 제거: @hookform/resolvers, dotenv, fontkit, html2canvas, next-auth, pdf-lib, react-hook-form, zod
+   - 미사용 파일 삭제: `src/components/ui/form.tsx`
+
+3. **C4: as any 4개 제거**
+   - 파일: `src/app/admin/users/page.tsx`
+   - untyped Supabase client에서 불필요한 `as any` 캐스팅 + eslint-disable 주석 제거
 
 ### 2026-02-03 업데이트 (성능 최적화)
 

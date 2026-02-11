@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Loader2, Plus, Trash2, FileBarChart, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { BankBudgetReport } from '@/components/reports/BankBudgetReport';
+import { BankAnnualReport } from '@/components/reports/BankAnnualReport';
 import { toast } from 'sonner';
 import {
   BarChart,
@@ -82,6 +83,7 @@ export default function CustomReportPage() {
   const [includeBudget, setIncludeBudget] = useState(false);
   const [loading, setLoading] = useState(false);
   const [bankBudgetOpen, setBankBudgetOpen] = useState(false);
+  const [bankAnnualOpen, setBankAnnualOpen] = useState(false);
   const [result, setResult] = useState<ReportResult | null>(null);
 
   const addPeriod = () => {
@@ -191,13 +193,14 @@ export default function CustomReportPage() {
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             은행제출용 예산안
           </Button>
-          <Button variant="outline" disabled>
+          <Button variant="outline" onClick={() => setBankAnnualOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
-            은행제출용 연간보고 (준비중)
+            은행제출용 연간보고
           </Button>
         </CardContent>
       </Card>
       <BankBudgetReport open={bankBudgetOpen} onOpenChange={setBankBudgetOpen} />
+      <BankAnnualReport open={bankAnnualOpen} onOpenChange={setBankAnnualOpen} />
 
       {/* 설정 */}
       <Card>

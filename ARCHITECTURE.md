@@ -248,7 +248,7 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
 
 ## 최근 변경사항
 
-### 2026-02-11 업데이트 (은행제출용 예산안)
+### 2026-02-11 업데이트 (은행제출용 예산안 + 연간보고)
 
 1. **은행제출용 예산안 기능 신규 추가**
    - 커스텀 보고서 페이지 상단에 "은행제출용 예산안" 버튼 추가
@@ -256,12 +256,23 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
    - 지출부: 해당 연도 예산계획(getBudget)에서 집계
    - 수입부: 전년도 실제 수입(getIncomeRecords)에서 집계
    - 전기이월: 전년 말 잔액(getCarryoverBalance)
-   - 은행제출용 연간보고 버튼 (준비중 상태로 배치)
 
-2. **신규 파일**
-   - `src/app/api/reports/bank-budget/route.ts` — 데이터 집계 API
-   - `src/components/reports/BankBudgetReport.tsx` — Dialog 미리보기 컴포넌트
-   - `src/lib/bank-budget-excel.ts` — 클라이언트 xlsx 생성 유틸
+2. **은행제출용 연간보고 기능 신규 추가**
+   - 커스텀 보고서 페이지 상단에 "은행제출용 연간보고" 버튼 추가
+   - 연도 선택 → 읽기전용 미리보기 → 엑셀 다운로드 흐름
+   - 전년도 월별 수입/지출 집계 (12개월 테이블)
+   - 수입 카테고리: 일반헌금, 목적헌금, 잡수입, 자본수입, 건축헌금
+   - 지출 카테고리: 사례비~예비비(10개), 건축비
+   - 당기잔고(월별 수입-지출), 총잔고(전기이월 기반 누적)
+   - 수입부 상세내역 (연간 합계)
+
+3. **신규 파일**
+   - `src/app/api/reports/bank-budget/route.ts` — 예산안 데이터 집계 API
+   - `src/components/reports/BankBudgetReport.tsx` — 예산안 Dialog 미리보기
+   - `src/lib/bank-budget-excel.ts` — 예산안 엑셀 생성 유틸
+   - `src/app/api/reports/bank-annual/route.ts` — 연간보고 월별 집계 API
+   - `src/components/reports/BankAnnualReport.tsx` — 연간보고 읽기전용 Dialog
+   - `src/lib/bank-annual-excel.ts` — 연간보고 엑셀 생성 유틸
 
 ### 2026-02-10 업데이트 (문서 정비 + 코드 클린징)
 

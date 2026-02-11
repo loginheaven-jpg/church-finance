@@ -32,7 +32,8 @@ export interface BankBudgetExcelData {
     offering: Array<{ name: string; amount: number }>;     // 헌금 상세
     purposeOffering: Array<{ name: string; amount: number }>; // 목적헌금 상세
     constructionAmount: number;
-    miscAmount: number; // 잡수입/이자수입
+    miscAmount: number; // 잡수입
+    interestAmount: number; // 이자수입
   };
   expense: {
     categories: ExpenseCategory[];
@@ -85,8 +86,9 @@ export function generateBankBudgetExcel(data: BankBudgetExcelData): void {
   // 건축헌금
   detailRows.push({ e: '건축헌금', f: null, g: data.incomeDetail.constructionAmount });
 
-  // 기타
-  detailRows.push({ e: '기타', f: '잡수입/이자수입', g: data.incomeDetail.miscAmount });
+  // 기타 (잡수입/이자수입 분리)
+  detailRows.push({ e: '기타', f: '잡수입', g: data.incomeDetail.miscAmount });
+  detailRows.push({ e: null, f: '이자수입', g: data.incomeDetail.interestAmount });
 
   // 수입부 좌측 행 생성 + 우측 상세 병합
   let detailIdx = 0;
@@ -142,11 +144,8 @@ export function generateBankBudgetExcel(data: BankBudgetExcelData): void {
   const constructionExp = data.expense.categories.find(c => c.categoryCode === 500);
   rows.push([null, '건축비', constructionExp?.total || 0, null, null, null, null]);
 
-  // 빈 행
-  rows.push(emptyRow());
-
-  // 금년총계
-  rows.push(['금년총계', null, data.expense.grandTotal, null, null, null, null]);
+  // 금년지출총계
+  rows.push(['금년지출총계', null, data.expense.grandTotal, null, null, null, null]);
 
   // 시트 생성
   const ws = XLSX.utils.aoa_to_sheet(rows);

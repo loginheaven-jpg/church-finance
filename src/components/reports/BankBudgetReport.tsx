@@ -151,7 +151,7 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
       income: {
         categories: [10, 20, 30, 40, 500].map(catCode => ({
           categoryCode: catCode,
-          categoryName: { 10: '헌금', 20: '목적헌금', 30: '잡수입', 40: '자본수입', 500: '건축헌금' }[catCode] || '',
+          categoryName: { 10: '헌금', 20: '목적헌금', 30: '잡수입', 40: '이자수입', 500: '건축헌금' }[catCode] || '',
           total: incomeComputed.catTotals[catCode] || 0,
           codes: [],
         })),
@@ -163,7 +163,8 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
         offering: offeringDetail,
         purposeOffering: purposeDetail,
         constructionAmount: incomeComputed.catTotals[500] || 0,
-        miscAmount: (edit.incomeCodes[30] || 0) + (edit.incomeCodes[31] || 0),
+        miscAmount: (edit.incomeCodes[30] || 0) + (edit.incomeCodes[32] || 0),
+        interestAmount: edit.incomeCodes[31] || 0,
       },
       expense: {
         categories: data.expense.categories.map(cat => ({
@@ -238,7 +239,7 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
                       { code: 10, name: '헌금' },
                       { code: 20, name: '목적헌금' },
                       { code: 30, name: '잡수입' },
-                      { code: 40, name: '자본수입' },
+                      { code: 40, name: '이자수입' },
                     ]).map(cat => (
                       <tr key={cat.code} className="border-b">
                         <td className="py-2 px-3 pl-8">{cat.name}</td>
@@ -410,7 +411,12 @@ function AmountInput({ value, onChange }: { value: number; onChange: (v: number)
     <Input
       type="text"
       value={text}
-      onChange={e => setText(e.target.value)}
+      onChange={e => {
+            const v = e.target.value;
+            setText(v);
+            const num = parseInt(v.replace(/[^0-9-]/g, ''), 10);
+            if (!isNaN(num)) onChange(num);
+          }}
       onBlur={handleBlur}
       onFocus={handleFocus}
       className="h-7 text-right text-sm w-40 ml-auto"

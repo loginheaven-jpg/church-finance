@@ -14,9 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Plus, Trash2, FileBarChart, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Loader2, Plus, Trash2, FileBarChart, FileSpreadsheet, Download, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { BankBudgetReport } from '@/components/reports/BankBudgetReport';
 import { BankAnnualReport } from '@/components/reports/BankAnnualReport';
+import { YearSelector } from '@/components/common/YearSelector';
+import { generateCombinedBankExcel } from '@/lib/bank-combined-excel';
+import { BankBudgetExcelData } from '@/lib/bank-budget-excel';
+import { BankAnnualExcelData } from '@/lib/bank-annual-excel';
 import { toast } from 'sonner';
 import {
   BarChart,
@@ -84,6 +88,8 @@ export default function CustomReportPage() {
   const [loading, setLoading] = useState(false);
   const [bankBudgetOpen, setBankBudgetOpen] = useState(false);
   const [bankAnnualOpen, setBankAnnualOpen] = useState(false);
+  const [bankYear, setBankYear] = useState(currentYear);
+  const [excelLoading, setExcelLoading] = useState(false);
   const [result, setResult] = useState<ReportResult | null>(null);
 
   const addPeriod = () => {
@@ -156,6 +162,80 @@ export default function CustomReportPage() {
     }
   };
 
+  const handleCombinedExcel = async () => {
+    setExcelLoading(true);
+    try {
+      const [budgetRes, annualRes] = await Promise.all([
+        fetch(`/api/reports/bank-budget?year=${bankYear}`),
+        fetch(`/api/reports/bank-annual?year=${bankYear - 1}`),
+      ]);
+      const budgetJson = await budgetRes.json();
+      const annualJson = await annualRes.json();
+
+      if (!budgetJson.success || !annualJson.success) {
+        toast.error(budgetJson.error || annualJson.error || '데이터 조회 실패');
+        return;
+      }
+
+      // 예산안 데이터 변환
+      const bd = budgetJson.data;
+      const incCodes: Record<number, number> = {};
+      for (const cat of bd.income.categories) {
+        for (const c of cat.codes) {
+          incCodes[c.code] = c.amount;
+        }
+      }
+      // 기타잡수입(32)을 잡수입(30)에 합산
+      incCodes[30] = (incCodes[30] || 0) + (incCodes[32] || 0);
+
+      const budgetData: BankBudgetExcelData = {
+        year: bankYear,
+        carryover: bd.carryover.general,
+        income: {
+          categories: [
+            { categoryCode: 10, categoryName: '헌금', total: [11,12,13,14].reduce((s: number, c: number) => s + (incCodes[c] || 0), 0), codes: [] },
+            { categoryCode: 20, categoryName: '목적헌금', total: [21,22,24].reduce((s: number, c: number) => s + (incCodes[c] || 0), 0), codes: [] },
+            { categoryCode: 30, categoryName: '잡수입', total: incCodes[30] || 0, codes: [] },
+            { categoryCode: 40, categoryName: '이자수입', total: incCodes[31] || 0, codes: [] },
+            { categoryCode: 500, categoryName: '건축헌금', total: bd.income.constructionTotal, codes: [] },
+          ],
+          generalSubtotal: bd.income.generalSubtotal,
+          constructionTotal: bd.income.constructionTotal,
+          grandTotal: bd.income.grandTotal,
+        },
+        incomeDetail: {
+          offering: [11, 12, 13, 14].map((c: number) => ({ name: getCodeName(c), amount: incCodes[c] || 0 })),
+          purposeOffering: [21, 22, 24].map((c: number) => ({ name: getCodeName(c), amount: incCodes[c] || 0 })),
+          constructionAmount: bd.income.constructionTotal,
+          miscAmount: incCodes[30] || 0,
+          interestAmount: incCodes[31] || 0,
+        },
+        expense: {
+          categories: bd.expense.categories,
+          generalSubtotal: bd.expense.generalSubtotal,
+          constructionTotal: bd.expense.constructionTotal,
+          grandTotal: bd.expense.grandTotal,
+        },
+      };
+
+      // 연간보고 데이터 변환
+      const ad = annualJson.data;
+      const annualData: BankAnnualExcelData = {
+        year: ad.year,
+        carryover: ad.carryover.total,
+        months: ad.months,
+        incomeDetail: ad.incomeDetail,
+      };
+
+      generateCombinedBankExcel(bankYear, budgetData, annualData);
+      toast.success('엑셀 파일이 다운로드되었습니다');
+    } catch {
+      toast.error('엑셀 생성 중 오류가 발생했습니다');
+    } finally {
+      setExcelLoading(false);
+    }
+  };
+
   const formatAmount = (amount: number) => {
     if (Math.abs(amount) >= 100000000) {
       return `${(amount / 100000000).toFixed(1)}억`;
@@ -197,6 +277,13 @@ export default function CustomReportPage() {
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             은행제출용 연간보고
           </Button>
+          <div className="flex items-center gap-2 ml-auto">
+            <YearSelector year={bankYear} onYearChange={setBankYear} variant="compact" />
+            <Button onClick={handleCombinedExcel} disabled={excelLoading}>
+              {excelLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              엑셀저장
+            </Button>
+          </div>
         </CardContent>
       </Card>
       <BankBudgetReport open={bankBudgetOpen} onOpenChange={setBankBudgetOpen} />
@@ -484,4 +571,13 @@ export default function CustomReportPage() {
       )}
     </div>
   );
+}
+
+function getCodeName(code: number): string {
+  const names: Record<number, string> = {
+    11: '주일헌금', 12: '십일조헌금', 13: '감사헌금', 14: '특별(절기)헌금',
+    21: '선교헌금', 22: '구제헌금', 24: '지정헌금',
+    30: '잡수입', 31: '이자수입', 500: '건축헌금',
+  };
+  return names[code] || `코드${code}`;
 }

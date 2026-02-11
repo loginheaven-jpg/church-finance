@@ -56,7 +56,7 @@ function monthValues(months: MonthData[], getter: (m: MonthData) => number): (st
   return months.map(m => val(getter(m)));
 }
 
-export function generateBankAnnualExcel(data: BankAnnualExcelData): void {
+export function createBankAnnualSheet(data: BankAnnualExcelData): XLSX.WorkSheet {
   const rows: (string | number | null)[][] = [];
   const M = data.months;
 
@@ -201,7 +201,11 @@ export function generateBankAnnualExcel(data: BankAnnualExcelData): void {
     }
   }
 
-  // 워크북 생성 및 다운로드
+  return ws;
+}
+
+export function generateBankAnnualExcel(data: BankAnnualExcelData): void {
+  const ws = createBankAnnualSheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '연간보고');
   XLSX.writeFile(wb, `연간보고_${data.year}년.xlsx`);

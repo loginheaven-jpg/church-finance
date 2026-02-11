@@ -43,7 +43,7 @@ export interface BankBudgetExcelData {
   };
 }
 
-export function generateBankBudgetExcel(data: BankBudgetExcelData): void {
+export function createBankBudgetSheet(data: BankBudgetExcelData): XLSX.WorkSheet {
   const rows: (string | number | null)[][] = [];
 
   // Helper: 빈 행
@@ -172,7 +172,11 @@ export function generateBankBudgetExcel(data: BankBudgetExcelData): void {
     }
   }
 
-  // 워크북 생성 및 다운로드
+  return ws;
+}
+
+export function generateBankBudgetExcel(data: BankBudgetExcelData): void {
+  const ws = createBankBudgetSheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '예산안');
   XLSX.writeFile(wb, `예산안_${data.year}년.xlsx`);

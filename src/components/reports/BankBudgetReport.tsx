@@ -5,9 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { YearSelector } from '@/components/common/YearSelector';
-import { Loader2, Download } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { generateBankBudgetExcel, BankBudgetExcelData } from '@/lib/bank-budget-excel';
 
 interface IncomeCode {
   code: number;
@@ -140,51 +139,6 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
     setEdit(prev => prev ? { ...prev, expenseCategories: { ...prev.expenseCategories, [catCode]: value } } : prev);
   }, []);
 
-  const handleDownload = () => {
-    if (!edit || !data || !incomeComputed || !expenseComputed) return;
-
-    const offeringDetail = [11, 12, 13, 14]
-      .map(c => ({ name: getCodeName(c), amount: edit.incomeCodes[c] || 0 }));
-    const purposeDetail = [21, 22, 24]
-      .map(c => ({ name: getCodeName(c), amount: edit.incomeCodes[c] || 0 }));
-
-    const excelData: BankBudgetExcelData = {
-      year,
-      carryover: edit.carryover,
-      income: {
-        categories: [
-          { categoryCode: 10, categoryName: '헌금', total: [11,12,13,14].reduce((s,c) => s + (edit.incomeCodes[c] || 0), 0), codes: [] },
-          { categoryCode: 20, categoryName: '목적헌금', total: [21,22,24].reduce((s,c) => s + (edit.incomeCodes[c] || 0), 0), codes: [] },
-          { categoryCode: 30, categoryName: '잡수입', total: edit.incomeCodes[30] || 0, codes: [] },
-          { categoryCode: 40, categoryName: '이자수입', total: edit.incomeCodes[31] || 0, codes: [] },
-          { categoryCode: 500, categoryName: '건축헌금', total: incomeComputed.catTotals[500] || 0, codes: [] },
-        ],
-        generalSubtotal: incomeComputed.general,
-        constructionTotal: incomeComputed.construction,
-        grandTotal: incomeComputed.total,
-      },
-      incomeDetail: {
-        offering: offeringDetail,
-        purposeOffering: purposeDetail,
-        constructionAmount: incomeComputed.catTotals[500] || 0,
-        miscAmount: edit.incomeCodes[30] || 0,
-        interestAmount: edit.incomeCodes[31] || 0,
-      },
-      expense: {
-        categories: data.expense.categories.map(cat => ({
-          ...cat,
-          total: edit.expenseCategories[cat.categoryCode] || 0,
-        })),
-        generalSubtotal: expenseComputed.general,
-        constructionTotal: expenseComputed.construction,
-        grandTotal: expenseComputed.total,
-      },
-    };
-
-    generateBankBudgetExcel(excelData);
-    toast.success('엑셀 파일이 다운로드되었습니다');
-  };
-
   const fmt = (n: number) => n.toLocaleString('ko-KR');
 
   return (
@@ -201,12 +155,6 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             생성
           </Button>
-          {edit && incomeComputed && expenseComputed && (
-            <Button variant="outline" onClick={handleDownload} className="ml-auto">
-              <Download className="mr-2 h-4 w-4" />
-              엑셀 다운로드
-            </Button>
-          )}
         </div>
 
         {/* 미리보기 */}
@@ -470,23 +418,4 @@ function DetailSection({
       ))}
     </>
   );
-}
-
-// 코드명 매핑
-function getCodeName(code: number): string {
-  const names: Record<number, string> = {
-    11: '주일헌금',
-    12: '십일조헌금',
-    13: '감사헌금',
-    14: '특별(절기)헌금',
-    21: '선교헌금',
-    22: '구제헌금',
-    24: '지정헌금',
-    30: '잡수입',
-    31: '이자수입',
-    32: '기타잡수입',
-    40: '자본수입',
-    500: '건축헌금',
-  };
-  return names[code] || `코드${code}`;
 }

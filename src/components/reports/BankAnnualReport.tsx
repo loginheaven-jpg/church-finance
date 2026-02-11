@@ -4,9 +4,8 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { YearSelector } from '@/components/common/YearSelector';
-import { Loader2, Download } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { generateBankAnnualExcel, BankAnnualExcelData } from '@/lib/bank-annual-excel';
 
 interface MonthlyIncome {
   general: number;
@@ -82,18 +81,6 @@ export function BankAnnualReport({ open, onOpenChange }: BankAnnualReportProps) 
     }
   };
 
-  const handleDownload = () => {
-    if (!data) return;
-    const excelData: BankAnnualExcelData = {
-      year: data.year,
-      carryover: data.carryover.total,
-      months: data.months,
-      incomeDetail: data.incomeDetail,
-    };
-    generateBankAnnualExcel(excelData);
-    toast.success('엑셀 파일이 다운로드되었습니다');
-  };
-
   const fmt = (n: number) => {
     if (n === 0) return '-';
     return n.toLocaleString('ko-KR');
@@ -143,12 +130,6 @@ export function BankAnnualReport({ open, onOpenChange }: BankAnnualReportProps) 
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             생성
           </Button>
-          {data && (
-            <Button variant="outline" onClick={handleDownload} className="ml-auto">
-              <Download className="mr-2 h-4 w-4" />
-              엑셀 다운로드
-            </Button>
-          )}
         </div>
 
         {/* 미리보기 */}

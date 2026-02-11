@@ -248,6 +248,21 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
 
 ## 최근 변경사항
 
+### 2026-02-11 업데이트 (은행제출용 예산안)
+
+1. **은행제출용 예산안 기능 신규 추가**
+   - 커스텀 보고서 페이지 상단에 "은행제출용 예산안" 버튼 추가
+   - 연도 선택 → 미리보기(편집 가능) → 엑셀 다운로드 흐름
+   - 지출부: 해당 연도 예산계획(getBudget)에서 집계
+   - 수입부: 전년도 실제 수입(getIncomeRecords)에서 집계
+   - 전기이월: 전년 말 잔액(getCarryoverBalance)
+   - 은행제출용 연간보고 버튼 (준비중 상태로 배치)
+
+2. **신규 파일**
+   - `src/app/api/reports/bank-budget/route.ts` — 데이터 집계 API
+   - `src/components/reports/BankBudgetReport.tsx` — Dialog 미리보기 컴포넌트
+   - `src/lib/bank-budget-excel.ts` — 클라이언트 xlsx 생성 유틸
+
 ### 2026-02-10 업데이트 (문서 정비 + 코드 클린징)
 
 1. **ARCHITECTURE.md 문서-코드 불일치 8건 수정 (D1~D8)**

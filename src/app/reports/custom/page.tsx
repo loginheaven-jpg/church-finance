@@ -14,7 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Plus, Trash2, FileBarChart, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Loader2, Plus, Trash2, FileBarChart, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { BankBudgetReport } from '@/components/reports/BankBudgetReport';
 import { toast } from 'sonner';
 import {
   BarChart,
@@ -80,6 +81,7 @@ export default function CustomReportPage() {
   const [includeExpense, setIncludeExpense] = useState(true);
   const [includeBudget, setIncludeBudget] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [bankBudgetOpen, setBankBudgetOpen] = useState(false);
   const [result, setResult] = useState<ReportResult | null>(null);
 
   const addPeriod = () => {
@@ -181,6 +183,21 @@ export default function CustomReportPage() {
           원하는 기간과 항목을 선택하여 맞춤형 보고서를 생성합니다
         </p>
       </div>
+
+      {/* 은행 보고서 */}
+      <Card>
+        <CardContent className="flex items-center gap-3 py-4">
+          <Button variant="outline" onClick={() => setBankBudgetOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            은행제출용 예산안
+          </Button>
+          <Button variant="outline" disabled>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            은행제출용 연간보고 (준비중)
+          </Button>
+        </CardContent>
+      </Card>
+      <BankBudgetReport open={bankBudgetOpen} onOpenChange={setBankBudgetOpen} />
 
       {/* 설정 */}
       <Card>

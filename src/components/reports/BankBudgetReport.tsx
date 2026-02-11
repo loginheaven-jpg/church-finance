@@ -140,9 +140,9 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
   const handleDownload = () => {
     if (!edit || !data || !incomeComputed || !expenseComputed) return;
 
-    const offeringDetail = [11, 12, 13, 14, 21]
+    const offeringDetail = [11, 12, 13, 14]
       .map(c => ({ name: getCodeName(c), amount: edit.incomeCodes[c] || 0 }));
-    const purposeDetail = [22, 24]
+    const purposeDetail = [21, 22, 24]
       .map(c => ({ name: getCodeName(c), amount: edit.incomeCodes[c] || 0 }));
 
     const excelData: BankBudgetExcelData = {
@@ -184,7 +184,7 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1400px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[1400px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>은행제출용 예산안</DialogTitle>
         </DialogHeader>

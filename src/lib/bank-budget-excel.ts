@@ -70,27 +70,22 @@ export function generateBankBudgetExcel(data: BankBudgetExcelData): void {
   // 수입부 상세내역 행 수집 (우측에 배치)
   const detailRows: Array<{ e: string | null; f: string | null; g: number | null }> = [];
 
-  // 헌금 상세
-  if (data.incomeDetail.offering.length > 0) {
-    detailRows.push({ e: null, f: '주일헌금', g: data.incomeDetail.offering.find(o => o.name === '주일헌금')?.amount || 0 });
-    detailRows.push({ e: null, f: '십일조헌금', g: data.incomeDetail.offering.find(o => o.name === '십일조헌금')?.amount || 0 });
-    detailRows.push({ e: '헌금', f: '감사헌금', g: data.incomeDetail.offering.find(o => o.name === '감사헌금')?.amount || 0 });
-    detailRows.push({ e: null, f: '특별(절기)헌금', g: data.incomeDetail.offering.find(o => o.name === '특별(절기)헌금')?.amount || 0 });
-    detailRows.push({ e: null, f: '선교헌금', g: data.incomeDetail.offering.find(o => o.name === '선교헌금')?.amount || 0 });
+  // 헌금 상세 (첫 항목에 '헌금' 라벨)
+  for (let i = 0; i < data.incomeDetail.offering.length; i++) {
+    const item = data.incomeDetail.offering[i];
+    detailRows.push({ e: i === 0 ? '헌금' : null, f: item.name, g: item.amount });
   }
 
-  // 목적헌금 상세
-  if (data.incomeDetail.purposeOffering.length > 0) {
-    detailRows.push({ e: '목적헌금', f: '구제헌금', g: data.incomeDetail.purposeOffering.find(o => o.name === '구제헌금')?.amount || 0 });
-    detailRows.push({ e: null, f: '지정헌금', g: data.incomeDetail.purposeOffering.find(o => o.name === '지정헌금')?.amount || 0 });
+  // 목적헌금 상세 (첫 항목에 '목적헌금' 라벨)
+  for (let i = 0; i < data.incomeDetail.purposeOffering.length; i++) {
+    const item = data.incomeDetail.purposeOffering[i];
+    detailRows.push({ e: i === 0 ? '목적헌금' : null, f: item.name, g: item.amount });
   }
 
   // 건축헌금
-  detailRows.push({ e: null, f: null, g: null }); // 빈행
   detailRows.push({ e: '건축헌금', f: null, g: data.incomeDetail.constructionAmount });
 
   // 기타
-  detailRows.push({ e: null, f: null, g: null }); // 빈행
   detailRows.push({ e: '기타', f: '잡수입/이자수입', g: data.incomeDetail.miscAmount });
 
   // 수입부 좌측 행 생성 + 우측 상세 병합
@@ -103,7 +98,7 @@ export function generateBankBudgetExcel(data: BankBudgetExcelData): void {
 
   // 일반수입소계
   const detail1 = detailRows[detailIdx] || { e: null, f: null, g: null };
-  rows.push(['일반수입소계', null, data.income.generalSubtotal, null, detail1.e, detail1.f, detail1.g]);
+  rows.push([null, '일반수입소계', data.income.generalSubtotal, null, detail1.e, detail1.f, detail1.g]);
   detailIdx++;
 
   // 건축헌금
@@ -117,18 +112,22 @@ export function generateBankBudgetExcel(data: BankBudgetExcelData): void {
   rows.push(['금년수입총계', null, data.income.grandTotal, null, detail3.e, detail3.f, detail3.g]);
   detailIdx++;
 
-  // 나머지 상세 행 추가
+  // 나머지 상세 행 (마지막 1개는 지출부 헤더와 같은 행에 배치)
+  const remainingDetails: typeof detailRows = [];
   while (detailIdx < detailRows.length) {
-    const detail = detailRows[detailIdx];
-    rows.push([null, null, null, null, detail.e, detail.f, detail.g]);
+    remainingDetails.push(detailRows[detailIdx]);
     detailIdx++;
   }
+  for (let i = 0; i < remainingDetails.length - 1; i++) {
+    const detail = remainingDetails[i];
+    rows.push([null, null, null, null, detail.e, detail.f, detail.g]);
+  }
 
-  // 빈 행
-  rows.push(emptyRow());
-
-  // 지출부 헤더
-  rows.push([null, '지출부', null, null, null, null, null]);
+  // 지출부 헤더 (마지막 상세와 같은 행)
+  const lastDetail = remainingDetails.length > 0
+    ? remainingDetails[remainingDetails.length - 1]
+    : { e: null, f: null, g: null };
+  rows.push([null, '지출부', null, null, lastDetail.e, lastDetail.f, lastDetail.g]);
 
   // 지출부 카테고리 (건축 제외)
   const generalExpCats = data.expense.categories.filter(c => c.categoryCode < 500);
@@ -137,7 +136,7 @@ export function generateBankBudgetExcel(data: BankBudgetExcelData): void {
   }
 
   // 일반지출 소계
-  rows.push(['일반지출 소계', null, data.expense.generalSubtotal, null, null, null, null]);
+  rows.push([null, '일반지출 소계', data.expense.generalSubtotal, null, null, null, null]);
 
   // 건축비
   const constructionExp = data.expense.categories.find(c => c.categoryCode === 500);

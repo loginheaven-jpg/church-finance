@@ -87,6 +87,9 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
             incCodes[c.code] = c.amount;
           }
         }
+        // 기타잡수입(32)을 잡수입(30)에 합산
+        incCodes[30] = (incCodes[30] || 0) + (incCodes[32] || 0);
+        delete incCodes[32];
         const expCats: Record<number, number> = {};
         for (const cat of d.expense.categories) {
           expCats[cat.categoryCode] = cat.total;
@@ -149,12 +152,13 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
       year,
       carryover: edit.carryover,
       income: {
-        categories: [10, 20, 30, 40, 500].map(catCode => ({
-          categoryCode: catCode,
-          categoryName: { 10: '헌금', 20: '목적헌금', 30: '잡수입', 40: '이자수입', 500: '건축헌금' }[catCode] || '',
-          total: incomeComputed.catTotals[catCode] || 0,
-          codes: [],
-        })),
+        categories: [
+          { categoryCode: 10, categoryName: '헌금', total: [11,12,13,14].reduce((s,c) => s + (edit.incomeCodes[c] || 0), 0), codes: [] },
+          { categoryCode: 20, categoryName: '목적헌금', total: [21,22,24].reduce((s,c) => s + (edit.incomeCodes[c] || 0), 0), codes: [] },
+          { categoryCode: 30, categoryName: '잡수입', total: edit.incomeCodes[30] || 0, codes: [] },
+          { categoryCode: 40, categoryName: '이자수입', total: edit.incomeCodes[31] || 0, codes: [] },
+          { categoryCode: 500, categoryName: '건축헌금', total: incomeComputed.catTotals[500] || 0, codes: [] },
+        ],
         generalSubtotal: incomeComputed.general,
         constructionTotal: incomeComputed.construction,
         grandTotal: incomeComputed.total,
@@ -163,7 +167,7 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
         offering: offeringDetail,
         purposeOffering: purposeDetail,
         constructionAmount: incomeComputed.catTotals[500] || 0,
-        miscAmount: (edit.incomeCodes[30] || 0) + (edit.incomeCodes[32] || 0),
+        miscAmount: edit.incomeCodes[30] || 0,
         interestAmount: edit.incomeCodes[31] || 0,
       },
       expense: {
@@ -236,14 +240,14 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
 
                     {/* 수입 카테고리 (건축 제외) — READ ONLY */}
                     {([
-                      { code: 10, name: '헌금' },
-                      { code: 20, name: '목적헌금' },
-                      { code: 30, name: '잡수입' },
-                      { code: 40, name: '이자수입' },
+                      { name: '헌금', value: [11,12,13,14].reduce((s,c) => s + (edit.incomeCodes[c] || 0), 0) },
+                      { name: '목적헌금', value: [21,22,24].reduce((s,c) => s + (edit.incomeCodes[c] || 0), 0) },
+                      { name: '잡수입', value: edit.incomeCodes[30] || 0 },
+                      { name: '이자수입', value: edit.incomeCodes[31] || 0 },
                     ]).map(cat => (
-                      <tr key={cat.code} className="border-b">
+                      <tr key={cat.name} className="border-b">
                         <td className="py-2 px-3 pl-8">{cat.name}</td>
-                        <td className="py-2 px-3 text-right font-mono">{fmt(incomeComputed.catTotals[cat.code] || 0)}</td>
+                        <td className="py-2 px-3 text-right font-mono">{fmt(cat.value)}</td>
                       </tr>
                     ))}
 
@@ -328,7 +332,6 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
                         { code: 12, name: '십일조헌금' },
                         { code: 13, name: '감사헌금' },
                         { code: 14, name: '특별(절기)헌금' },
-                        { code: 21, name: '선교헌금' },
                       ]}
                       values={edit.incomeCodes}
                       onChange={updateIncCode}
@@ -338,6 +341,7 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
                     <DetailSection
                       label="목적헌금"
                       items={[
+                        { code: 21, name: '선교헌금' },
                         { code: 22, name: '구제헌금' },
                         { code: 24, name: '지정헌금' },
                       ]}
@@ -345,13 +349,12 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
                       onChange={updateIncCode}
                     />
 
-                    {/* 잡수입 상세 */}
+                    {/* 잡수입 상세 (기타잡수입은 잡수입에 합산) */}
                     <DetailSection
                       label="잡수입"
                       items={[
                         { code: 30, name: '잡수입' },
                         { code: 31, name: '이자수입' },
-                        { code: 32, name: '기타잡수입' },
                       ]}
                       values={edit.incomeCodes}
                       onChange={updateIncCode}

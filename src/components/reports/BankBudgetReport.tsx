@@ -7,6 +7,16 @@ import { Input } from '@/components/ui/input';
 import { YearSelector } from '@/components/common/YearSelector';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { BankBudgetExcelData } from '@/lib/bank-budget-excel';
+
+// 최대자리 바로 아래 단위까지 올림
+function roundUpBudget(n: number): number {
+  if (n <= 0) return 0;
+  const digits = Math.floor(Math.log10(n));
+  if (digits < 1) return n;
+  const unit = Math.pow(10, digits - 1);
+  return Math.ceil(n / unit) * unit;
+}
 
 interface IncomeCode {
   code: number;
@@ -54,6 +64,7 @@ interface EditState {
 interface BankBudgetReportProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onBudgetData?: (data: BankBudgetExcelData | null) => void;
 }
 
 // 코드 → 카테고리 매핑
@@ -62,7 +73,17 @@ function codeToCategory(code: number): number {
   return Math.floor(code / 10) * 10;
 }
 
-export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) {
+// 코드명 매핑
+function getCodeName(code: number): string {
+  const names: Record<number, string> = {
+    11: '주일헌금', 12: '십일조헌금', 13: '감사헌금', 14: '특별(절기)헌금',
+    21: '선교헌금', 22: '구제헌금', 24: '지정헌금',
+    30: '잡수입', 31: '이자수입', 500: '건축헌금',
+  };
+  return names[code] || `코드${code}`;
+}
+
+export function BankBudgetReport({ open, onOpenChange, onBudgetData }: BankBudgetReportProps) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [loading, setLoading] = useState(false);
@@ -79,11 +100,11 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
       if (json.success) {
         const d: BankBudgetData = json.data;
         setData(d);
-        // 편집 상태 초기화: 상세코드 금액
+        // 편집 상태 초기화: 상세코드 금액 (올림 적용)
         const incCodes: Record<number, number> = {};
         for (const cat of d.income.categories) {
           for (const c of cat.codes) {
-            incCodes[c.code] = c.amount;
+            incCodes[c.code] = roundUpBudget(c.amount);
           }
         }
         // 기타잡수입(32)을 잡수입(30)에 합산
@@ -139,10 +160,49 @@ export function BankBudgetReport({ open, onOpenChange }: BankBudgetReportProps) 
     setEdit(prev => prev ? { ...prev, expenseCategories: { ...prev.expenseCategories, [catCode]: value } } : prev);
   }, []);
 
+  // Dialog 닫힐 때 편집 데이터를 부모에 전달
+  const handleOpenChange = useCallback((newOpen: boolean) => {
+    if (!newOpen && edit && data && incomeComputed && expenseComputed) {
+      onBudgetData?.({
+        year,
+        carryover: edit.carryover,
+        income: {
+          categories: [
+            { categoryCode: 10, categoryName: '헌금', total: [11,12,13,14].reduce((s,c) => s + (edit.incomeCodes[c] || 0), 0), codes: [] },
+            { categoryCode: 20, categoryName: '목적헌금', total: [21,22,24].reduce((s,c) => s + (edit.incomeCodes[c] || 0), 0), codes: [] },
+            { categoryCode: 30, categoryName: '잡수입', total: edit.incomeCodes[30] || 0, codes: [] },
+            { categoryCode: 40, categoryName: '이자수입', total: edit.incomeCodes[31] || 0, codes: [] },
+            { categoryCode: 500, categoryName: '건축헌금', total: incomeComputed.catTotals[500] || 0, codes: [] },
+          ],
+          generalSubtotal: incomeComputed.general,
+          constructionTotal: incomeComputed.construction,
+          grandTotal: incomeComputed.total,
+        },
+        incomeDetail: {
+          offering: [11,12,13,14].map(c => ({ name: getCodeName(c), amount: edit.incomeCodes[c] || 0 })),
+          purposeOffering: [21,22,24].map(c => ({ name: getCodeName(c), amount: edit.incomeCodes[c] || 0 })),
+          constructionAmount: incomeComputed.catTotals[500] || 0,
+          miscAmount: edit.incomeCodes[30] || 0,
+          interestAmount: edit.incomeCodes[31] || 0,
+        },
+        expense: {
+          categories: data.expense.categories.map(cat => ({
+            ...cat,
+            total: edit.expenseCategories[cat.categoryCode] || 0,
+          })),
+          generalSubtotal: expenseComputed.general,
+          constructionTotal: expenseComputed.construction,
+          grandTotal: expenseComputed.total,
+        },
+      });
+    }
+    onOpenChange(newOpen);
+  }, [edit, data, incomeComputed, expenseComputed, year, onBudgetData, onOpenChange]);
+
   const fmt = (n: number) => n.toLocaleString('ko-KR');
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[1400px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>은행제출용 예산안</DialogTitle>

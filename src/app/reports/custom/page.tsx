@@ -90,6 +90,7 @@ export default function CustomReportPage() {
   const [bankAnnualOpen, setBankAnnualOpen] = useState(false);
   const [bankYear, setBankYear] = useState(currentYear);
   const [excelLoading, setExcelLoading] = useState(false);
+  const [savedBudgetData, setSavedBudgetData] = useState<BankBudgetExcelData | null>(null);
   const [result, setResult] = useState<ReportResult | null>(null);
 
   const addPeriod = () => {
@@ -165,60 +166,64 @@ export default function CustomReportPage() {
   const handleCombinedExcel = async () => {
     setExcelLoading(true);
     try {
-      const [budgetRes, annualRes] = await Promise.all([
-        fetch(`/api/reports/bank-budget?year=${bankYear}`),
-        fetch(`/api/reports/bank-annual?year=${bankYear - 1}`),
-      ]);
-      const budgetJson = await budgetRes.json();
-      const annualJson = await annualRes.json();
+      // 예산안: 미리보기에서 편집한 데이터가 있으면 사용, 없으면 API 호출
+      let budgetData: BankBudgetExcelData;
+      if (savedBudgetData && savedBudgetData.year === bankYear) {
+        budgetData = savedBudgetData;
+      } else {
+        const budgetRes = await fetch(`/api/reports/bank-budget?year=${bankYear}`);
+        const budgetJson = await budgetRes.json();
+        if (!budgetJson.success) {
+          toast.error(budgetJson.error || '예산안 데이터 조회 실패');
+          return;
+        }
+        const bd = budgetJson.data;
+        const incCodes: Record<number, number> = {};
+        for (const cat of bd.income.categories) {
+          for (const c of cat.codes) {
+            incCodes[c.code] = roundUpBudget(c.amount);
+          }
+        }
+        incCodes[30] = (incCodes[30] || 0) + (incCodes[32] || 0);
 
-      if (!budgetJson.success || !annualJson.success) {
-        toast.error(budgetJson.error || annualJson.error || '데이터 조회 실패');
+        budgetData = {
+          year: bankYear,
+          carryover: bd.carryover.general,
+          income: {
+            categories: [
+              { categoryCode: 10, categoryName: '헌금', total: [11,12,13,14].reduce((s: number, c: number) => s + (incCodes[c] || 0), 0), codes: [] },
+              { categoryCode: 20, categoryName: '목적헌금', total: [21,22,24].reduce((s: number, c: number) => s + (incCodes[c] || 0), 0), codes: [] },
+              { categoryCode: 30, categoryName: '잡수입', total: incCodes[30] || 0, codes: [] },
+              { categoryCode: 40, categoryName: '이자수입', total: incCodes[31] || 0, codes: [] },
+              { categoryCode: 500, categoryName: '건축헌금', total: roundUpBudget(bd.income.constructionTotal), codes: [] },
+            ],
+            generalSubtotal: bd.income.generalSubtotal,
+            constructionTotal: bd.income.constructionTotal,
+            grandTotal: bd.income.grandTotal,
+          },
+          incomeDetail: {
+            offering: [11, 12, 13, 14].map((c: number) => ({ name: getCodeName(c), amount: incCodes[c] || 0 })),
+            purposeOffering: [21, 22, 24].map((c: number) => ({ name: getCodeName(c), amount: incCodes[c] || 0 })),
+            constructionAmount: roundUpBudget(bd.income.constructionTotal),
+            miscAmount: incCodes[30] || 0,
+            interestAmount: incCodes[31] || 0,
+          },
+          expense: {
+            categories: bd.expense.categories,
+            generalSubtotal: bd.expense.generalSubtotal,
+            constructionTotal: bd.expense.constructionTotal,
+            grandTotal: bd.expense.grandTotal,
+          },
+        };
+      }
+
+      // 연간보고: 항상 API에서 조회 (읽기전용이므로 편집 데이터 없음)
+      const annualRes = await fetch(`/api/reports/bank-annual?year=${bankYear - 1}`);
+      const annualJson = await annualRes.json();
+      if (!annualJson.success) {
+        toast.error(annualJson.error || '연간보고 데이터 조회 실패');
         return;
       }
-
-      // 예산안 데이터 변환
-      const bd = budgetJson.data;
-      const incCodes: Record<number, number> = {};
-      for (const cat of bd.income.categories) {
-        for (const c of cat.codes) {
-          incCodes[c.code] = c.amount;
-        }
-      }
-      // 기타잡수입(32)을 잡수입(30)에 합산
-      incCodes[30] = (incCodes[30] || 0) + (incCodes[32] || 0);
-
-      const budgetData: BankBudgetExcelData = {
-        year: bankYear,
-        carryover: bd.carryover.general,
-        income: {
-          categories: [
-            { categoryCode: 10, categoryName: '헌금', total: [11,12,13,14].reduce((s: number, c: number) => s + (incCodes[c] || 0), 0), codes: [] },
-            { categoryCode: 20, categoryName: '목적헌금', total: [21,22,24].reduce((s: number, c: number) => s + (incCodes[c] || 0), 0), codes: [] },
-            { categoryCode: 30, categoryName: '잡수입', total: incCodes[30] || 0, codes: [] },
-            { categoryCode: 40, categoryName: '이자수입', total: incCodes[31] || 0, codes: [] },
-            { categoryCode: 500, categoryName: '건축헌금', total: bd.income.constructionTotal, codes: [] },
-          ],
-          generalSubtotal: bd.income.generalSubtotal,
-          constructionTotal: bd.income.constructionTotal,
-          grandTotal: bd.income.grandTotal,
-        },
-        incomeDetail: {
-          offering: [11, 12, 13, 14].map((c: number) => ({ name: getCodeName(c), amount: incCodes[c] || 0 })),
-          purposeOffering: [21, 22, 24].map((c: number) => ({ name: getCodeName(c), amount: incCodes[c] || 0 })),
-          constructionAmount: bd.income.constructionTotal,
-          miscAmount: incCodes[30] || 0,
-          interestAmount: incCodes[31] || 0,
-        },
-        expense: {
-          categories: bd.expense.categories,
-          generalSubtotal: bd.expense.generalSubtotal,
-          constructionTotal: bd.expense.constructionTotal,
-          grandTotal: bd.expense.grandTotal,
-        },
-      };
-
-      // 연간보고 데이터 변환
       const ad = annualJson.data;
       const annualData: BankAnnualExcelData = {
         year: ad.year,
@@ -286,7 +291,7 @@ export default function CustomReportPage() {
           </div>
         </CardContent>
       </Card>
-      <BankBudgetReport open={bankBudgetOpen} onOpenChange={setBankBudgetOpen} />
+      <BankBudgetReport open={bankBudgetOpen} onOpenChange={setBankBudgetOpen} onBudgetData={setSavedBudgetData} />
       <BankAnnualReport open={bankAnnualOpen} onOpenChange={setBankAnnualOpen} />
 
       {/* 설정 */}
@@ -580,4 +585,13 @@ function getCodeName(code: number): string {
     30: '잡수입', 31: '이자수입', 500: '건축헌금',
   };
   return names[code] || `코드${code}`;
+}
+
+// 최대자리 바로 아래 단위까지 올림
+function roundUpBudget(n: number): number {
+  if (n <= 0) return 0;
+  const digits = Math.floor(Math.log10(n));
+  if (digits < 1) return n;
+  const unit = Math.pow(10, digits - 1);
+  return Math.ceil(n / unit) * unit;
 }

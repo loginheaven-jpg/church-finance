@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { LogIn, UserPlus, AlertCircle, Heart, ArrowLeft, Building2, Globe, FileText } from 'lucide-react';
+import { LogIn, UserPlus, AlertCircle, Heart, ArrowLeft, Building2, Globe, FileText, ExternalLink } from 'lucide-react';
 import { PledgeEntryModal, TaxInfoEntryModal } from '@/components/pledge';
 
 type PageMode = 'choice' | 'login';
@@ -146,6 +146,18 @@ export default function LoginPage() {
                     </div>
                   </div>
                 </button>
+
+                {/* 교적부 로그인 안내 */}
+                <div className="pt-2 border-t border-slate-100 text-center">
+                  <p className="text-xs text-gray-400 mb-1.5">교적부 계정이 있으신가요?</p>
+                  <a
+                    href="https://saint.yebom.org/login?redirect=https://finance.yebom.org"
+                    className="inline-flex items-center gap-1 text-sm text-[#C9A962] hover:text-[#b8953a] font-medium"
+                  >
+                    교적부에서 로그인하기
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
             </CardContent>
           </Card>

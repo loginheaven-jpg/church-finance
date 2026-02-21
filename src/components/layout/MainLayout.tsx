@@ -8,6 +8,7 @@ import { Menu, X, CalendarCheck, AlertTriangle } from 'lucide-react';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { Button } from '@/components/ui/button';
 import { PledgePromptPopup } from '@/components/pledge';
+import { VersionChecker } from '@/lib/version-checker';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -140,6 +141,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <div className="min-h-screen bg-[#F8F6F3]">
+      <VersionChecker />
       {/* Mobile Header - md 이하에서만 표시 */}
       <header
         className="fixed top-0 left-0 right-0 z-[60] md:hidden flex items-center justify-between px-4 py-3"

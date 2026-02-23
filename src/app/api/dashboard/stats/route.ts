@@ -63,8 +63,8 @@ export async function GET(request: NextRequest) {
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
 
-    const startDate = monday.toISOString().split('T')[0];
-    const endDate = sunday.toISOString().split('T')[0];
+    let startDate = monday.toISOString().split('T')[0];
+    let endDate = sunday.toISOString().split('T')[0];
 
     // 연간 날짜 범위
     const yearStart = `${currentYear}-01-01`;
@@ -172,9 +172,31 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // === 마감 전 자동 이전 주 이동 ===
+    // weekOffset=0(기본)이고 현재 주에 수입 데이터가 없으면 이전 주로 자동 이동
+    // (주일이 지났지만 마감 작업이 아직 안 된 경우)
+    let effectiveWeeklyIncome = weeklyIncomeRecords;
+    let effectiveWeeklyExpense = weeklyExpenseRecords;
+    let weekShifted = false;
+
+    if (weekOffset === 0 && weeklyIncomeRecords.length === 0) {
+      monday.setDate(monday.getDate() - 7);
+      sunday.setDate(sunday.getDate() - 7);
+      startDate = monday.toISOString().split('T')[0];
+      endDate = sunday.toISOString().split('T')[0];
+
+      effectiveWeeklyIncome = yearlyIncomeRecords.filter(
+        r => r.date >= startDate && r.date <= endDate
+      );
+      effectiveWeeklyExpense = yearlyExpenseRecords.filter(
+        r => r.date >= startDate && r.date <= endDate
+      );
+      weekShifted = true;
+    }
+
     // 주간 수입/지출 합계
-    const weeklyIncome = weeklyIncomeRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
-    const weeklyExpense = weeklyExpenseRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const weeklyIncome = effectiveWeeklyIncome.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const weeklyExpense = effectiveWeeklyExpense.reduce((sum, r) => sum + (r.amount || 0), 0);
 
     // 카테고리별 수입 집계 (세부항목 포함)
     interface CategoryDetail {
@@ -210,7 +232,7 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    for (const r of weeklyIncomeRecords) {
+    for (const r of effectiveWeeklyIncome) {
       const categoryCode = getIncomeCategoryCode(r.offering_code);
       const categoryName = getIncomeCategoryName(categoryCode);
 
@@ -274,7 +296,7 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    for (const r of weeklyExpenseRecords) {
+    for (const r of effectiveWeeklyExpense) {
       const categoryCode = r.category_code || 0;
       const categoryName = getExpenseCategoryName(categoryCode);
 
@@ -329,12 +351,12 @@ export async function GET(request: NextRequest) {
     const carryoverBalance = carryoverData?.balance || 0;
 
     // 현재 잔액 = 이월잔액 + 선택주까지의 수입 - 선택주까지의 지출
-    // (차트와 일치하도록 endDate 기준)
+    // 주간보고와 동일: 자본수입(40번대) 제외, 자본지출(92,93) 제외
     const balanceIncome = yearlyIncomeRecords
-      .filter(r => r.date <= endDate)
+      .filter(r => r.date <= endDate && !(r.offering_code >= 40 && r.offering_code < 50))
       .reduce((sum, r) => sum + (r.amount || 0), 0);
     const balanceExpense = yearlyExpenseRecords
-      .filter(r => r.date <= endDate)
+      .filter(r => r.date <= endDate && r.account_code !== 92 && r.account_code !== 93)
       .reduce((sum, r) => sum + (r.amount || 0), 0);
     const balance = carryoverBalance + balanceIncome - balanceExpense;
 
@@ -518,6 +540,9 @@ export async function GET(request: NextRequest) {
       // super_admin 검증용 은행잔액 정보
       lastBankBalance,
       lastBankDate,
+      // 실제 표시 날짜 (마감 전 자동 이전 주 이동 반영)
+      displaySunday: endDate,
+      weekShifted,
     };
 
     // 캐시에 저장 (noCache가 아닐 때만)
@@ -562,6 +587,8 @@ export async function GET(request: NextRequest) {
       topOverBudgetItems: [],
       lastBankBalance: 0,
       lastBankDate: null,
+      displaySunday: null,
+      weekShifted: false,
     });
   }
 }

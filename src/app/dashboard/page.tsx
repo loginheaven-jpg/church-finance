@@ -68,6 +68,9 @@ interface DashboardStats {
   // super_admin 검증용 은행잔액
   lastBankBalance?: number;
   lastBankDate?: string | null;
+  // 마감 전 자동 이전 주 이동 반영
+  displaySunday?: string | null;
+  weekShifted?: boolean;
 }
 
 function DashboardContent() {
@@ -105,6 +108,12 @@ function DashboardContent() {
     },
   });
 
+  // 실제 표시 날짜: API 응답의 displaySunday 우선, 없으면 로컬 계산값 사용
+  // (마감 전 자동 이전 주 이동이 반영된 날짜)
+  const effectiveDate = stats?.displaySunday
+    ? new Date(stats.displaySunday + 'T00:00:00')
+    : targetSunday;
+
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('ko-KR').format(amount) + '원';
   };
@@ -126,7 +135,7 @@ function DashboardContent() {
 
   // 8주 데이터 생성 (실제 API에서 가져오거나 더미 데이터)
   const weeklyData = stats?.weeklyData || Array.from({ length: 8 }, (_, i) => {
-    const date = addWeeks(targetSunday, i - 7);
+    const date = addWeeks(effectiveDate, i - 7);
     return {
       date: format(date, 'M/d'),
       income: 0,
@@ -139,7 +148,7 @@ function DashboardContent() {
     <div className="space-y-6">
       {/* Header with Week Navigation */}
       <DashboardHeader
-        currentDate={targetSunday}
+        currentDate={effectiveDate}
         weekOffset={weekOffset}
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}

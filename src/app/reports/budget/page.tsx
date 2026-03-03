@@ -172,8 +172,8 @@ function SubCategoryItem({
   onExecutedClick?: (code: number, name: string) => void;
 }) {
   return (
-    <tr className="border-b border-slate-100 hover:bg-slate-50">
-      <td className="py-3 sm:py-4 pl-4 sm:pl-8 text-left text-sm sm:text-lg">
+    <div className="flex items-center border-b border-slate-100 hover:bg-slate-50 py-2 sm:py-3">
+      <div className="flex-1 pl-4 sm:pl-8 text-left text-xs sm:text-sm truncate">
         {onExecutedClick ? (
           <button
             type="button"
@@ -186,14 +186,14 @@ function SubCategoryItem({
         ) : (
           item.account_item
         )}
-      </td>
-      <td className="py-3 sm:py-4 px-2 sm:px-4 text-right text-sm sm:text-lg text-slate-500" title={formatFullCurrency(item.prev_executed)}>
+      </div>
+      <div className="w-20 px-2 text-right text-xs sm:text-sm text-slate-500" title={formatFullCurrency(item.prev_executed)}>
         {formatCurrency(item.prev_executed)}
-      </td>
-      <td className="py-3 sm:py-4 px-2 sm:px-4 text-right text-sm sm:text-lg" title={formatFullCurrency(item.budgeted)}>
+      </div>
+      <div className="w-20 px-2 text-right text-xs sm:text-sm" title={formatFullCurrency(item.budgeted)}>
         {formatCurrency(item.budgeted)}
-      </td>
-      <td className="py-3 sm:py-4 px-2 sm:px-4 text-right text-sm sm:text-lg font-medium">
+      </div>
+      <div className="w-20 px-2 text-right text-xs sm:text-sm font-medium">
         {onExecutedClick ? (
           <button
             type="button"
@@ -208,13 +208,18 @@ function SubCategoryItem({
             {formatCurrency(item.executed)}
           </span>
         )}
-      </td>
-      <td className="py-3 sm:py-4 px-2 sm:px-4 text-right">
-        <Badge variant={(item.syncRate ?? 0) > 100 ? "destructive" : "secondary"} className="w-20 sm:w-24 justify-center text-xs sm:text-sm py-1 sm:py-1.5">
+      </div>
+      <div className="w-[72px] px-2 text-right">
+        <Badge variant={(item.percentage ?? 0) > 100 ? "destructive" : "outline"} className="w-[60px] sm:w-[64px] justify-center text-[10px] sm:text-xs py-0.5">
+          {(item.percentage ?? 0).toFixed(0)}%
+        </Badge>
+      </div>
+      <div className="w-[72px] px-2 text-right">
+        <Badge variant={(item.syncRate ?? 0) > 100 ? "destructive" : "secondary"} className="w-[60px] sm:w-[64px] justify-center text-[10px] sm:text-xs py-0.5">
           {(item.syncRate ?? 0).toFixed(1)}%
         </Badge>
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 }
 
@@ -239,71 +244,87 @@ function CategoryItem({
     <div className="border rounded-lg overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between hover:bg-gray-50 transition-colors gap-2 sm:gap-0"
+        className="w-full p-2 sm:p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between hover:bg-gray-50 transition-colors gap-2 sm:gap-0"
       >
         <div className="flex items-center gap-2 sm:gap-3">
           {isExpanded ? <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5" /> : <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />}
-          <span className="font-bold text-base sm:text-lg">{category.category_item} ({category.category_code})</span>
+          <span className="font-bold text-sm sm:text-base">{category.category_item} ({category.category_code})</span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-5 pl-6 sm:pl-0">
+        <div className="flex items-center pl-6 sm:pl-0">
           {/* 대항목 합계 숫자 */}
-          <div className="text-right min-w-[50px] sm:min-w-[70px] hidden sm:block">
-            <div className="text-xs text-slate-400">{prevYear}집행</div>
-            <div className="font-semibold text-sm sm:text-base text-slate-600" title={formatFullCurrency(category.prev_executed)}>{formatCurrency(category.prev_executed)}</div>
+          <div className="w-20 px-2 text-right hidden sm:block">
+            <div className="text-[10px] text-slate-400">{prevYear}집행</div>
+            <div className="font-semibold text-xs text-slate-600" title={formatFullCurrency(category.prev_executed)}>{formatCurrency(category.prev_executed)}</div>
           </div>
-          <div className="text-right min-w-[50px] sm:min-w-[70px]">
-            <div className="text-xs text-slate-400">{currentYear}예산</div>
-            <div className="font-semibold text-sm sm:text-base" title={formatFullCurrency(category.budget)}>{formatCurrency(category.budget)}</div>
+          <div className="w-20 px-2 text-right">
+            <div className="text-[10px] text-slate-400">{currentYear}예산</div>
+            <div className="font-semibold text-xs" title={formatFullCurrency(category.budget)}>{formatCurrency(category.budget)}</div>
           </div>
-          <div className="text-right min-w-[50px] sm:min-w-[70px]">
-            <div className="text-xs text-slate-400">{currentYear}집행</div>
-            <div className="font-semibold text-sm sm:text-base text-blue-600" title={formatFullCurrency(category.executed)}>{formatCurrency(category.executed)}</div>
+          <div className="w-20 px-2 text-right">
+            <div className="text-[10px] text-slate-400">{currentYear}집행</div>
+            <div className="font-semibold text-xs text-blue-600" title={formatFullCurrency(category.executed)}>{formatCurrency(category.executed)}</div>
           </div>
-          <Badge
-            variant={(category.syncRate ?? 0) > 100 ? "destructive" : "secondary"}
-            className="w-16 sm:w-20 justify-center font-semibold text-xs sm:text-sm py-0.5 sm:py-1"
-          >
-            {(category.syncRate ?? 0).toFixed(1)}%
-          </Badge>
+          <div className="w-[72px] px-2 flex justify-end">
+            <Badge
+              variant={(category.executionRate ?? 0) > 100 ? "destructive" : "outline"}
+              className="w-[60px] sm:w-[64px] justify-center font-semibold text-[10px] sm:text-xs py-0.5"
+            >
+              {(category.executionRate ?? 0).toFixed(0)}%
+            </Badge>
+          </div>
+          <div className="w-[72px] px-2 flex justify-end">
+            <Badge
+              variant={(category.syncRate ?? 0) > 100 ? "destructive" : "secondary"}
+              className="w-[60px] sm:w-[64px] justify-center font-semibold text-[10px] sm:text-xs py-0.5"
+            >
+              {(category.syncRate ?? 0).toFixed(1)}%
+            </Badge>
+          </div>
         </div>
       </button>
 
       {isExpanded && category.accounts.length > 0 && (
-        <div className="px-2 sm:px-5 pb-5 overflow-x-auto">
-          <table className="w-full min-w-[500px]">
-            <tbody>
-              {category.accounts.map(item => (
-                <SubCategoryItem
-                  key={item.account_code}
-                  item={item}
-                  onExecutedClick={onExecutedClick}
-                />
-              ))}
-              {/* 소계 행 */}
-              <tr className="border-t border-slate-300 bg-slate-50 font-semibold text-sm sm:text-lg">
-                <td className="py-3 sm:py-4 pl-4 sm:pl-8 text-left">소계</td>
-                <td className="py-3 sm:py-4 px-2 sm:px-4 text-right text-slate-500">
-                  {formatCurrency(category.prev_executed)}
-                </td>
-                <td className="py-3 sm:py-4 px-2 sm:px-4 text-right">
-                  {formatCurrency(category.budget)}
-                </td>
-                <td className="py-3 sm:py-4 px-2 sm:px-4 text-right">
-                  {formatCurrency(category.executed)}
-                </td>
-                <td className="py-3 sm:py-4 px-2 sm:px-4 text-right">
-                  <Badge
-                    variant={(category.syncRate ?? 0) > 100 ? "destructive" : "secondary"}
-                    className="w-20 sm:w-24 justify-center text-xs sm:text-sm py-1 sm:py-1.5"
-                  >
-                    {(category.syncRate ?? 0).toFixed(1)}%
-                  </Badge>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="px-2 sm:px-5 pb-4 overflow-x-auto">
+          <div className="min-w-[500px]">
+            {category.accounts.map(item => (
+              <SubCategoryItem
+                key={item.account_code}
+                item={item}
+                onExecutedClick={onExecutedClick}
+              />
+            ))}
+            {/* 소계 행 */}
+            <div className="flex items-center border-t border-slate-300 bg-slate-50 font-semibold text-xs sm:text-sm py-2 sm:py-3">
+              <div className="flex-1 pl-4 sm:pl-8 text-left">소계</div>
+              <div className="w-20 px-2 text-right text-slate-500">
+                {formatCurrency(category.prev_executed)}
+              </div>
+              <div className="w-20 px-2 text-right">
+                {formatCurrency(category.budget)}
+              </div>
+              <div className="w-20 px-2 text-right">
+                {formatCurrency(category.executed)}
+              </div>
+              <div className="w-[72px] px-2 text-right">
+                <Badge
+                  variant={(category.executionRate ?? 0) > 100 ? "destructive" : "outline"}
+                  className="w-[60px] sm:w-[64px] justify-center text-[10px] sm:text-xs py-0.5"
+                >
+                  {(category.executionRate ?? 0).toFixed(0)}%
+                </Badge>
+              </div>
+              <div className="w-[72px] px-2 text-right">
+                <Badge
+                  variant={(category.syncRate ?? 0) > 100 ? "destructive" : "secondary"}
+                  className="w-[60px] sm:w-[64px] justify-center text-[10px] sm:text-xs py-0.5"
+                >
+                  {(category.syncRate ?? 0).toFixed(1)}%
+                </Badge>
+              </div>
+            </div>
+          </div>
           {(category.syncRate ?? 0) > 100 && (
-            <div className="text-sm sm:text-base text-red-600 mt-2 pl-4 sm:pl-8">
+            <div className="text-xs sm:text-sm text-red-600 mt-2 pl-4 sm:pl-8">
               동기예산 초과: +{formatFullCurrency(Math.round((category.executed ?? 0) * ((category.syncRate ?? 0) - 100) / (category.syncRate ?? 1)))}
             </div>
           )}
@@ -711,13 +732,14 @@ export default function BudgetExecutionPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* 고정 컬럼 헤더 - 모바일에서 숨김 */}
-          <div className="hidden sm:block sticky top-0 z-10 bg-slate-100 border-b border-slate-300 -mx-6 px-6 py-3 -mt-4 shadow-sm">
-            <div className="flex items-center text-lg font-medium text-slate-600">
+          <div className="hidden sm:block sticky top-0 z-10 bg-slate-100 border-b border-slate-300 -mx-6 px-6 py-2 -mt-4 shadow-sm">
+            <div className="flex items-center text-xs font-semibold text-slate-600">
               <div className="flex-1 pl-12">항목명</div>
-              <div className="w-28 text-right px-4">{reportData.prevYear}집행</div>
-              <div className="w-28 text-right px-4">{reportData.year}예산</div>
-              <div className="w-28 text-right px-4">{reportData.year}집행</div>
-              <div className="w-28 text-right px-4">동기집행율</div>
+              <div className="w-20 text-right px-2">{reportData.prevYear}집행</div>
+              <div className="w-20 text-right px-2">{reportData.year}예산</div>
+              <div className="w-20 text-right px-2">{reportData.year}집행</div>
+              <div className="w-[72px] text-right px-2">연간집행율</div>
+              <div className="w-[72px] text-right px-2">동기집행율</div>
             </div>
           </div>
           {reportData.categories.map((category, idx) => (

@@ -452,14 +452,14 @@ export default function CardExpenseIntegrationPage() {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="min-w-[700px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[100px]">거래일</TableHead>
                     <TableHead className="w-[80px]">보유자</TableHead>
-                    <TableHead>가맹점</TableHead>
+                    <TableHead className="min-w-[80px]">가맹점</TableHead>
                     <TableHead className="text-right w-[100px]">금액</TableHead>
-                    <TableHead className="w-[150px]">내역</TableHead>
+                    <TableHead className="w-[150px] min-w-[150px]">내역</TableHead>
                     <TableHead className="w-[150px]">계정과목</TableHead>
                   </TableRow>
                 </TableHeader>

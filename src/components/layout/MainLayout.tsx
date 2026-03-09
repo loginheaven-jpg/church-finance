@@ -9,6 +9,7 @@ import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { Button } from '@/components/ui/button';
 import { PledgePromptPopup } from '@/components/pledge';
 import { VersionChecker } from '@/lib/version-checker';
+import { FinanceCodeFab } from './FinanceCodeFab';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -249,6 +250,9 @@ export function MainLayout({ children }: MainLayoutProps) {
           onDismiss={handlePledgeDismiss}
         />
       )}
+
+      {/* 재정코드 플로팅 버튼 */}
+      <FinanceCodeFab />
 
       <Toaster position="top-right" richColors />
     </div>

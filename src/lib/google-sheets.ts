@@ -290,6 +290,26 @@ async function seedExpenseCodesForce(): Promise<void> {
   await appendToSheet(FINANCE_CONFIG.sheets.expenseCodes, codes);
 }
 
+/**
+ * 다양한 날짜 문자열을 YYYY-MM-DD 형식으로 정규화
+ * 지원 형식: "2026. 3. 8", "2026.3.8", "2026-03-08", "2026-3-8" 등
+ */
+function normalizeDateString(value: string): string | null {
+  // 이미 YYYY-MM-DD 형식이면 그대로 반환
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  // "2026. 3. 8" 또는 "2026.3.8" 또는 "2026-3-8" 등 → 분리
+  const match = value.match(/^(\d{4})\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{1,2})\s*\.?\s*$/);
+  if (match) {
+    const y = match[1];
+    const m = match[2].padStart(2, '0');
+    const d = match[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return null;
+}
+
 export async function getSheetData<T>(sheetName: string): Promise<T[]> {
   const rows = await readSheet(sheetName);
 
@@ -298,10 +318,23 @@ export async function getSheetData<T>(sheetName: string): Promise<T[]> {
   const headers = rows[0];
   const data = rows.slice(1);
 
+  // 날짜 컬럼 식별 (date, transaction_date 등)
+  const dateHeaders = new Set(
+    headers.filter(h => h === 'date' || h.endsWith('_date'))
+  );
+
   return data.map(row => {
     const obj: Record<string, unknown> = {};
     headers.forEach((header, index) => {
       let value: unknown = row[index];
+
+      // 날짜 컬럼 정규화: 다양한 형식 → YYYY-MM-DD
+      if (dateHeaders.has(header) && typeof value === 'string' && value !== '') {
+        const normalized = normalizeDateString(value);
+        if (normalized) {
+          value = normalized;
+        }
+      }
 
       // 숫자 변환 (콤마 포함 문자열도 처리)
       if (typeof value === 'string' && value !== '') {

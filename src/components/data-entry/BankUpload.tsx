@@ -99,6 +99,14 @@ export function BankUpload() {
   const [unifiedExpense, setUnifiedExpense] = useState<UnifiedExpenseItem[]>([]);
   const [existingKeys, setExistingKeys] = useState<Set<string>>(new Set());
   const [duplicateIndices, setDuplicateIndices] = useState<Set<number>>(new Set());
+  const [balanceVerification, setBalanceVerification] = useState<{
+    currentBalance: number | null;
+    previousBalance: number;
+    totalDeposit: number;
+    totalWithdrawal: number;
+    calculatedBalance: number;
+    isValid: boolean | null;
+  } | null>(null);
 
   // matchResult가 변경되면 통합 리스트 생성
   const buildUnifiedLists = useCallback((result: MatchPreviewResult) => {
@@ -215,6 +223,11 @@ export function BankUpload() {
           }
         });
         setDuplicateIndices(dupIndices);
+
+        // 4. 잔고 검증 데이터 저장
+        if (result.balanceVerification) {
+          setBalanceVerification(result.balanceVerification);
+        }
 
         setData(parsedData);
         setStep('preview');
@@ -595,6 +608,52 @@ export function BankUpload() {
                   <span className="text-xs text-slate-400">(별도 탭)</span>
                 </div>
               </div>
+
+              {/* 잔고 검증 카드 */}
+              {step === 'preview' && balanceVerification && (
+                <div className={cn(
+                  'rounded-lg p-3 border text-sm',
+                  balanceVerification.isValid === true ? 'bg-green-50 border-green-200' :
+                  balanceVerification.isValid === false ? 'bg-red-50 border-red-200' :
+                  'bg-slate-50 border-slate-200'
+                )}>
+                  <div className="font-semibold mb-2">
+                    {balanceVerification.isValid === true ? '✓ 잔고 검증 통과' :
+                     balanceVerification.isValid === false ? '✗ 잔고 불일치' :
+                     '잔고 검증 (E11셀 없음)'}
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span>이전 잔고:</span>
+                      <span className="font-medium">{new Intl.NumberFormat('ko-KR').format(balanceVerification.previousBalance)}원</span>
+                    </div>
+                    <div className="flex justify-between text-blue-700">
+                      <span>+ 수입 합계 (A):</span>
+                      <span className="font-medium">{new Intl.NumberFormat('ko-KR').format(balanceVerification.totalDeposit)}원</span>
+                    </div>
+                    <div className="flex justify-between text-red-700">
+                      <span>- 지출 합계 (B):</span>
+                      <span className="font-medium">{new Intl.NumberFormat('ko-KR').format(balanceVerification.totalWithdrawal)}원</span>
+                    </div>
+                    <div className="border-t pt-1 flex justify-between font-semibold">
+                      <span>계산 잔고:</span>
+                      <span>{new Intl.NumberFormat('ko-KR').format(balanceVerification.calculatedBalance)}원</span>
+                    </div>
+                    {balanceVerification.currentBalance !== null && (
+                      <div className="flex justify-between font-semibold">
+                        <span>E11 잔고:</span>
+                        <span>{new Intl.NumberFormat('ko-KR').format(balanceVerification.currentBalance)}원</span>
+                      </div>
+                    )}
+                    {balanceVerification.isValid === false && balanceVerification.currentBalance !== null && (
+                      <div className="text-red-700 font-bold flex justify-between border-t pt-1">
+                        <span>차액:</span>
+                        <span>{new Intl.NumberFormat('ko-KR').format(Math.abs(balanceVerification.calculatedBalance - balanceVerification.currentBalance))}원</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* 1단계: 은행원장에 반영 버튼 */}
               {step === 'preview' && (

@@ -23,6 +23,10 @@ export async function POST(request: NextRequest) {
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
 
+    // E11셀에서 현재 잔고 추출 (은행원장 엑셀 고정 위치)
+    const e11Cell = worksheet['E11'];
+    const currentBalance = e11Cell ? parseAmount(e11Cell.v) : null;
+
     // JSON으로 변환
     const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
 
@@ -133,10 +137,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 잔고 검증 데이터 계산
+    const totalDeposit = transactions.reduce((sum, t) => sum + t.deposit, 0);
+    const totalWithdrawal = transactions.reduce((sum, t) => sum + t.withdrawal, 0);
+    // 이전 잔고 = 첫 거래의 잔고 - 첫 거래 입금 + 첫 거래 출금
+    const firstTx = transactions[0];
+    const previousBalance = firstTx ? firstTx.balance - firstTx.deposit + firstTx.withdrawal : 0;
+    const calculatedBalance = previousBalance + totalDeposit - totalWithdrawal;
+
     return NextResponse.json({
       success: true,
       data: transactions,
       message: `${transactions.length}건의 거래 데이터를 불러왔습니다`,
+      balanceVerification: {
+        currentBalance,        // E11셀 잔고
+        previousBalance,       // 이전 잔고 (역산)
+        totalDeposit,          // A: 수입 합계
+        totalWithdrawal,       // B: 지출 합계
+        calculatedBalance,     // 이전잔고 + A - B
+        isValid: currentBalance !== null ? calculatedBalance === currentBalance : null,
+      },
     });
   } catch (error) {
     console.error('Bank preview error:', error);

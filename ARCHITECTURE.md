@@ -134,7 +134,7 @@ src/
 | 메뉴 | 경로 | 최소 권한 | 비고 |
 |------|------|----------|------|
 | 지출청구 | `/expense-claim` | admin | |
-| 데이터 입력 | `/data-entry` | admin | 수입/지출 직접 입력 |
+| 데이터 입력 | `/data-entry` | admin | 4탭: 현금헌금 동기화, 은행원장 입력, 미반영 처리, 수입부 데이터보정 |
 | 거래 매칭 | `/match` | admin | 미분류 거래 분류 |
 | 카드내역 입력 | `/card-expense-integration` | **member** | 카드 사용 내역 업로드 |
 | 카드 상세 입력 | `/card-details` | **member** | 카드 거래 상세 입력 |
@@ -416,3 +416,43 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
 4. **권한 조정**
    - '예산 관리' 메뉴 제거 (구글 시트에서 직접 관리)
    - '커스텀 보고서' super_admin 전용으로 변경
+
+### 2025-03 업데이트 (데이터 입력 재설계 + 수입부 데이터보정)
+
+1. **데이터 입력 4탭 구조로 재설계**
+   - 기존 3탭 → 4탭: 현금헌금 동기화 / 은행원장 입력 / 미반영 처리 / 수입부 데이터보정
+   - 은행원장 입력 탭에 잔고 검증 기능 추가 (이전잔고 + 수입합계 - 지출합계 = E11셀 현재잔고)
+   - 미반영 처리 탭명 변경 (재정부 반영 → 미반영 처리)
+
+2. **수입부 데이터보정 기능 (신규)**
+   - 수입부 레코드 검색: 날짜 범위, 헌금자명, 금액 범위
+   - 레코드 수정: 날짜, 헌금자, 대표자, 헌금코드, 금액, 비고
+   - 레코드 분할: 1건 → N건 (합계 일치 검증)
+   - 레코드 삭제: 확인 다이얼로그 후 삭제
+
+3. **신규 API 라우트**
+   | 경로 | 메서드 | 용도 |
+   |------|--------|------|
+   | `/api/income/records` | GET | 수입부 레코드 검색 (날짜/헌금자/금액 필터) |
+   | `/api/income/records/[id]` | PUT | 수입부 레코드 수정 |
+   | `/api/income/records/[id]` | DELETE | 수입부 레코드 삭제 |
+   | `/api/income/records/split` | POST | 수입부 레코드 분할 |
+
+4. **google-sheets.ts 함수 추가**
+   - `deleteIncomeRecord(id)`: 수입부 레코드 삭제
+   - `updateIncomeRecord(id, updates)`: 수입부 레코드 수정
+   - `splitIncomeRecord(originalId, newRecords)`: 원본 삭제 + 신규 N건 생성
+
+5. **신규/수정 컴포넌트**
+   ```
+   src/components/data-entry/
+   ├── CashOfferingSync.tsx     # 변경 없음
+   ├── BankUpload.tsx           # 잔고 검증 UI 추가
+   ├── FinanceReflection.tsx    # 탭명만 변경 (미반영 처리)
+   └── IncomeCorrection.tsx     # 수입부 데이터보정 (신규)
+   ```
+
+6. **은행원장 잔고 검증**
+   - preview API에서 엑셀 E11셀 값(현재잔고) 추출
+   - 이전잔고 + A(수입합계) - B(지출합계) = C(E11 현재잔고) 자동 검증
+   - 검증 결과를 카드 UI로 표시 (일치: 녹색, 불일치: 적색)

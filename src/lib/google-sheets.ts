@@ -631,6 +631,102 @@ export async function getIncomeRecords(
   return data;
 }
 
+// 수입 레코드 삭제 (ID로)
+export async function deleteIncomeRecord(id: string): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.income;
+
+  // 시트 ID 가져오기
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+
+  const sheet = spreadsheet.data.sheets?.find(
+    (s) => s.properties?.title === sheetName
+  );
+
+  if (!sheet?.properties?.sheetId) {
+    throw new Error('수입부 시트를 찾을 수 없습니다');
+  }
+
+  // 행 찾기
+  const rows = await readSheet(sheetName);
+  const rowIndex = rows.findIndex((row) => row[0] === id);
+
+  if (rowIndex === -1) {
+    throw new Error(`수입 레코드를 찾을 수 없습니다: ${id}`);
+  }
+
+  // 행 삭제
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId: sheet.properties.sheetId,
+              dimension: 'ROWS',
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1,
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
+// 수입 레코드 수정 (ID로 찾아서 업데이트)
+export async function updateIncomeRecord(id: string, updates: Partial<IncomeRecord>): Promise<void> {
+  const sheetName = FINANCE_CONFIG.sheets.income;
+  const rows = await readSheet(sheetName);
+  const rowIndex = rows.findIndex((row) => row[0] === id);
+
+  if (rowIndex === -1) {
+    throw new Error(`수입 레코드를 찾을 수 없습니다: ${id}`);
+  }
+
+  // 기존 행 데이터 (컬럼 순서: id, date, source, offering_code, donor_name, representative, amount, note, input_method, created_at, created_by, transaction_date)
+  const row = rows[rowIndex];
+  const updatedRow = [
+    row[0],  // id (변경 불가)
+    updates.date ?? row[1],
+    updates.source ?? row[2],
+    updates.offering_code ?? row[3],
+    updates.donor_name ?? row[4],
+    updates.representative ?? row[5],
+    updates.amount ?? row[6],
+    updates.note ?? row[7],
+    updates.input_method ?? row[8],
+    row[9],  // created_at (변경 불가)
+    row[10] || '', // created_by
+    updates.transaction_date ?? row[11] ?? '',
+  ];
+
+  await updateSheet(sheetName, `A${rowIndex + 1}:L${rowIndex + 1}`, [updatedRow]);
+}
+
+// 수입 레코드 분할 (원본 삭제 후 새 레코드들 추가)
+export async function splitIncomeRecord(
+  originalId: string,
+  newRecords: Omit<IncomeRecord, 'id' | 'created_at'>[]
+): Promise<void> {
+  // 원본 삭제
+  await deleteIncomeRecord(originalId);
+
+  // 새 레코드에 ID, created_at 부여
+  const now = getKSTDateTime();
+  const records: IncomeRecord[] = newRecords.map(r => ({
+    ...r,
+    id: generateId('INC'),
+    created_at: now,
+  }));
+
+  // 수입부에 추가 (skipPledgeMatching=true: 분할이므로 이미 매칭된 데이터)
+  await addIncomeRecords(records, true);
+}
+
 // ============================================
 // 지출부 관련
 // ============================================

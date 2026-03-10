@@ -22,10 +22,14 @@ export const CACHE_TTL = {
   MY_OFFERING: 3600,   // 개인헌금: 1시간 (개인별 조회, 자주 변경 안됨)
 } as const;
 
+// 캐시 버전: 데이터 읽기 로직 변경 시 버전을 올려서 stale 캐시 자동 무효화
+// v2 → v3: 날짜 정규화(normalizeDateString) 추가 반영
+const CACHE_VERSION = 'v3';
+
 // 캐시 키 생성 헬퍼
 export const cacheKeys = {
   dashboard: (year: number, weekOffset: number) =>
-    `finance:dashboard:v2:${year}:${weekOffset}`,
+    `finance:dashboard:${CACHE_VERSION}:${year}:${weekOffset}`,
   weeklyReport: (year: number, weekNo: number) =>
     `finance:report:weekly:${year}:${weekNo}`,
   monthlyReport: (year: number) =>

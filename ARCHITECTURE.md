@@ -67,8 +67,6 @@ src/
 │   ├── queries.ts        # 공통 쿼리 함수
 │   ├── utils.ts          # 공통 유틸
 │   ├── receipt-pdf.tsx   # PDF 영수증 렌더링
-│   ├── pdf/              # PDF 관련
-│   │   └── donation-receipt.tsx  # 기부금 영수증 PDF
 │   └── auth/             # 인증 관련
 │       ├── finance-permissions.ts  # 권한 정의 및 체크
 │       └── use-finance-session.ts  # 세션 훅
@@ -90,10 +88,19 @@ src/
 | 변수명 | 설명 | 필수 여부 |
 |--------|------|----------|
 | `SESSION_SECRET` | iron-session 암호화 키 (교적부와 동일해야 함, 32자 이상) | ✅ 필수 |
-| `GOOGLE_SHEETS_PRIVATE_KEY` | Google Sheets API 서비스 계정 키 | ✅ 필수 |
-| `GOOGLE_SHEETS_CLIENT_EMAIL` | Google Sheets API 서비스 계정 이메일 | ✅ 필수 |
-| `SUPABASE_URL` | Supabase 프로젝트 URL | ✅ 필수 |
-| `SUPABASE_ANON_KEY` | Supabase Anon 키 | ✅ 필수 |
+| `GOOGLE_PRIVATE_KEY` | Google Sheets API 서비스 계정 비공개 키 | ✅ 필수 |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Google Sheets API 서비스 계정 이메일 | ✅ 필수 |
+| `FINANCE_SHEET_ID` | 재정부 메인 Google Sheets ID | ✅ 필수 |
+| `CASH_OFFERING_SHEET_ID` | 현금헌금 Google Sheets ID | ✅ 필수 |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase 프로젝트 URL (클라이언트) | ✅ 필수 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Anon 키 (클라이언트) | ✅ 필수 |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Service Role 키 (서버 전용) | ✅ 필수 |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL (캐싱) | 선택 |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST 토큰 (캐싱) | 선택 |
+| `CHURCH_NAME` | 교회명 (기부금 영수증용) | 선택 |
+| `CHURCH_ADDRESS` | 교회 주소 (기부금 영수증용) | 선택 |
+| `CHURCH_LEADER` | 담임목사명 (기부금 영수증용) | 선택 |
+| `NEXT_PUBLIC_BUILD_ID` | 빌드 ID (버전 체크용) | 선택 |
 
 ## 권한 체계
 
@@ -181,18 +188,31 @@ function hasAccess(userRole: FinanceRole, requiredRole: FinanceRole): boolean {
 
 ### 주요 시트
 
-| 시트명 | 용도 | 비고 |
-|--------|------|------|
-| 연도별예산 | 예산 데이터 조회 | IMPORTRANGE로 외부 시트 연동 (읽기 전용) |
-| 수입부 | 수입 기록 | |
-| 지출부 | 지출 기록 | |
-| 헌금자관리 | 헌금자 정보 | |
-| 작정헌금 | 작정 내역 | |
-| 은행거래 | 은행 입출금 내역 | |
-| 카드거래 | 카드 사용 내역 | |
-| 매칭규칙 | 자동 매칭 학습 규칙 | |
-| 수입부코드 | 수입 계정과목 | |
-| 지출부코드 | 지출 계정과목 | |
+| 시트명 | 코드 키 | 용도 | 비고 |
+|--------|---------|------|------|
+| 수입부 | income | 수입 기록 | |
+| 지출부 | expense | 지출 기록 | |
+| 은행원장 | bank | 은행 입출금 내역 | |
+| 카드원본 | card | 카드 사용 내역 | |
+| 카드소유자 | cardOwners | 카드 소유자 매핑 | |
+| 매칭규칙 | matchingRules | 자동 매칭 학습 규칙 | |
+| 예산 | budget | 예산 데이터 | |
+| 수입부코드 | incomeCodes | 수입 계정과목 | |
+| 지출부코드 | expenseCodes | 지출 계정과목 | |
+| 헌금자정보 | donorInfo | 헌금자 정보 | |
+| 수작업발급이력 | manualReceipts | 기부금영수증 수작업 발급 이력 | |
+| 이월잔액 | carryoverBalance | 연초 이월 잔액 | |
+| 작정헌금 | pledgeDonations | 작정 내역 (레거시) | |
+| 작정헌금v2 | pledges | 작정 내역 (현행) | |
+| 작정이력 | pledgeHistory | 작정 변경 이력 | |
+| 작정마일스톤 | pledgeMilestones | 작정 달성 마일스톤 | |
+| 건축원장 | buildingMaster | 건축헌금 원장 | |
+| 연도별예산 | yearlyBudget | 외부 예산 조회 | IMPORTRANGE 연동 (읽기 전용) |
+| 사업자정보 | businessInfo | 교회 사업자 정보 | 기부금영수증용 |
+| 지출청구 | expenseClaim | 지출 청구 내역 | |
+| 계정 | accounts | 계정 정보 | |
+| 카드내역임시 | cardExpenseTemp | 카드내역 임시 저장 | |
+| 헌금함 | (별도 시트) | 현금헌금 데이터 | CASH_OFFERING_SHEET_ID 사용 | |
 
 ---
 
@@ -247,6 +267,36 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
 ---
 
 ## 최근 변경사항
+
+### 2026-03-11 업데이트 (코드 클린업 + 문서 정비)
+
+1. **함수명 오타 수정**
+   - `matchIncomeToPlledge` → `matchIncomeToPledge` (google-sheets.ts 정의 + 호출부)
+
+2. **미사용 코드 삭제**
+   - `src/lib/pdf/donation-receipt.tsx` 삭제 (receipt-pdf.tsx가 실제 사용 파일)
+   - `src/components/data-entry/CardUpload.tsx` 삭제 (card-expense-integration 페이지로 대체 완료)
+   - 미사용 Redis 캐시 키 6개 제거 (weeklyReport, monthlyReport 등 정의만 있고 사용처 없음)
+
+3. **보안 개선**
+   - 마이그레이션 라우트 5개 삭제 (`/api/migrate/*` — 일회성 이관 완료, 인증 없이 노출 위험)
+   - API 에러 응답에서 `String(error)` 내부정보 노출 제거 (7개 파일) → 일반 에러 메시지로 교체
+
+4. **UI 수정**
+   - Sidebar에서 존재하지 않는 `/admin/settings` (시스템 설정) 고스트 메뉴 제거
+
+5. **문서 정비**
+   - ARCHITECTURE.md 환경변수 섹션: 5개 → 14개 (실제 사용 변수 반영, 변수명 오류 수정)
+   - ARCHITECTURE.md 시트명 섹션: 10개 → 23개 (실제 google-sheets.ts FINANCE_CONFIG 기준)
+   - 향후 검토 사항 문서 신규 작성 (`FUTURE_REVIEW.md`)
+
+### 2026-03-10 업데이트 (버그 수정)
+
+1. **대시보드 캐시 버전 변경**
+   - v2 → v3: 날짜 정규화(normalizeDateString) 추가 후 stale 캐시 문제 해결
+
+2. **수입부/지출부 날짜 서식 변경 시 대시보드 0원 문제 수정**
+   - Google Sheets 날짜 서식 변경 시 대시보드 수입/지출이 0원으로 표시되는 문제 해결
 
 ### 2026-03-09 업데이트 (재정코드 플로팅 버튼)
 

@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Budget fetch error:', error);
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: '예산 처리 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Budget save error:', error);
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: '예산 처리 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }
@@ -126,7 +126,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('Budget delete error:', error);
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: '예산 처리 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }

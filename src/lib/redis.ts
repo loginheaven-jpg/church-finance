@@ -30,18 +30,6 @@ const CACHE_VERSION = 'v3';
 export const cacheKeys = {
   dashboard: (year: number, weekOffset: number) =>
     `finance:dashboard:${CACHE_VERSION}:${year}:${weekOffset}`,
-  weeklyReport: (year: number, weekNo: number) =>
-    `finance:report:weekly:${year}:${weekNo}`,
-  monthlyReport: (year: number) =>
-    `finance:report:monthly:${year}`,
-  budgetReport: (year: number) =>
-    `finance:report:budget:${year}`,
-  comparisonReport: (year: number) =>
-    `finance:report:comparison:${year}`,
-  incomeAnalysis: (year: number) =>
-    `finance:report:income:${year}`,
-  expenseAnalysis: (year: number) =>
-    `finance:report:expense:${year}`,
   donors: (year: number) =>
     `finance:donors:${year}`,
   incomeCodes: () =>

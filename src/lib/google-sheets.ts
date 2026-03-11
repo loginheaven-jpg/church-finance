@@ -603,7 +603,7 @@ export async function addIncomeRecords(records: IncomeRecord[], skipPledgeMatchi
     for (const record of records) {
       if (record.donor_name && record.offering_code && record.amount > 0) {
         try {
-          await matchIncomeToPlledge(
+          await matchIncomeToPledge(
             record.donor_name,
             record.id,
             record.offering_code,
@@ -2994,7 +2994,7 @@ export function getOfferingTypeByCode(code: number): OfferingType | null {
 /**
  * 수입 입력 시 자동 작정 매칭
  */
-export async function matchIncomeToPlledge(
+export async function matchIncomeToPledge(
   donorName: string,
   incomeId: string,
   incomeCode: number,

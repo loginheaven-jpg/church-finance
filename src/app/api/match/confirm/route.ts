@@ -127,8 +127,8 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       incomeSuccess = false;
-      incomeError = error instanceof Error ? error.message : String(error);
-      console.error('[match/confirm] 수입 레코드 저장 실패:', incomeError);
+      console.error('[match/confirm] 수입 레코드 저장 실패:', error);
+      incomeError = '수입 레코드 저장 중 오류가 발생했습니다';
     }
   }
 
@@ -200,8 +200,8 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       expenseSuccess = false;
-      expenseError = error instanceof Error ? error.message : String(error);
-      console.error('[match/confirm] 지출 레코드 저장 실패:', expenseError);
+      console.error('[match/confirm] 지출 레코드 저장 실패:', error);
+      expenseError = '지출 레코드 저장 중 오류가 발생했습니다';
     }
   }
 

@@ -9,7 +9,6 @@ import {
   GitCompare,
   CreditCard,
   FileText,
-  Settings,
   Users,
   BarChart3,
   Receipt,
@@ -102,7 +101,6 @@ const menuSections: MenuSection[] = [
     minRole: 'super_admin',
     items: [
       { href: '/admin/annual-closing', label: '연마감', icon: CalendarCheck },
-      { href: '/admin/settings', label: '시스템 설정', icon: Settings },
       { href: '/admin/users', label: '사용자 관리', icon: UserCog },
     ],
   },

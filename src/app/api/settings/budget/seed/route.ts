@@ -168,7 +168,7 @@ export async function POST() {
   } catch (error) {
     console.error('Budget seed error:', error);
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: '예산 시드 처리 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Sheet creation error:', error);
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: '시트 처리 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Sheet check error:', error);
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: '시트 처리 중 오류가 발생했습니다' },
       { status: 500 }
     );
   }

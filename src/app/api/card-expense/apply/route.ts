@@ -13,6 +13,7 @@ import {
   SESSION_COOKIE_NAME,
   hasRole,
 } from '@/lib/auth/finance-permissions';
+import { invalidateYearCache } from '@/lib/redis';
 import type { ExpenseRecord } from '@/types';
 
 interface ApplyResponse {
@@ -127,6 +128,10 @@ export async function POST() {
     const message = deletedRecordId
       ? `${expenseRecords.length}건의 거래가 지출부에 반영되었습니다.`
       : `${expenseRecords.length}건의 거래가 추가되었습니다. (주의: NH카드대금 행 삭제 실패 - 수동 확인 필요)`;
+
+    // 캐시 무효화 (데이터 변경 반영)
+    const year = parseInt(expenseRecords[0].date.substring(0, 4), 10);
+    await invalidateYearCache(year);
 
     return NextResponse.json<ApplyResponse>({
       success: true,

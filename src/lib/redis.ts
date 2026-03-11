@@ -43,6 +43,21 @@ export const cacheKeys = {
   // 개인헌금 캐시 (사용자별, 연도별, 모드별)
   myOffering: (userName: string, year: number, mode: string, includeHistory: boolean) =>
     `finance:my-offering:${encodeURIComponent(userName)}:${year}:${mode}:${includeHistory}`,
+  // 보고서 캐시
+  weeklyReport: (year: number, startDate: string) =>
+    `finance:report:weekly:${year}:${startDate}`,
+  monthlyReport: (year: number) =>
+    `finance:report:monthly:${year}`,
+  budgetReport: (year: number, endDate: string, excludeConstruction: boolean) =>
+    `finance:report:budget:${year}:${endDate}:${excludeConstruction}`,
+  comparisonReport: (endYear: number) =>
+    `finance:report:comparison:${endYear}`,
+  incomeAnalysis: (year: number) =>
+    `finance:report:income-analysis:${year}`,
+  expenseAnalysis: (year: number) =>
+    `finance:report:expense-analysis:${year}`,
+  donorAnalysis: (year: number) =>
+    `finance:report:donor-analysis:${year}`,
 };
 
 // 캐시 조회 with 폴백

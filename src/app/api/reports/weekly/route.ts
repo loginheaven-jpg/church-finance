@@ -6,6 +6,7 @@ import {
   getExpenseCodes,
   getCarryoverBalance,
 } from '@/lib/google-sheets';
+import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 import type { WeeklyReport } from '@/types';
 
 // 주어진 날짜의 주일(일요일)을 계산
@@ -62,6 +63,10 @@ export async function GET(request: NextRequest) {
     const year = sunday.getFullYear();
     const weekNumber = getWeekNumber(sunday);
     const reportId = startDate.replace(/-/g, '');
+
+    // 캐시 조회 또는 데이터 생성
+    const cacheKey = cacheKeys.weeklyReport(year, startDate);
+    const data = await getWithCache(cacheKey, async () => {
 
     // 데이터 조회
     const [incomeRecords, expenseRecords, incomeCodes, expenseCodes] = await Promise.all([
@@ -272,9 +277,12 @@ export async function GET(request: NextRequest) {
       balance: weeklyIncomeSubtotal - weeklyExpenseSubtotal,
     };
 
+    return report;
+    }, CACHE_TTL.REPORTS);
+
     return NextResponse.json({
       success: true,
-      data: report,
+      data,
     });
   } catch (error) {
     console.error('Weekly report error:', error);

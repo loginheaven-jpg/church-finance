@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchCashOfferings, addIncomeRecords, getBankTransactions, updateBankTransaction, generateId, getKSTDateTime, getWeekEndingSunday } from '@/lib/google-sheets';
 import { syncCashOfferingsWithDuplicatePrevention } from '@/lib/matching-engine';
+import { invalidateYearCache } from '@/lib/redis';
 import type { IncomeRecord } from '@/types';
 
 interface PreviewData {
@@ -86,6 +87,10 @@ export async function POST(request: NextRequest) {
 
       await addIncomeRecords(incomeRecords);
 
+      // 캐시 무효화 (데이터 변경 반영)
+      const year = parseInt(startDate.substring(0, 4), 10);
+      await invalidateYearCache(year);
+
       return NextResponse.json({
         success: true,
         processed: incomeRecords.length,
@@ -116,6 +121,12 @@ export async function POST(request: NextRequest) {
       startDate,
       endDate
     );
+
+    // 캐시 무효화 (데이터 변경 반영)
+    if (result.processed > 0) {
+      const year = parseInt(startDate.substring(0, 4), 10);
+      await invalidateYearCache(year);
+    }
 
     return NextResponse.json({
       success: true,

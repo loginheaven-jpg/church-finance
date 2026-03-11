@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords } from '@/lib/google-sheets';
+import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const year = Number(searchParams.get('year')) || new Date().getFullYear();
+
+    // 캐시 조회 또는 데이터 생성
+    const cacheKey = cacheKeys.donorAnalysis(year);
+    const analysisData = await getWithCache(cacheKey, async () => {
 
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
@@ -201,43 +206,46 @@ export async function GET(request: NextRequest) {
       riskLevel: giniCoefficient > 0.6 ? '매우 위험' : giniCoefficient > 0.4 ? '위험' : '보통',
     };
 
+    return {
+      year,
+      summary: {
+        totalDonors: totalIndividuals,           // 기존 호환성 (개인 수)
+        totalHouseholds,                         // 가구 수
+        totalAmount,
+        avgPerDonor: avgPerIndividual,           // 기존 호환성 (인당 평균)
+        avgPerHousehold,                         // 가구당 평균
+        totalTransactions: incomeRecords.length,
+      },
+      amountDistribution: amountRanges.map(r => ({
+        label: r.label,
+        count: r.count,
+        totalAmount: r.totalAmount,
+        percentage: totalHouseholds > 0 ? Math.round((r.count / totalHouseholds) * 100) : 0,
+      })),
+      monthlyDonors,
+      frequencyDistribution: frequencyDistribution.map(f => ({
+        label: f.label,
+        count: f.count,
+        percentage: totalHouseholds > 0 ? Math.round((f.count / totalHouseholds) * 100) : 0,
+      })),
+      retention: {
+        newDonors: newDonors.length,
+        lostDonors: lostDonors.length,
+        retainedDonors: retainedDonors.length,
+        retentionRate: prevDonorSet.size > 0
+          ? Math.round((retainedDonors.length / prevDonorSet.size) * 100)
+          : 0,
+      },
+      // 집중도 분석 데이터
+      waterfallData,
+      lorenzData,
+      concentration,
+    };
+    }, CACHE_TTL.REPORTS);
+
     return NextResponse.json({
       success: true,
-      data: {
-        year,
-        summary: {
-          totalDonors: totalIndividuals,           // 기존 호환성 (개인 수)
-          totalHouseholds,                         // 가구 수
-          totalAmount,
-          avgPerDonor: avgPerIndividual,           // 기존 호환성 (인당 평균)
-          avgPerHousehold,                         // 가구당 평균
-          totalTransactions: incomeRecords.length,
-        },
-        amountDistribution: amountRanges.map(r => ({
-          label: r.label,
-          count: r.count,
-          totalAmount: r.totalAmount,
-          percentage: totalHouseholds > 0 ? Math.round((r.count / totalHouseholds) * 100) : 0,
-        })),
-        monthlyDonors,
-        frequencyDistribution: frequencyDistribution.map(f => ({
-          label: f.label,
-          count: f.count,
-          percentage: totalHouseholds > 0 ? Math.round((f.count / totalHouseholds) * 100) : 0,
-        })),
-        retention: {
-          newDonors: newDonors.length,
-          lostDonors: lostDonors.length,
-          retainedDonors: retainedDonors.length,
-          retentionRate: prevDonorSet.size > 0
-            ? Math.round((retainedDonors.length / prevDonorSet.size) * 100)
-            : 0,
-        },
-        // 집중도 분석 데이터
-        waterfallData,
-        lorenzData,
-        concentration,
-      },
+      data: analysisData,
     });
   } catch (error) {
     console.error('Donor analysis error:', error);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords, getExpenseRecords, getCarryoverBalance } from '@/lib/google-sheets';
+import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 import type { MonthlyReport } from '@/types';
 
 // 이월잔액을 동적으로 계산하는 헬퍼 함수
@@ -45,13 +46,13 @@ export async function GET(request: NextRequest) {
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
 
-    const [incomeRecords, expenseRecords, calculatedCarryover] = await Promise.all([
-      getIncomeRecords(startDate, endDate),
-      getExpenseRecords(startDate, endDate),
-      getCalculatedCarryover(year - 1), // 전년도 말 잔액 = 해당 연도 시작 이월금
-    ]);
-
+    // 디버그 모드: 캐시 우회
     if (debug) {
+      const [incomeRecords, expenseRecords] = await Promise.all([
+        getIncomeRecords(startDate, endDate),
+        getExpenseRecords(startDate, endDate),
+      ]);
+
       return NextResponse.json({
         debug: true,
         year,
@@ -68,6 +69,16 @@ export async function GET(request: NextRequest) {
         }
       });
     }
+
+    // 캐시 조회 또는 데이터 생성
+    const cacheKey = cacheKeys.monthlyReport(year);
+    const data = await getWithCache(cacheKey, async () => {
+
+    const [incomeRecords, expenseRecords, calculatedCarryover] = await Promise.all([
+      getIncomeRecords(startDate, endDate),
+      getExpenseRecords(startDate, endDate),
+      getCalculatedCarryover(year - 1), // 전년도 말 잔액 = 해당 연도 시작 이월금
+    ]);
 
     // 월별 집계
     const monthlyData = new Map<number, { income: number; expense: number }>();
@@ -121,16 +132,19 @@ export async function GET(request: NextRequest) {
       months,
     };
 
+    return {
+      ...report,
+      carryoverBalance,
+      totalIncome,
+      totalExpense,
+      currentBalance: endBalance,
+      isCurrentYear,
+    };
+    }, CACHE_TTL.REPORTS);
+
     return NextResponse.json({
       success: true,
-      data: {
-        ...report,
-        carryoverBalance,
-        totalIncome,
-        totalExpense,
-        currentBalance: endBalance,
-        isCurrentYear,
-      },
+      data,
     });
   } catch (error) {
     console.error('Monthly report error:', error);

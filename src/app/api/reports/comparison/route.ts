@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords, getExpenseRecords, getIncomeCodes, getExpenseCodes } from '@/lib/google-sheets';
+import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 
 // 카테고리 이름 정의 (fallback용)
 const INCOME_CATEGORY_NAMES: Record<number, string> = {
@@ -40,6 +41,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const endYear = Number(searchParams.get('year')) || new Date().getFullYear();
     const startYear = 2019; // 2019년부터 시작 (2018년 이전 데이터 제외)
+
+    // 캐시 조회 또는 데이터 생성
+    const cacheKey = cacheKeys.comparisonReport(endYear);
+    const comparison = await getWithCache(cacheKey, async () => {
+
     const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
     const years3 = [endYear - 2, endYear - 1, endYear].filter(y => y >= startYear); // 월별 추이용 3개년
 
@@ -138,7 +144,7 @@ export async function GET(request: NextRequest) {
     };
 
     // 비교 데이터 생성
-    const comparison = {
+    return {
       years,
       summary: years.map((year, idx) => {
         const data = yearlyData[idx];
@@ -171,6 +177,7 @@ export async function GET(request: NextRequest) {
         };
       }),
     };
+    }, CACHE_TTL.REPORTS);
 
     return NextResponse.json({
       success: true,

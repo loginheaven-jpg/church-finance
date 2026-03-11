@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getExpenseRecords, getExpenseCodes, getBudget } from '@/lib/google-sheets';
+import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const year = Number(searchParams.get('year')) || new Date().getFullYear();
+
+    // 캐시 조회 또는 데이터 생성
+    const cacheKey = cacheKeys.expenseAnalysis(year);
+    const analysisData = await getWithCache(cacheKey, async () => {
 
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
@@ -124,40 +129,43 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 20);
 
+    return {
+      year,
+      summary: {
+        totalExpense,
+        totalBudget,
+        executionRate: totalBudget > 0 ? Math.round((totalExpense / totalBudget) * 100) : 0,
+        totalCount,
+        averagePerTransaction: totalCount > 0 ? Math.round(totalExpense / totalCount) : 0,
+      },
+      byCategory: Array.from(byCategory.entries())
+        .map(([code, data]) => ({
+          code,
+          ...data,
+          executionRate: data.budget > 0 ? Math.round((data.amount / data.budget) * 100) : 0,
+        }))
+        .sort((a, b) => b.amount - a.amount),
+      byCode: Array.from(byCode.entries())
+        .map(([code, data]) => ({
+          code,
+          ...data,
+          executionRate: data.budget > 0 ? Math.round((data.amount / data.budget) * 100) : 0,
+        }))
+        .sort((a, b) => b.amount - a.amount),
+      byMonth: byMonth.map((data, idx) => ({
+        month: idx + 1,
+        ...data,
+      })),
+      byPaymentMethod: Array.from(byPaymentMethod.entries())
+        .map(([method, data]) => ({ method, ...data }))
+        .sort((a, b) => b.amount - a.amount),
+      topVendors,
+    };
+    }, CACHE_TTL.REPORTS);
+
     return NextResponse.json({
       success: true,
-      data: {
-        year,
-        summary: {
-          totalExpense,
-          totalBudget,
-          executionRate: totalBudget > 0 ? Math.round((totalExpense / totalBudget) * 100) : 0,
-          totalCount,
-          averagePerTransaction: totalCount > 0 ? Math.round(totalExpense / totalCount) : 0,
-        },
-        byCategory: Array.from(byCategory.entries())
-          .map(([code, data]) => ({
-            code,
-            ...data,
-            executionRate: data.budget > 0 ? Math.round((data.amount / data.budget) * 100) : 0,
-          }))
-          .sort((a, b) => b.amount - a.amount),
-        byCode: Array.from(byCode.entries())
-          .map(([code, data]) => ({
-            code,
-            ...data,
-            executionRate: data.budget > 0 ? Math.round((data.amount / data.budget) * 100) : 0,
-          }))
-          .sort((a, b) => b.amount - a.amount),
-        byMonth: byMonth.map((data, idx) => ({
-          month: idx + 1,
-          ...data,
-        })),
-        byPaymentMethod: Array.from(byPaymentMethod.entries())
-          .map(([method, data]) => ({ method, ...data }))
-          .sort((a, b) => b.amount - a.amount),
-        topVendors,
-      },
+      data: analysisData,
     });
   } catch (error) {
     console.error('Expense analysis error:', error);

@@ -266,9 +266,71 @@ src/lib/google-sheets.ts                  # 외부 시트 접근 함수 추가
 
 ---
 
+## Redis 캐시 정책
+
+### 개요
+
+Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Redis가 설정되지 않은 환경에서는 자동으로 캐시를 우회하고 직접 API를 호출합니다.
+
+### 캐시 TTL
+
+| 키 | TTL | 용도 |
+|----|-----|------|
+| `DASHBOARD` | 3일 (259200s) | 대시보드 통계 |
+| `REPORTS` | 3일 (259200s) | 모든 보고서 API |
+| `DONORS` | 3일 (259200s) | 헌금자 목록 |
+| `CODES` | 7일 (604800s) | 수입부/지출부 코드 (거의 변경 안됨) |
+| `BUDGET` | 3일 (259200s) | 예산 데이터 |
+| `MY_OFFERING` | 1시간 (3600s) | 개인헌금 조회 |
+
+### 캐시 키 구조
+
+| 캐시 키 패턴 | 용도 |
+|-------------|------|
+| `finance:dashboard:v3:{year}:{weekOffset}` | 대시보드 |
+| `finance:report:weekly:{year}:{startDate}` | 주간보고서 |
+| `finance:report:monthly:{year}` | 월간보고서 |
+| `finance:report:budget:{year}:{endDate}:{excludeConstruction}` | 예산대비보고서 |
+| `finance:report:comparison:{endYear}` | 연간비교보고서 |
+| `finance:report:income-analysis:{year}` | 수입분석 |
+| `finance:report:expense-analysis:{year}` | 지출분석 |
+| `finance:report:donor-analysis:{year}` | 헌금자분석 |
+| `finance:my-offering:{userName}:{year}:{mode}:{includeHistory}` | 개인헌금 |
+
+### 캐시 무효화
+
+- **데이터 변경 시**: `invalidateYearCache(year)` 호출 → `finance:*:${year}*` 패턴 매칭으로 해당 연도 관련 캐시 일괄 삭제
+- **무효화 호출 위치**:
+  - `POST /api/sync/cash-offering` — 현금헌금 동기화
+  - `POST /api/match/confirm` — 거래 매칭 확인
+  - `POST /api/card/submit-details` — 카드내역 저장
+  - `POST /api/card-expense/apply` — 카드대금 반영
+  - `POST /api/income/records/split` — 수입부 레코드 분할
+  - `PUT /api/income/records/[id]` — 수입부 레코드 수정
+  - `DELETE /api/income/records/[id]` — 수입부 레코드 삭제
+  - `POST /api/settings/budget` — 예산 설정
+  - `POST /api/settings/carryover` — 이월잔액 설정
+
+### 캐시 버전
+
+`CACHE_VERSION = 'v3'` — 데이터 읽기 로직 변경 시 버전을 올려서 stale 캐시를 자동 무효화합니다.
+
+---
+
 ## 최근 변경사항
 
-### 2026-03-11 업데이트 (코드 클린업 + 문서 정비)
+### 2026-03-11 업데이트 (캐시 개선 + 코드 클린업)
+
+1. **보고서 API Redis 캐시 추가**
+   - 7개 보고서 API에 `getWithCache` 적용: weekly, monthly, budget, comparison, income-analysis, expense-analysis, donor-analysis
+   - 캐시 TTL: 3일 (CACHE_TTL.REPORTS = 259200s)
+   - monthly 보고서의 debug 모드는 캐시 우회
+
+2. **캐시 무효화 누락 수정**
+   - 4개 데이터 입력 라우트에 `invalidateYearCache()` 호출 추가
+   - 대상: sync/cash-offering, match/confirm, card/submit-details, card-expense/apply
+
+3. **코드 클린업 + 문서 정비** (이전 커밋)
 
 1. **함수명 오타 수정**
    - `matchIncomeToPlledge` → `matchIncomeToPledge` (google-sheets.ts 정의 + 호출부)

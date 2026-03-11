@@ -7,6 +7,7 @@ import {
 } from '@/lib/google-sheets';
 import { incrementRuleUsage } from '@/lib/matching-engine';
 import { getServerSession, hasRole } from '@/lib/auth/finance-permissions';
+import { invalidateYearCache } from '@/lib/redis';
 import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
 
 interface MatchedIncomeItem {
@@ -259,6 +260,12 @@ export async function POST(request: NextRequest) {
   // 하나라도 성공했으면 success: true (부분 성공 허용)
   const hasAnySuccess = incomeCount > 0 || expenseCount > 0 || suppressedCount > 0;
   const hasAnyFailure = !incomeSuccess || !expenseSuccess || !suppressedSuccess;
+
+  // 캐시 무효화 (데이터 변경 반영)
+  if (hasAnySuccess) {
+    const year = new Date().getFullYear();
+    await invalidateYearCache(year);
+  }
 
   return NextResponse.json({
     success: hasAnySuccess,

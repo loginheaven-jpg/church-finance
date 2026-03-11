@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBudget, getExpenseRecords } from '@/lib/google-sheets';
+import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 
 // 경과일수 계산
 function getDaysPassed(year: number, endDate: string): number {
@@ -40,6 +41,10 @@ export async function GET(request: NextRequest) {
       // 미래년도는 연말 (예측)
       endDate = `${year}-12-31`;
     }
+
+    // 캐시 조회 또는 데이터 생성
+    const cacheKey = cacheKeys.budgetReport(year, endDate, excludeConstruction);
+    const report = await getWithCache(cacheKey, async () => {
 
     const daysPassed = getDaysPassed(year, endDate);
     const daysInYear = isLeapYear(year) ? 366 : 365;
@@ -204,7 +209,7 @@ export async function GET(request: NextRequest) {
     }
     overBudgetItems.sort((a, b) => b.syncRate - a.syncRate);
 
-    const report = {
+    return {
       year,
       prevYear,
       referenceDate: endDate,
@@ -219,6 +224,7 @@ export async function GET(request: NextRequest) {
       categories: Array.from(categoryMap.values())
         .sort((a, b) => a.category_code - b.category_code),
     };
+    }, CACHE_TTL.REPORTS);
 
     return NextResponse.json({
       success: true,

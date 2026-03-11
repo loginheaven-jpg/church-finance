@@ -5,6 +5,7 @@ import {
   generateId,
   getKSTDateTime,
 } from '@/lib/google-sheets';
+import { invalidateYearCache } from '@/lib/redis';
 import type { CardTransaction, ExpenseRecord } from '@/types';
 
 export async function POST(request: NextRequest) {
@@ -54,6 +55,10 @@ export async function POST(request: NextRequest) {
       matched_status: 'matched',
       matched_id: expenseRecord.id,
     });
+
+    // 캐시 무효화 (데이터 변경 반영)
+    const year = parseInt(expenseRecord.date.substring(0, 4), 10);
+    await invalidateYearCache(year);
 
     return NextResponse.json({
       success: true,

@@ -296,7 +296,17 @@ export default function ExpenseAnalysisPage() {
                       </text>
                     );
                   }}
-                  labelLine={true}
+                  labelLine={(props) => {
+                    const pct = (props.percent ?? 0) * 100;
+                    if (pct < 1) return <line x1={0} y1={0} x2={0} y2={0} stroke="none" />;
+                    return (
+                      <line
+                        x1={props.points?.[0]?.x} y1={props.points?.[0]?.y}
+                        x2={props.points?.[1]?.x} y2={props.points?.[1]?.y}
+                        stroke="#94a3b8" strokeWidth={1}
+                      />
+                    );
+                  }}
                 >
                   {categoryPieData.map((_, idx) => (
                     <Cell key={idx} fill={COLORS[idx % COLORS.length]} />

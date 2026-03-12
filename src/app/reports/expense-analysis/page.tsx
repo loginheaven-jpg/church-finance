@@ -278,15 +278,15 @@ export default function ExpenseAnalysisPage() {
             <CardTitle>카테고리별 비율</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
                 <Pie
                   data={categoryPieData}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={100}
+                  outerRadius={85}
                   innerRadius={0}
                   label={({ cx, cy, midAngle, outerRadius, name, percent, index }) => {
                     const RADIAN = Math.PI / 180;

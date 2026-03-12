@@ -140,9 +140,10 @@ export async function POST(request: NextRequest) {
     // 잔고 검증 데이터 계산
     const totalDeposit = transactions.reduce((sum, t) => sum + t.deposit, 0);
     const totalWithdrawal = transactions.reduce((sum, t) => sum + t.withdrawal, 0);
-    // 이전 잔고 = 첫 거래의 잔고 - 첫 거래 입금 + 첫 거래 출금
-    const firstTx = transactions[0];
-    const previousBalance = firstTx ? firstTx.balance - firstTx.deposit + firstTx.withdrawal : 0;
+    // 이전 잔고 = 시간순으로 가장 오래된 거래에서 역산
+    // 농협 엑셀은 최신→과거 순이므로 마지막 행이 가장 오래된 거래
+    const oldestTx = transactions[transactions.length - 1];
+    const previousBalance = oldestTx ? oldestTx.balance - oldestTx.deposit + oldestTx.withdrawal : 0;
     const calculatedBalance = previousBalance + totalDeposit - totalWithdrawal;
 
     return NextResponse.json({

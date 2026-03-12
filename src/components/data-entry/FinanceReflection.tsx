@@ -976,7 +976,7 @@ export function FinanceReflection() {
                   )}
                 </div>
                 <p className="text-sm text-slate-500">
-                  Google Sheets {reflectionResult?.type === 'income' ? '수입부' : '지출부'}에 성공적으로 반영되었습니다.
+                  {reflectionResult?.type === 'income' ? '수입부' : '지출부'}에 성공적으로 반영되었습니다.
                 </p>
               </div>
             </AlertDialogDescription>

@@ -181,10 +181,13 @@ export function IncomeCorrection() {
   // 분할 행 추가
   const addSplitRow = () => {
     if (!splitRecord) return;
+    // 기존 행들의 금액 합산 → 새 마지막 행에 차액 자동 입력
+    const currentSum = splitRows.reduce((sum, r) => sum + r.amount, 0);
+    const remainder = Math.max(0, splitRecord.amount - currentSum);
     setSplitRows([...splitRows, {
       offering_code: splitRecord.offering_code,
       donor_name: splitRecord.donor_name,
-      amount: 0,
+      amount: remainder,
       note: '',
     }]);
   };
@@ -192,7 +195,13 @@ export function IncomeCorrection() {
   // 분할 행 제거
   const removeSplitRow = (index: number) => {
     if (splitRows.length <= 2) return;
-    setSplitRows(splitRows.filter((_, i) => i !== index));
+    const remaining = splitRows.filter((_, i) => i !== index);
+    // 마지막 행에 차액 자동 반영
+    if (splitRecord && remaining.length >= 2) {
+      const sumExceptLast = remaining.slice(0, -1).reduce((sum, r) => sum + r.amount, 0);
+      remaining[remaining.length - 1].amount = Math.max(0, splitRecord.amount - sumExceptLast);
+    }
+    setSplitRows(remaining);
   };
 
   // 분할 행 수정
@@ -200,6 +209,12 @@ export function IncomeCorrection() {
     const updated = [...splitRows];
     if (field === 'amount') {
       updated[index][field] = Number(value) || 0;
+      // 마지막 행이 아닌 곳의 금액 변경 시, 마지막 행에 차액 자동 입력
+      if (splitRecord && index < updated.length - 1) {
+        const sumExceptLast = updated.slice(0, -1).reduce((sum, r) => sum + r.amount, 0);
+        const remainder = splitRecord.amount - sumExceptLast;
+        updated[updated.length - 1].amount = Math.max(0, remainder);
+      }
     } else if (field === 'offering_code') {
       updated[index][field] = Number(value) || 0;
     } else {
@@ -301,6 +316,7 @@ export function IncomeCorrection() {
                 placeholder="이름 검색"
                 value={search.donorName}
                 onChange={e => setSearch({ ...search, donorName: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
                 className="h-9"
               />
             </div>

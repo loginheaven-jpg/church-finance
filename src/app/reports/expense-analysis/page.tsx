@@ -306,7 +306,8 @@ export default function ExpenseAnalysisPage() {
                         x={x}
                         y={y}
                         fill="#374151"
-                        fontSize={10}
+                        fontSize={13}
+                        fontWeight={500}
                         textAnchor={x > cxNum ? 'start' : 'end'}
                         dominantBaseline="central"
                       >

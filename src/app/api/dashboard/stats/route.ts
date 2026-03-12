@@ -350,13 +350,12 @@ export async function GET(request: NextRequest) {
     // 이월잔액
     const carryoverBalance = carryoverData?.balance || 0;
 
-    // 현재 잔액 = 이월잔액 + 선택주까지의 수입 - 선택주까지의 지출
-    // 주간보고와 동일: 자본수입(40번대) 제외, 자본지출(92,93) 제외
+    // 현재 잔액 = 이월잔액 + 선택주까지의 전체 수입 - 선택주까지의 전체 지출
     const balanceIncome = yearlyIncomeRecords
-      .filter(r => r.date <= endDate && !(r.offering_code >= 40 && r.offering_code < 50))
+      .filter(r => r.date <= endDate)
       .reduce((sum, r) => sum + (r.amount || 0), 0);
     const balanceExpense = yearlyExpenseRecords
-      .filter(r => r.date <= endDate && r.account_code !== 92 && r.account_code !== 93)
+      .filter(r => r.date <= endDate)
       .reduce((sum, r) => sum + (r.amount || 0), 0);
     const balance = carryoverBalance + balanceIncome - balanceExpense;
 

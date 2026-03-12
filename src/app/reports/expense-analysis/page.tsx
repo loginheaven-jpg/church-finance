@@ -241,6 +241,108 @@ export default function ExpenseAnalysisPage() {
         </Card>
       </div>
 
+      {/* Category Analysis — 카테고리별 비율 + 세부내역 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle>카테고리별 비율</CardTitle>
+              <button
+                onClick={() => setIncludeConstruction(prev => !prev)}
+                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                  includeConstruction
+                    ? 'bg-blue-100 text-blue-700 border-blue-300'
+                    : 'bg-slate-100 text-slate-500 border-slate-300'
+                }`}
+              >
+                건축비 {includeConstruction ? 'ON' : 'OFF'}
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
+                <Pie
+                  data={categoryPieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={85}
+                  innerRadius={0}
+                  label={(props) => {
+                    const { cx, cy, midAngle, outerRadius, name, percent } = props;
+                    const RADIAN = Math.PI / 180;
+                    const cxNum = Number(cx) || 0;
+                    const cyNum = Number(cy) || 0;
+                    const angle = midAngle ?? 0;
+                    const pct = (percent ?? 0) * 100;
+                    if (pct < 1) return null; // 1% 미만은 라벨 생략
+                    const radiusMultiplier = pct < 5 ? 1.6 : pct < 10 ? 1.4 : 1.25;
+                    const radius = (outerRadius ?? 85) * radiusMultiplier;
+                    const x = cxNum + radius * Math.cos(-angle * RADIAN);
+                    const y = cyNum + radius * Math.sin(-angle * RADIAN);
+                    return (
+                      <text
+                        x={x}
+                        y={y}
+                        fill="#374151"
+                        fontSize={12}
+                        fontWeight={500}
+                        textAnchor={x > cxNum ? 'start' : 'end'}
+                        dominantBaseline="central"
+                      >
+                        {`${name} ${pct.toFixed(0)}%`}
+                      </text>
+                    );
+                  }}
+                  labelLine={true}
+                >
+                  {categoryPieData.map((_, idx) => (
+                    <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => formatFullAmount(Number(value) || 0)} />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>세부내역</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="max-h-[320px] overflow-y-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-white">
+                  <TableRow>
+                    <TableHead className="w-[80px]">카테고리</TableHead>
+                    <TableHead>항목명</TableHead>
+                    <TableHead className="text-right">금액</TableHead>
+                    <TableHead className="text-right w-[60px]">비율</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredByCode
+                    .sort((a, b) => b.amount - a.amount)
+                    .map(item => (
+                    <TableRow key={item.code}>
+                      <TableCell className="text-slate-500 text-xs">{item.category}</TableCell>
+                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell className="text-right text-red-600">{formatFullAmount(item.amount)}</TableCell>
+                      <TableCell className="text-right text-slate-600">
+                        {filteredTotal > 0 ? ((item.amount / filteredTotal) * 100).toFixed(1) : 0}%
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Monthly Trend */}
       <Card>
         <CardHeader>
@@ -281,109 +383,6 @@ export default function ExpenseAnalysisPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* Category Analysis */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle>카테고리별 비율</CardTitle>
-              <button
-                onClick={() => setIncludeConstruction(prev => !prev)}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                  includeConstruction
-                    ? 'bg-blue-100 text-blue-700 border-blue-300'
-                    : 'bg-slate-100 text-slate-500 border-slate-300'
-                }`}
-              >
-                건축비 {includeConstruction ? 'ON' : 'OFF'}
-              </button>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <ResponsiveContainer width="100%" height={320}>
-              <PieChart margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
-                <Pie
-                  data={categoryPieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={85}
-                  innerRadius={0}
-                  label={({ cx, cy, midAngle, outerRadius, name, percent, index }) => {
-                    const RADIAN = Math.PI / 180;
-                    const cxNum = Number(cx) || 0;
-                    const cyNum = Number(cy) || 0;
-                    const angle = midAngle ?? 0;
-                    const pct = (percent ?? 0) * 100;
-                    // 비율이 작을수록 더 바깥으로 (최소 1.2, 최대 1.6)
-                    const radiusMultiplier = pct < 5 ? 1.5 : pct < 10 ? 1.35 : 1.2;
-                    const radius = (outerRadius ?? 100) * radiusMultiplier;
-                    // 작은 슬라이스는 수직 오프셋 추가 (겹침 방지)
-                    const verticalOffset = pct < 5 ? ((index ?? 0) % 3 - 1) * 12 : 0;
-                    const x = cxNum + radius * Math.cos(-angle * RADIAN);
-                    const y = cyNum + radius * Math.sin(-angle * RADIAN) + verticalOffset;
-                    return (
-                      <text
-                        x={x}
-                        y={y}
-                        fill="#374151"
-                        fontSize={13}
-                        fontWeight={500}
-                        textAnchor={x > cxNum ? 'start' : 'end'}
-                        dominantBaseline="central"
-                      >
-                        {`${name} (${pct.toFixed(0)}%)`}
-                      </text>
-                    );
-                  }}
-                  labelLine={false}
-                >
-                  {categoryPieData.map((_, idx) => (
-                    <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => formatFullAmount(Number(value) || 0)} />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>세부내역</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="max-h-[280px] overflow-y-auto">
-              <Table>
-                <TableHeader className="sticky top-0 bg-white">
-                  <TableRow>
-                    <TableHead className="w-[80px]">카테고리</TableHead>
-                    <TableHead>항목명</TableHead>
-                    <TableHead className="text-right">금액</TableHead>
-                    <TableHead className="text-right w-[60px]">비율</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredByCode
-                    .sort((a, b) => b.amount - a.amount)
-                    .map(item => (
-                    <TableRow key={item.code}>
-                      <TableCell className="text-slate-500 text-xs">{item.category}</TableCell>
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell className="text-right text-red-600">{formatFullAmount(item.amount)}</TableCell>
-                      <TableCell className="text-right text-slate-600">
-                        {filteredTotal > 0 ? ((item.amount / filteredTotal) * 100).toFixed(1) : 0}%
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Payment Method */}
       <Card>

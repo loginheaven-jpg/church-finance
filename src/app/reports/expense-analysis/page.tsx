@@ -66,6 +66,7 @@ export default function ExpenseAnalysisPage() {
   const { year, setYear } = useYear();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ExpenseAnalysisData | null>(null);
+  const [includeConstruction, setIncludeConstruction] = useState(true);
 
   useEffect(() => {
     loadData();
@@ -139,7 +140,11 @@ export default function ExpenseAnalysisPage() {
     건축비: { name: '건축비', codes: [500] },
   };
 
-  const categoryPieData = Object.values(categoryGroupMap)
+  const activeGroups = includeConstruction
+    ? Object.values(categoryGroupMap)
+    : Object.values(categoryGroupMap).filter(g => g.name !== '건축비');
+
+  const categoryPieData = activeGroups
     .map(group => {
       const amount = data.byCategory
         .filter(c => group.codes.includes(c.code))
@@ -147,6 +152,12 @@ export default function ExpenseAnalysisPage() {
       return { name: group.name, value: amount };
     })
     .filter(d => d.value > 0);
+
+  // 건축비 필터 적용된 세부내역
+  const filteredByCode = includeConstruction
+    ? data.byCode
+    : data.byCode.filter(item => item.code < 500);
+  const filteredTotal = filteredByCode.reduce((sum, item) => sum + item.amount, 0);
 
   // 예산 대비 집행 차트 데이터 (상위 8개)
   const budgetComparisonData = data.byCategory
@@ -275,7 +286,19 @@ export default function ExpenseAnalysisPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle>카테고리별 비율</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>카테고리별 비율</CardTitle>
+              <button
+                onClick={() => setIncludeConstruction(prev => !prev)}
+                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                  includeConstruction
+                    ? 'bg-blue-100 text-blue-700 border-blue-300'
+                    : 'bg-slate-100 text-slate-500 border-slate-300'
+                }`}
+              >
+                건축비 {includeConstruction ? 'ON' : 'OFF'}
+              </button>
+            </div>
           </CardHeader>
           <CardContent className="pt-0">
             <ResponsiveContainer width="100%" height={320}>
@@ -343,7 +366,7 @@ export default function ExpenseAnalysisPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.byCode
+                  {filteredByCode
                     .sort((a, b) => b.amount - a.amount)
                     .map(item => (
                     <TableRow key={item.code}>
@@ -351,7 +374,7 @@ export default function ExpenseAnalysisPage() {
                       <TableCell className="font-medium">{item.name}</TableCell>
                       <TableCell className="text-right text-red-600">{formatFullAmount(item.amount)}</TableCell>
                       <TableCell className="text-right text-slate-600">
-                        {((item.amount / data.summary.totalExpense) * 100).toFixed(1)}%
+                        {filteredTotal > 0 ? ((item.amount / filteredTotal) * 100).toFixed(1) : 0}%
                       </TableCell>
                     </TableRow>
                   ))}

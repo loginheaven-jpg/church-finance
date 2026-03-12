@@ -4,9 +4,8 @@ import { cookies } from 'next/headers';
 import {
   FinanceSession,
   FinanceRole,
-  SESSION_COOKIE_NAME,
-  SESSION_MAX_AGE,
 } from '@/lib/auth/finance-permissions';
+import { sealFinanceSession, FINANCE_SESSION_COOKIE } from '@/lib/auth/finance-session';
 
 // 교적부 세션 타입 정의
 interface SaintRecordSession {
@@ -75,12 +74,13 @@ export async function GET(request: NextRequest) {
     // 응답 생성 및 세션 쿠키 설정
     const response = NextResponse.redirect(redirectUrl);
 
-    // finance-session 쿠키 설정 (JSON 형식)
-    response.cookies.set(SESSION_COOKIE_NAME, JSON.stringify(financeSession), {
+    // finance-session 쿠키 설정 (iron-session 암호화)
+    const sealed = await sealFinanceSession(financeSession);
+    response.cookies.set(FINANCE_SESSION_COOKIE, sealed, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: SESSION_MAX_AGE,
+      maxAge: 60 * 60 * 24 * 7, // 7일
       path: '/',
       domain: COOKIE_DOMAIN,
     });

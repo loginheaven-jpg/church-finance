@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import {
-  FinanceSession,
-  SESSION_COOKIE_NAME,
-  canAccessPath
-} from '@/lib/auth/finance-permissions';
+import { canAccessPath } from '@/lib/auth/finance-permissions';
+import { unsealFinanceSession, FINANCE_SESSION_COOKIE } from '@/lib/auth/finance-session';
 
 // 인증이 필요 없는 경로
 const publicPaths = ['/login', '/register', '/api/auth'];
@@ -12,7 +9,7 @@ const publicPaths = ['/login', '/register', '/api/auth'];
 // 교적부 세션 쿠키 이름 (SSO 연동용)
 const SAINT_RECORD_COOKIE_NAME = 'saint_record_session';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 정적 파일, API 인증 경로 등은 무시
@@ -26,7 +23,7 @@ export function middleware(request: NextRequest) {
   }
 
   // 세션 쿠키 확인
-  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
+  const sessionCookie = request.cookies.get(FINANCE_SESSION_COOKIE);
   const authToken = request.cookies.get('auth-token');
   const saintRecordCookie = request.cookies.get(SAINT_RECORD_COOKIE_NAME);
 
@@ -46,7 +43,13 @@ export function middleware(request: NextRequest) {
   // 세션이 있는 경우 역할 기반 접근 제어
   if (sessionCookie) {
     try {
-      const session: FinanceSession = JSON.parse(sessionCookie.value);
+      const session = await unsealFinanceSession(sessionCookie.value);
+
+      if (!session) {
+        // 복호화 실패 시 로그인으로
+        const loginUrl = new URL('/login', request.url);
+        return NextResponse.redirect(loginUrl);
+      }
 
       // 경로 접근 권한 확인
       if (!canAccessPath(pathname, session.finance_role)) {
@@ -66,7 +69,7 @@ export function middleware(request: NextRequest) {
       }
       return response;
     } catch {
-      // 세션 파싱 실패 시 로그인으로
+      // 세션 복호화 실패 시 로그인으로
       const loginUrl = new URL('/login', request.url);
       return NextResponse.redirect(loginUrl);
     }

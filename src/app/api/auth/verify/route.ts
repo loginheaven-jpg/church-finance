@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { supabaseAdmin } from '@/lib/supabase';
-import { FinanceSession, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from '@/lib/auth/finance-permissions';
+import { FinanceSession } from '@/lib/auth/finance-permissions';
+import { sealFinanceSession, FINANCE_SESSION_COOKIE } from '@/lib/auth/finance-session';
 
 export async function POST(request: NextRequest) {
   try {
@@ -127,12 +128,13 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // 세션 쿠키 설정
-    response.cookies.set(SESSION_COOKIE_NAME, JSON.stringify(sessionData), {
+    // 세션 쿠키 설정 (iron-session 암호화)
+    const sealed = await sealFinanceSession(sessionData);
+    response.cookies.set(FINANCE_SESSION_COOKIE, sealed, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: SESSION_MAX_AGE,
+      maxAge: 60 * 60 * 24 * 7, // 7일
       path: '/',
     });
 
@@ -141,7 +143,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: SESSION_MAX_AGE,
+      maxAge: 60 * 60 * 24 * 7, // 7일
       path: '/',
     });
 
@@ -159,6 +161,6 @@ export async function POST(request: NextRequest) {
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
   response.cookies.delete('auth-token');
-  response.cookies.delete(SESSION_COOKIE_NAME);
+  response.cookies.delete(FINANCE_SESSION_COOKIE);
   return response;
 }

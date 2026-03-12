@@ -121,12 +121,6 @@ export function canManageUsers(userRole: FinanceRole): boolean {
   return userRole === 'super_admin';
 }
 
-// 세션 쿠키 이름
-export const SESSION_COOKIE_NAME = 'finance-session';
-
-// 세션 만료 시간 (7일)
-export const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
-
 /**
  * 카드소유자 이름 매칭 (완전 일치)
  * 세션의 사용자 이름과 카드소유자 이름이 일치하는지 확인
@@ -138,21 +132,6 @@ export function isCardOwnerMatch(sessionName: string, cardOwner: string | undefi
 
 /**
  * 서버 API Route에서 세션 가져오기
- * cookies() 함수를 사용하여 세션 쿠키를 파싱
+ * iron-session을 사용하여 암호화된 세션 쿠키를 복호화
  */
-export async function getServerSession(): Promise<FinanceSession | null> {
-  try {
-    // Next.js의 cookies() 함수를 동적으로 import
-    const { cookies } = await import('next/headers');
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
-
-    if (!sessionCookie) {
-      return null;
-    }
-
-    return JSON.parse(sessionCookie.value) as FinanceSession;
-  } catch {
-    return null;
-  }
-}
+export { getFinanceSession as getServerSession } from './finance-session';

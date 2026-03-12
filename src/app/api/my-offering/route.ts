@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getIncomeRecords, getIncomeCodes, getDonorInfo, getPledgeDonations } from '@/lib/google-sheets';
-import { FinanceSession, SESSION_COOKIE_NAME } from '@/lib/auth/finance-permissions';
+import { getFinanceSession } from '@/lib/auth/finance-session';
 import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 
 // 가족 그룹 멤버 조회
@@ -128,22 +127,11 @@ async function getFamilyGroup(userName: string): Promise<{
 export async function GET(request: NextRequest) {
   try {
     // 세션에서 사용자 정보 가져오기
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
+    const session = await getFinanceSession();
 
-    if (!sessionCookie) {
+    if (!session) {
       return NextResponse.json(
         { error: '로그인이 필요합니다' },
-        { status: 401 }
-      );
-    }
-
-    let session: FinanceSession;
-    try {
-      session = JSON.parse(sessionCookie.value);
-    } catch {
-      return NextResponse.json(
-        { error: '세션이 유효하지 않습니다' },
         { status: 401 }
       );
     }

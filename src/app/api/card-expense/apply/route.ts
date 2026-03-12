@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import {
   addExpenseRecords,
   deleteExpenseRecord,
@@ -9,10 +8,9 @@ import {
   updateCardExpenseTempStatus,
 } from '@/lib/google-sheets';
 import {
-  FinanceSession,
-  SESSION_COOKIE_NAME,
   hasRole,
 } from '@/lib/auth/finance-permissions';
+import { getFinanceSession } from '@/lib/auth/finance-session';
 import { invalidateYearCache } from '@/lib/redis';
 import type { ExpenseRecord } from '@/types';
 
@@ -25,16 +23,7 @@ interface ApplyResponse {
 }
 
 // 현재 세션 가져오기 헬퍼
-async function getSession(): Promise<FinanceSession | null> {
-  try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
-    if (!sessionCookie) return null;
-    return JSON.parse(sessionCookie.value);
-  } catch {
-    return null;
-  }
-}
+const getSession = getFinanceSession;
 
 export async function POST() {
   try {

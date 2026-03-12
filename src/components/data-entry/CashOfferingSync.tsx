@@ -38,6 +38,10 @@ function getDuplicateKey(date: string, donorName: string, amount: number): strin
 }
 
 export function CashOfferingSync() {
+  // 로컬 날짜를 YYYY-MM-DD 문자열로 변환 (UTC 변환 없이)
+  const formatLocalDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const [startDate, setStartDate] = useState(() => {
     // 직전 주 월요일 ~ 일요일 기준으로 설정
     const now = new Date();
@@ -48,7 +52,7 @@ export function CashOfferingSync() {
     // 해당 주의 월요일 = 일요일 - 6
     const monday = new Date(lastSunday);
     monday.setDate(lastSunday.getDate() - 6);
-    return monday.toISOString().split('T')[0];
+    return formatLocalDate(monday);
   });
   const [endDate, setEndDate] = useState(() => {
     // 지난 일요일
@@ -56,7 +60,7 @@ export function CashOfferingSync() {
     const day = now.getDay();
     const lastSunday = new Date(now);
     lastSunday.setDate(now.getDate() - (day === 0 ? 0 : day));
-    return lastSunday.toISOString().split('T')[0];
+    return formatLocalDate(lastSunday);
   });
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);

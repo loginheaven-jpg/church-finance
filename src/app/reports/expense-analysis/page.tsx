@@ -128,11 +128,25 @@ export default function ExpenseAnalysisPage() {
     건수: m.count,
   }));
 
-  // 카테고리 파이차트 데이터
-  const categoryPieData = data.byCategory.map(c => ({
-    name: c.name,
-    value: c.amount,
-  }));
+  // 카테고리 파이차트 데이터 — 7그룹으로 병합
+  const categoryGroupMap: Record<string, { name: string; codes: number[] }> = {
+    사례비: { name: '사례비', codes: [10] },
+    예배교육비: { name: '예배교육비', codes: [20, 40] },
+    선교구제비: { name: '선교구제비', codes: [30, 50] },
+    관리운영비: { name: '관리운영비', codes: [60, 70] },
+    상회비: { name: '상회비', codes: [80] },
+    기타: { name: '기타', codes: [90] },
+    건축비: { name: '건축비', codes: [500] },
+  };
+
+  const categoryPieData = Object.values(categoryGroupMap)
+    .map(group => {
+      const amount = data.byCategory
+        .filter(c => group.codes.includes(c.code))
+        .reduce((sum, c) => sum + c.amount, 0);
+      return { name: group.name, value: amount };
+    })
+    .filter(d => d.value > 0);
 
   // 예산 대비 집행 차트 데이터 (상위 8개)
   const budgetComparisonData = data.byCategory

@@ -53,9 +53,9 @@ export const cacheKeys = {
   comparisonReport: (endYear: number) =>
     `finance:report:comparison:${endYear}`,
   incomeAnalysis: (year: number) =>
-    `finance:report:income-analysis:${year}`,
+    `finance:report:income-analysis:${CACHE_VERSION}:${year}`,
   expenseAnalysis: (year: number) =>
-    `finance:report:expense-analysis:${year}`,
+    `finance:report:expense-analysis:${CACHE_VERSION}:${year}`,
   donorAnalysis: (year: number) =>
     `finance:report:donor-analysis:${year}`,
 };

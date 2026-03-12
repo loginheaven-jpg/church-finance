@@ -14,11 +14,21 @@ export async function GET(request: NextRequest) {
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
 
-    const [expenseRecords, expenseCodes, budgetData] = await Promise.all([
+    // 전년동기 기준일 계산 (현재 날짜의 월/일을 전년에 적용)
+    const now = new Date();
+    const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const currentMonthDay = `${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
+    const prevYearStart = `${year - 1}-01-01`;
+    const prevYearSamePeriodEnd = `${year - 1}-${currentMonthDay}`;
+
+    const [expenseRecords, expenseCodes, budgetData, prevYearRecords] = await Promise.all([
       getExpenseRecords(startDate, endDate),
       getExpenseCodes(),
       getBudget(year),
+      getExpenseRecords(prevYearStart, prevYearSamePeriodEnd),
     ]);
+
+    const prevYearSamePeriodTotal = prevYearRecords.reduce((sum, r) => sum + r.amount, 0);
 
     // 코드 맵 생성
     const codeMap = new Map<number, { category: string; item: string }>();
@@ -137,6 +147,7 @@ export async function GET(request: NextRequest) {
         executionRate: totalBudget > 0 ? Math.round((totalExpense / totalBudget) * 100) : 0,
         totalCount,
         averagePerTransaction: totalCount > 0 ? Math.round(totalExpense / totalCount) : 0,
+        prevYearSamePeriodTotal,
       },
       byCategory: Array.from(byCategory.entries())
         .map(([code, data]) => ({

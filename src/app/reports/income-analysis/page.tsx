@@ -37,6 +37,7 @@ interface IncomeAnalysisData {
     totalIncome: number;
     totalCount: number;
     averagePerTransaction: number;
+    prevYearSamePeriodTotal: number;
   };
   byCategory: Array<{ name: string; amount: number; count: number }>;
   byCode: Array<{ code: number; name: string; category: string; amount: number; count: number }>;
@@ -217,6 +218,11 @@ export default function IncomeAnalysisPage() {
                 <div className="text-2xl font-bold text-slate-900">
                   {formatFullAmount(data.summary.totalIncome)}
                 </div>
+                {data.summary.prevYearSamePeriodTotal > 0 && (
+                  <div className="text-xs text-slate-400 mt-1">
+                    전년동기 {formatFullAmount(data.summary.prevYearSamePeriodTotal)}
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>

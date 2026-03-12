@@ -37,6 +37,7 @@ interface ExpenseAnalysisData {
     executionRate: number;
     totalCount: number;
     averagePerTransaction: number;
+    prevYearSamePeriodTotal: number;
   };
   byCategory: Array<{
     code: number;
@@ -203,6 +204,11 @@ export default function ExpenseAnalysisPage() {
                 <div className="text-2xl font-bold text-slate-900">
                   {formatFullAmount(data.summary.totalExpense)}
                 </div>
+                {data.summary.prevYearSamePeriodTotal > 0 && (
+                  <div className="text-xs text-slate-400 mt-1">
+                    전년동기 {formatFullAmount(data.summary.prevYearSamePeriodTotal)}
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>

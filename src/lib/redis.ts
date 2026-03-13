@@ -57,7 +57,7 @@ export const cacheKeys = {
   expenseAnalysis: (year: number) =>
     `finance:report:expense-analysis:${CACHE_VERSION}:${year}`,
   donorAnalysis: (year: number) =>
-    `finance:report:donor-analysis:${year}`,
+    `finance:report:donor-analysis:${CACHE_VERSION}:${year}`,
 };
 
 // 캐시 조회 with 폴백

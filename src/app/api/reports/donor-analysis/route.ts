@@ -50,6 +50,19 @@ export async function GET(request: NextRequest) {
       household.months.add(month);
     });
 
+    // 경과 월수 계산 (경과주차 / 52 × 12)
+    // 과거 연도는 12개월, 현재 연도는 경과주차 기반
+    const now = new Date();
+    const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const currentYear = kstNow.getFullYear();
+    let elapsedMonths = 12;
+    if (year === currentYear) {
+      const yearStart = new Date(year, 0, 1);
+      const diffMs = kstNow.getTime() - yearStart.getTime();
+      const elapsedWeeks = diffMs / (7 * 24 * 60 * 60 * 1000);
+      elapsedMonths = Math.max(elapsedWeeks / 52 * 12, 1); // 최소 1개월
+    }
+
     // 금액 분포 계산 (익명 통계)
     const amountRanges = [
       { label: '10만 미만', min: 0, max: 100000, count: 0, totalAmount: 0 },
@@ -60,7 +73,7 @@ export async function GET(request: NextRequest) {
     ];
 
     householdMap.forEach(household => {
-      const avgPerMonth = household.totalAmount / 12;
+      const avgPerMonth = household.totalAmount / elapsedMonths;
       for (const range of amountRanges) {
         if (avgPerMonth >= range.min && avgPerMonth < range.max) {
           range.count += 1;

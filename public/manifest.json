@@ -3,7 +3,7 @@
   "short_name": "예봄재정",
   "description": "예봄교회 재정관리 시스템",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#ffffff",
   "theme_color": "#1e40af",
   "orientation": "portrait-primary",

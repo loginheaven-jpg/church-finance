@@ -137,7 +137,24 @@ export async function GET(request: NextRequest) {
     const prevEndDate = `${year - 1}-12-31`;
     const prevIncomeRecords = await getIncomeRecords(prevStartDate, prevEndDate);
 
-    const prevDonorSet = new Set(prevIncomeRecords.map(r => r.representative || r.donor_name));
+    // 전년 가구별 집계 (동일 필터 적용)
+    const prevHouseholdMap = new Map<string, number>();
+    prevIncomeRecords.forEach(r => {
+      const key = r.representative || r.donor_name || '익명';
+      prevHouseholdMap.set(key, (prevHouseholdMap.get(key) || 0) + r.amount);
+    });
+    // 전년은 12개월 기준으로 월평균 필터 적용
+    if (minMonthlyAvg > 0) {
+      const keysToRemove: string[] = [];
+      prevHouseholdMap.forEach((totalAmount, key) => {
+        if (totalAmount / 12 < minMonthlyAvg) {
+          keysToRemove.push(key);
+        }
+      });
+      keysToRemove.forEach(key => prevHouseholdMap.delete(key));
+    }
+
+    const prevDonorSet = new Set(prevHouseholdMap.keys());
     const currDonorSet = new Set<string>();
     householdMap.forEach((_, key) => currDonorSet.add(key));
 

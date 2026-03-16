@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -16,6 +17,7 @@ import { toast } from 'sonner';
 import { Download, FileSpreadsheet, Save, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
+import ExpenseClaimVerification from '@/components/expense-claim/ExpenseClaimVerification';
 
 interface ExpenseClaimData {
   rowIndex: number;
@@ -189,6 +191,16 @@ export default function ExpenseClaimPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-900">지출청구</h1>
+      </div>
+
+      <Tabs defaultValue="claim">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="claim">지출청구</TabsTrigger>
+          <TabsTrigger value="verification">처리내역 점검</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="claim" className="mt-6">
+      <div className="flex items-center justify-end">
         <div className="flex gap-2">
           {isSuperAdmin && (
             <Button
@@ -344,6 +356,12 @@ export default function ExpenseClaimPage() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+
+        <TabsContent value="verification" className="mt-6">
+          <ExpenseClaimVerification />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -48,7 +48,7 @@ src/
 │   ├── my-offering/       # 내 헌금
 │   ├── data-entry/        # 수입/지출 입력
 │   ├── match/             # 거래 매칭
-│   ├── expense-claim/     # 지출청구
+│   ├── expense-claim/     # 지출청구 (탭: 지출청구, 처리내역 점검)
 │   ├── card-expense-integration/  # 카드내역 입력
 │   ├── card-details/      # 카드 상세 입력
 │   ├── donors/            # 헌금자 관리 (receipts 포함)
@@ -140,7 +140,7 @@ src/
 
 | 메뉴 | 경로 | 최소 권한 | 비고 |
 |------|------|----------|------|
-| 지출청구 | `/expense-claim` | admin | |
+| 지출청구 | `/expense-claim` | admin | 2탭: 지출청구, 처리내역 점검 |
 | 데이터 입력 | `/data-entry` | admin | 4탭: 현금헌금 동기화, 은행원장 입력, 미반영 처리, 수입부 데이터보정 |
 | 거래 매칭 | `/match` | admin | 미분류 거래 분류 |
 | 카드내역 입력 | `/card-expense-integration` | **member** | 카드 사용 내역 업로드 |
@@ -318,6 +318,25 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 ---
 
 ## 최근 변경사항
+
+### 2026-03-16 업데이트 (지출청구 처리내역 점검 + 분석 개선)
+
+1. **지출청구 처리내역 점검 기능 추가**
+   - `/expense-claim` 페이지에 탭 구조 도입 (지출청구 / 처리내역 점검)
+   - 처리완료 청구건 ↔ 지출원장 교차대조 (금액+날짜+내역 스코어링)
+   - 청구자명 검색, 날짜범위 필터, 상태별(매칭/누락/확인필요) 필터
+   - 매칭 후보 아코디언 상세 표시
+   - API: `GET /api/expense-claim/verification`
+   - 함수: `getProcessedExpenseClaims()` (google-sheets.ts)
+
+2. **헌금자 월평균 분포 계산 수정**
+   - `totalAmount / 12` → `totalAmount / (경과주차/52*12)` (연중 시점 반영)
+
+3. **수입/지출 분석 전년동기 비교 추가**
+   - 상단 카드에 전년동기 총수입/총지출 병기
+
+4. **캐시 키 버전 추가**
+   - income-analysis, expense-analysis, donor-analysis 캐시 키에 `CACHE_VERSION` 포함
 
 ### 2026-03-11 업데이트 (캐시 개선 + 코드 클린업)
 

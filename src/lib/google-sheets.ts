@@ -2482,6 +2482,72 @@ export async function markExpenseClaimsAsProcessed(
   });
 }
 
+/**
+ * 처리완료된 지출청구 조회 (K컬럼에 날짜가 있는 행)
+ * @param startDate K컬럼(처리일) 시작 범위 (YYYY-MM-DD)
+ * @param endDate K컬럼(처리일) 끝 범위 (YYYY-MM-DD)
+ */
+export async function getProcessedExpenseClaims(
+  startDate?: string,
+  endDate?: string
+): Promise<ExpenseClaimRow[]> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.expenseClaim, 'A:K');
+
+  if (!rows || rows.length <= 1) return [];
+
+  const claims: ExpenseClaimRow[] = [];
+
+  // 헤더 스킵, 데이터 행부터 처리 (i=1부터)
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+
+    // K컬럼(index 10)이 비어있지 않은 행만 선택 (처리완료)
+    const rawProcessedDate = row[10] || '';
+    if (rawProcessedDate.trim() === '') continue;
+
+    // 처리일 정규화
+    const processedDate = normalizeDateString(rawProcessedDate.trim()) || rawProcessedDate.trim();
+
+    // 날짜 범위 필터
+    if (startDate && processedDate < startDate) continue;
+    if (endDate && processedDate > endDate) continue;
+
+    // 컬럼 매핑: D=청구자, E=계정, F=금액, G=내역, H=계좌번호, J=은행명
+    let bankName = row[9] || '';      // J컬럼 (index 9)
+    let accountNumber = '';
+    const rawAccount = row[7] || '';  // H컬럼 (index 7)
+    const amountStr = row[5] || '0';  // F컬럼 (index 5)
+    const claimant = row[3] || '';    // D컬럼 (index 3)
+
+    // H컬럼에 "계좌 / 은행명 / 이름" 형태인 경우 파싱
+    if (rawAccount.includes('/')) {
+      const parts = rawAccount.split('/').map(s => s.trim());
+      accountNumber = parts[0].replace(/[^0-9]/g, '');
+      if (!bankName && parts[1]) bankName = parts[1];
+    } else {
+      accountNumber = rawAccount.replace(/[^0-9]/g, '');
+    }
+
+    // 금액 파싱
+    const amount = parseFloat(String(amountStr).replace(/[,원\s]/g, '')) || 0;
+    if (amount <= 0) continue;
+
+    claims.push({
+      rowIndex: i + 1,
+      bankName,
+      accountNumber,
+      amount,
+      claimant,
+      accountCode: row[4] || '',
+      description: row[6] || '',
+      processedDate,
+    });
+  }
+
+  return claims;
+}
+
 // ============================================
 // 작정헌금 v2 관련
 // ============================================

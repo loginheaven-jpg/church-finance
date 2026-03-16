@@ -106,17 +106,35 @@ export default function IncomeAnalysisPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<IncomeAnalysisData | null>(null);
   const [donorData, setDonorData] = useState<DonorAnalysisData | null>(null);
+  const [minMonthlyAvg, setMinMonthlyAvg] = useState(0);
 
   useEffect(() => {
     loadData();
   }, [year]);
+
+  // 필터 변경 시 donor 데이터만 재호출
+  useEffect(() => {
+    loadDonorData();
+  }, [minMonthlyAvg]);
+
+  const loadDonorData = async () => {
+    try {
+      const donorRes = await fetch(`/api/reports/donor-analysis?year=${year}&minMonthlyAvg=${minMonthlyAvg}`);
+      const donorResult = await donorRes.json();
+      if (donorResult.success) {
+        setDonorData(donorResult.data);
+      }
+    } catch (error) {
+      console.error('Donor data load error:', error);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
     try {
       const [incomeRes, donorRes] = await Promise.all([
         fetch(`/api/reports/income-analysis?year=${year}`),
-        fetch(`/api/reports/donor-analysis?year=${year}`),
+        fetch(`/api/reports/donor-analysis?year=${year}&minMonthlyAvg=${minMonthlyAvg}`),
       ]);
       const [incomeResult, donorResult] = await Promise.all([
         incomeRes.json(),
@@ -399,6 +417,34 @@ export default function IncomeAnalysisPage() {
         </CardContent>
       </Card>
 
+      {/* 실질 헌금가구 필터 */}
+      <div className="flex items-center gap-3 py-2">
+        <span className="text-sm font-medium text-slate-600">실질 헌금가구 필터:</span>
+        {[
+          { label: '전체', value: 0 },
+          { label: '1만↑', value: 10000 },
+          { label: '5만↑', value: 50000 },
+          { label: '10만↑', value: 100000 },
+        ].map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => setMinMonthlyAvg(opt.value)}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+              minMonthlyAvg === opt.value
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+        {minMonthlyAvg > 0 && (
+          <span className="text-xs text-blue-600 ml-2">
+            월평균 {(minMonthlyAvg / 10000).toFixed(0)}만원 이상 가구만 표시
+          </span>
+        )}
+      </div>
+
       {/* 헌금자 분석 섹션 */}
       {donorData && (
         <>
@@ -445,7 +491,7 @@ export default function IncomeAnalysisPage() {
                   <div>
                     <div className="text-sm text-slate-500">신규 헌금자</div>
                     <div className="text-2xl font-bold text-emerald-600">
-                      +{donorData.retention.newDonors}명
+                      +{donorData.retention.newDonors}가구
                     </div>
                   </div>
                 </div>
@@ -460,7 +506,7 @@ export default function IncomeAnalysisPage() {
                   <div>
                     <div className="text-sm text-slate-500">이탈 헌금자</div>
                     <div className="text-2xl font-bold text-red-600">
-                      -{donorData.retention.lostDonors}명
+                      -{donorData.retention.lostDonors}가구
                     </div>
                   </div>
                 </div>
@@ -471,25 +517,25 @@ export default function IncomeAnalysisPage() {
           {/* 유지율 카드 */}
           <Card>
             <CardHeader>
-              <CardTitle>전년 대비 헌금자 현황</CardTitle>
+              <CardTitle>전년 대비 헌금자 현황 (가구 단위) {minMonthlyAvg > 0 && <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">{(minMonthlyAvg/10000)}만↑ 필터</span>}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div className="p-4 bg-slate-50 rounded-lg">
                   <div className="text-3xl font-bold text-blue-600">
-                    {donorData.retention.retainedDonors}명
+                    {donorData.retention.retainedDonors}가구
                   </div>
                   <div className="text-sm text-slate-500 mt-1">유지</div>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-lg">
                   <div className="text-3xl font-bold text-emerald-600">
-                    +{donorData.retention.newDonors}명
+                    +{donorData.retention.newDonors}가구
                   </div>
                   <div className="text-sm text-slate-500 mt-1">신규</div>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-lg">
                   <div className="text-3xl font-bold text-red-600">
-                    -{donorData.retention.lostDonors}명
+                    -{donorData.retention.lostDonors}가구
                   </div>
                   <div className="text-sm text-slate-500 mt-1">이탈</div>
                 </div>
@@ -506,13 +552,13 @@ export default function IncomeAnalysisPage() {
           {/* 월별 헌금자 수 추이 */}
           <Card>
             <CardHeader>
-              <CardTitle>월별 헌금자 수 추이</CardTitle>
+              <CardTitle>월별 헌금자 수 추이 (가구 단위) {minMonthlyAvg > 0 && <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">{(minMonthlyAvg/10000)}만↑ 필터</span>}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={donorData.monthlyDonors.map(m => ({
                   name: `${m.month}월`,
-                  헌금자수: m.count,
+                  헌금가구수: m.count,
                   헌금액: m.amount,
                 }))}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -523,14 +569,14 @@ export default function IncomeAnalysisPage() {
                     formatter={(value, name) =>
                       name === '헌금액'
                         ? [Number(value).toLocaleString() + '원', name]
-                        : [value + '명', name]
+                        : [value + '가구', name]
                     }
                   />
                   <Legend />
                   <Line
                     yAxisId="left"
                     type="monotone"
-                    dataKey="헌금자수"
+                    dataKey="헌금가구수"
                     stroke="#3b82f6"
                     strokeWidth={2}
                   />
@@ -551,7 +597,7 @@ export default function IncomeAnalysisPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>월평균 헌금액 분포</CardTitle>
+                <CardTitle>월평균 헌금액 분포 (가구 단위) {minMonthlyAvg > 0 && <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">{(minMonthlyAvg/10000)}만↑</span>}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -572,7 +618,7 @@ export default function IncomeAnalysisPage() {
                         <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => [value + '명', '헌금자수']} />
+                    <Tooltip formatter={(value) => [value + '가구', '헌금가구수']} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="mt-4 space-y-2">
@@ -585,7 +631,7 @@ export default function IncomeAnalysisPage() {
                         />
                         <span>{d.label}</span>
                       </div>
-                      <span className="font-medium">{d.count}명 ({d.percentage}%)</span>
+                      <span className="font-medium">{d.count}가구 ({d.percentage}%)</span>
                     </div>
                   ))}
                 </div>
@@ -594,24 +640,24 @@ export default function IncomeAnalysisPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>연간 헌금 빈도 분포</CardTitle>
+                <CardTitle>연간 헌금 빈도 분포 (가구 단위) {minMonthlyAvg > 0 && <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">{(minMonthlyAvg/10000)}만↑</span>}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={donorData.frequencyDistribution.map(f => ({
                     name: f.label,
-                    헌금자수: f.count,
+                    헌금가구수: f.count,
                     비율: f.percentage,
                   }))} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
                     <YAxis type="category" dataKey="name" width={80} />
-                    <Tooltip formatter={(value) => [value + '명', '헌금자수']} />
-                    <Bar dataKey="헌금자수" fill="#3b82f6" radius={[0, 4, 4, 0]}>
+                    <Tooltip formatter={(value) => [value + '가구', '헌금가구수']} />
+                    <Bar dataKey="헌금가구수" fill="#3b82f6" radius={[0, 4, 4, 0]}>
                       <LabelList
-                        dataKey="헌금자수"
+                        dataKey="헌금가구수"
                         position="right"
-                        formatter={(value) => `${value}명`}
+                        formatter={(value) => `${value}가구`}
                         style={{ fontSize: 11 }}
                       />
                     </Bar>
@@ -632,7 +678,7 @@ export default function IncomeAnalysisPage() {
             {/* 워터폴 차트 - 그룹별 분담 구조 */}
             <Card>
               <CardHeader>
-                <CardTitle>헌금 분담 구조</CardTitle>
+                <CardTitle>헌금 분담 구조 (가구 단위) {minMonthlyAvg > 0 && <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">{(minMonthlyAvg/10000)}만↑</span>}</CardTitle>
                 <p className="text-sm text-slate-500">대표자 그룹별 기여도</p>
               </CardHeader>
               <CardContent>
@@ -701,7 +747,7 @@ export default function IncomeAnalysisPage() {
             {/* 로렌츠 곡선 */}
             <Card>
               <CardHeader>
-                <CardTitle>헌금 분포 로렌츠 곡선</CardTitle>
+                <CardTitle>헌금 분포 로렌츠 곡선 (가구 단위) {minMonthlyAvg > 0 && <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">{(minMonthlyAvg/10000)}만↑</span>}</CardTitle>
                 <p className="text-sm text-slate-500">대각선에 가까울수록 평등, 멀수록 집중</p>
               </CardHeader>
               <CardContent>

@@ -56,8 +56,8 @@ export const cacheKeys = {
     `finance:report:income-analysis:${CACHE_VERSION}:${year}`,
   expenseAnalysis: (year: number) =>
     `finance:report:expense-analysis:${CACHE_VERSION}:${year}`,
-  donorAnalysis: (year: number) =>
-    `finance:report:donor-analysis:${CACHE_VERSION}:${year}`,
+  donorAnalysis: (year: number, minMonthlyAvg: number = 0) =>
+    `finance:report:donor-analysis:${CACHE_VERSION}:${year}:${minMonthlyAvg}`,
 };
 
 // 캐시 조회 with 폴백

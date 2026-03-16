@@ -6,9 +6,10 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const year = Number(searchParams.get('year')) || new Date().getFullYear();
+    const minMonthlyAvg = Number(searchParams.get('minMonthlyAvg')) || 0;
 
     // 캐시 조회 또는 데이터 생성
-    const cacheKey = cacheKeys.donorAnalysis(year);
+    const cacheKey = cacheKeys.donorAnalysis(year, minMonthlyAvg);
     const analysisData = await getWithCache(cacheKey, async () => {
 
     const startDate = `${year}-01-01`;
@@ -61,6 +62,18 @@ export async function GET(request: NextRequest) {
       const diffMs = kstNow.getTime() - yearStart.getTime();
       const elapsedWeeks = diffMs / (7 * 24 * 60 * 60 * 1000);
       elapsedMonths = Math.max(elapsedWeeks / 52 * 12, 1); // 최소 1개월
+    }
+
+    // 월평균 필터 적용: minMonthlyAvg 이상인 가구만 남기기
+    if (minMonthlyAvg > 0) {
+      const keysToRemove: string[] = [];
+      householdMap.forEach((household, key) => {
+        const avgPerMonth = household.totalAmount / elapsedMonths;
+        if (avgPerMonth < minMonthlyAvg) {
+          keysToRemove.push(key);
+        }
+      });
+      keysToRemove.forEach(key => householdMap.delete(key));
     }
 
     // 금액 분포 계산 (익명 통계)

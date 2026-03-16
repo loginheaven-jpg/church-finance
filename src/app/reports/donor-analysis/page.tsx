@@ -117,7 +117,7 @@ export default function DonorAnalysisPage() {
   // 차트 데이터 변환
   const monthlyChartData = data.monthlyDonors.map(m => ({
     name: `${m.month}월`,
-    헌금자수: m.count,
+    헌금가구수: m.count,
     헌금액: m.amount,
   }));
 
@@ -128,7 +128,7 @@ export default function DonorAnalysisPage() {
 
   const frequencyData = data.frequencyDistribution.map(f => ({
     name: f.label,
-    헌금자수: f.count,
+    헌금가구수: f.count,
     비율: f.percentage,
   }));
 
@@ -194,7 +194,7 @@ export default function DonorAnalysisPage() {
               <div>
                 <div className="text-sm text-slate-500">신규 헌금자</div>
                 <div className="text-2xl font-bold text-emerald-600">
-                  +{data.retention.newDonors}명
+                  +{data.retention.newDonors}가구
                 </div>
               </div>
             </div>
@@ -209,7 +209,7 @@ export default function DonorAnalysisPage() {
               <div>
                 <div className="text-sm text-slate-500">이탈 헌금자</div>
                 <div className="text-2xl font-bold text-red-600">
-                  -{data.retention.lostDonors}명
+                  -{data.retention.lostDonors}가구
                 </div>
               </div>
             </div>
@@ -220,25 +220,25 @@ export default function DonorAnalysisPage() {
       {/* 유지율 카드 */}
       <Card>
         <CardHeader>
-          <CardTitle>전년 대비 헌금자 현황</CardTitle>
+          <CardTitle>전년 대비 헌금자 현황 (가구 단위)</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div className="p-4 bg-slate-50 rounded-lg">
               <div className="text-3xl font-bold text-blue-600">
-                {data.retention.retainedDonors}명
+                {data.retention.retainedDonors}가구
               </div>
               <div className="text-sm text-slate-500 mt-1">유지</div>
             </div>
             <div className="p-4 bg-slate-50 rounded-lg">
               <div className="text-3xl font-bold text-emerald-600">
-                +{data.retention.newDonors}명
+                +{data.retention.newDonors}가구
               </div>
               <div className="text-sm text-slate-500 mt-1">신규</div>
             </div>
             <div className="p-4 bg-slate-50 rounded-lg">
               <div className="text-3xl font-bold text-red-600">
-                -{data.retention.lostDonors}명
+                -{data.retention.lostDonors}가구
               </div>
               <div className="text-sm text-slate-500 mt-1">이탈</div>
             </div>
@@ -255,7 +255,7 @@ export default function DonorAnalysisPage() {
       {/* 월별 헌금자 수 추이 */}
       <Card>
         <CardHeader>
-          <CardTitle>월별 헌금자 수 추이</CardTitle>
+          <CardTitle>월별 헌금자 수 추이 (가구 단위)</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
@@ -268,14 +268,14 @@ export default function DonorAnalysisPage() {
                 formatter={(value, name) =>
                   name === '헌금액'
                     ? [Number(value).toLocaleString() + '원', name]
-                    : [value + '명', name]
+                    : [value + '가구', name]
                 }
               />
               <Legend />
               <Line
                 yAxisId="left"
                 type="monotone"
-                dataKey="헌금자수"
+                dataKey="헌금가구수"
                 stroke="#3b82f6"
                 strokeWidth={2}
               />
@@ -296,7 +296,7 @@ export default function DonorAnalysisPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>월평균 헌금액 분포</CardTitle>
+            <CardTitle>월평균 헌금액 분포 (가구 단위)</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -314,7 +314,7 @@ export default function DonorAnalysisPage() {
                     <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => [value + '명', '헌금자수']} />
+                <Tooltip formatter={(value) => [value + '가구', '헌금가구수']} />
               </PieChart>
             </ResponsiveContainer>
             <div className="mt-4 space-y-2">
@@ -327,7 +327,7 @@ export default function DonorAnalysisPage() {
                     />
                     <span>{d.label}</span>
                   </div>
-                  <span className="font-medium">{d.count}명 ({d.percentage}%)</span>
+                  <span className="font-medium">{d.count}가구 ({d.percentage}%)</span>
                 </div>
               ))}
             </div>
@@ -336,7 +336,7 @@ export default function DonorAnalysisPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>연간 헌금 빈도 분포</CardTitle>
+            <CardTitle>연간 헌금 빈도 분포 (가구 단위)</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -344,12 +344,12 @@ export default function DonorAnalysisPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis type="category" dataKey="name" width={80} />
-                <Tooltip formatter={(value) => [value + '명', '헌금자수']} />
-                <Bar dataKey="헌금자수" fill="#3b82f6" radius={[0, 4, 4, 0]}>
+                <Tooltip formatter={(value) => [value + '가구', '헌금가구수']} />
+                <Bar dataKey="헌금가구수" fill="#3b82f6" radius={[0, 4, 4, 0]}>
                   <LabelList
-                    dataKey="헌금자수"
+                    dataKey="헌금가구수"
                     position="right"
-                    formatter={(value) => `${value}명`}
+                    formatter={(value) => `${value}가구`}
                     style={{ fontSize: 11 }}
                   />
                 </Bar>

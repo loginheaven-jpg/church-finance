@@ -419,7 +419,7 @@ export default function IncomeAnalysisPage() {
 
       {/* 실질 헌금가구 필터 */}
       <div className="flex items-center gap-3 py-2">
-        <span className="text-sm font-medium text-slate-600">실질 헌금가구 필터:</span>
+        <span className="text-sm font-medium text-slate-600">실질 헌금가구 필터 (월평균):</span>
         {[
           { label: '전체', value: 0 },
           { label: '1만↑', value: 10000 },

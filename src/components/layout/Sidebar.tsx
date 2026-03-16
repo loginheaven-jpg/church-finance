@@ -86,7 +86,7 @@ const menuSections: MenuSection[] = [
     label: 'MANAGEMENTS',
     minRole: 'admin',
     items: [
-      { href: '/expense-claim', label: '지출청구', icon: FilePlus },
+      { href: '/expense-claim', label: '지출청구', icon: FilePlus, minRole: 'member' },
       { href: '/data-entry', label: '데이터 입력', icon: Upload },
       { href: '/match', label: '거래 매칭', icon: GitCompare },
       { href: '/card-expense-integration', label: '카드내역 입력', icon: CreditCard, minRole: 'member' },

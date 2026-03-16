@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +13,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Search, CheckCircle2, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Search, CheckCircle2, AlertTriangle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { useFinanceSession } from '@/lib/auth/use-finance-session';
 
 interface MatchedExpense {
   id: string;
@@ -25,6 +26,8 @@ interface MatchedExpense {
   account_code: number;
   score: number;
 }
+
+type VerificationStatus = 'matched' | 'pending' | 'missing';
 
 interface VerificationItem {
   claim: {
@@ -38,7 +41,7 @@ interface VerificationItem {
     description: string;
     processedDate: string;
   };
-  status: 'matched' | 'unmatched' | 'ambiguous';
+  status: VerificationStatus;
   matchedExpenses: MatchedExpense[];
   matchScore: number;
 }
@@ -48,8 +51,8 @@ interface VerificationData {
   summary: {
     total: number;
     matched: number;
-    unmatched: number;
-    ambiguous: number;
+    pending: number;
+    missing: number;
     totalAmount: number;
     unmatchedAmount: number;
   };
@@ -62,29 +65,46 @@ const getDefaultDates = () => {
   const now = new Date();
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   const year = kst.getFullYear();
-  const month = kst.getMonth() + 1;
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const endDate = `${year}-${String(month).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
+  // 기본 범위: 올해 1월 1일 ~ 오늘
+  const startDate = `${year}-01-01`;
+  const endDate = `${year}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
   return { startDate, endDate };
 };
 
 export default function ExpenseClaimVerification() {
+  const session = useFinanceSession();
+  const isAdmin = session?.finance_role === 'admin' || session?.finance_role === 'super_admin';
+  const userName = session?.name || '';
+
   const defaults = getDefaultDates();
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
   const [claimant, setClaimant] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<VerificationData | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'unmatched' | 'ambiguous'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'pending' | 'missing'>('all');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
+  // 일반 사용자는 본인명으로 고정
+  useEffect(() => {
+    if (!isAdmin && userName) {
+      setClaimant(userName);
+    }
+  }, [isAdmin, userName]);
+
   const fetchData = async () => {
+    const searchName = isAdmin ? claimant.trim() : userName;
+    if (!searchName && !isAdmin) {
+      toast.error('사용자 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (startDate) params.set('startDate', startDate);
       if (endDate) params.set('endDate', endDate);
-      if (claimant.trim()) params.set('claimant', claimant.trim());
+      if (searchName) params.set('claimant', searchName);
 
       const res = await fetch(`/api/expense-claim/verification?${params}`);
       const json = await res.json();
@@ -103,7 +123,7 @@ export default function ExpenseClaimVerification() {
     item => statusFilter === 'all' || item.status === statusFilter
   ) || [];
 
-  const statusBadge = (status: string) => {
+  const statusBadge = (status: VerificationStatus) => {
     switch (status) {
       case 'matched':
         return (
@@ -111,16 +131,16 @@ export default function ExpenseClaimVerification() {
             <CheckCircle2 className="h-3 w-3" />처리완료
           </span>
         );
-      case 'unmatched':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-            <XCircle className="h-3 w-3" />누락의심
-          </span>
-        );
-      case 'ambiguous':
+      case 'pending':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
-            <AlertTriangle className="h-3 w-3" />확인필요
+            <Clock className="h-3 w-3" />미처리 추정
+          </span>
+        );
+      case 'missing':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+            <AlertTriangle className="h-3 w-3" />누락의심
           </span>
         );
     }
@@ -152,13 +172,19 @@ export default function ExpenseClaimVerification() {
             </div>
             <div>
               <label className="text-xs text-slate-500 mb-1 block">청구자명</label>
-              <Input
-                type="text"
-                placeholder="전체"
-                value={claimant}
-                onChange={e => setClaimant(e.target.value)}
-                className="w-32"
-              />
+              {isAdmin ? (
+                <Input
+                  type="text"
+                  placeholder="전체"
+                  value={claimant}
+                  onChange={e => setClaimant(e.target.value)}
+                  className="w-32"
+                />
+              ) : (
+                <div className="h-9 px-3 py-2 bg-slate-100 rounded-md text-sm text-slate-700 w-32 flex items-center">
+                  {userName || '로딩중...'}
+                </div>
+              )}
             </div>
             <Button onClick={fetchData} disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Search className="h-4 w-4 mr-1" />}
@@ -180,16 +206,18 @@ export default function ExpenseClaimVerification() {
           </Card>
           <Card>
             <CardContent className="pt-6 text-center">
-              <div className="text-sm text-green-600">매칭 완료</div>
+              <div className="text-sm text-green-600">처리 완료</div>
               <div className="text-2xl font-bold text-green-600">{data.summary.matched}건</div>
               <div className="text-xs text-slate-400">지출원장 확인됨</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6 text-center">
-              <div className="text-sm text-red-600">누락 의심</div>
-              <div className="text-2xl font-bold text-red-600">{data.summary.unmatched + data.summary.ambiguous}건</div>
-              <div className="text-xs text-slate-400">{formatAmount(data.summary.unmatchedAmount)}</div>
+              <div className="text-sm text-red-600">미확인</div>
+              <div className="text-2xl font-bold text-red-600">{data.summary.pending + data.summary.missing}건</div>
+              <div className="text-xs text-slate-400">
+                미처리 추정 {data.summary.pending} / 누락의심 {data.summary.missing}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -200,9 +228,9 @@ export default function ExpenseClaimVerification() {
         <div className="flex gap-2">
           {[
             { key: 'all' as const, label: '전체', count: data.summary.total },
-            { key: 'matched' as const, label: '매칭', count: data.summary.matched },
-            { key: 'unmatched' as const, label: '누락', count: data.summary.unmatched },
-            { key: 'ambiguous' as const, label: '확인필요', count: data.summary.ambiguous },
+            { key: 'matched' as const, label: '처리완료', count: data.summary.matched },
+            { key: 'pending' as const, label: '미처리 추정', count: data.summary.pending },
+            { key: 'missing' as const, label: '누락의심', count: data.summary.missing },
           ].map(f => (
             <button
               key={f.key}
@@ -229,7 +257,7 @@ export default function ExpenseClaimVerification() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-20">상태</TableHead>
+                    <TableHead className="w-24">상태</TableHead>
                     <TableHead>청구자</TableHead>
                     <TableHead>청구일</TableHead>
                     <TableHead className="text-right">금액</TableHead>
@@ -258,13 +286,15 @@ export default function ExpenseClaimVerification() {
                         <TableCell className="text-sm text-slate-600 max-w-48 truncate">{item.claim.description}</TableCell>
                         <TableCell className="text-sm">
                           {item.status === 'matched'
-                            ? item.matchedExpenses[0]?.date || item.claim.processedDate
-                            : <span className="text-red-500">미처리</span>
+                            ? item.matchedExpenses[0]?.date || '-'
+                            : item.status === 'pending'
+                              ? <span className="text-yellow-600">미처리 추정</span>
+                              : <span className="text-red-500">누락의심</span>
                           }
                         </TableCell>
                         <TableCell className="text-center">
                           {item.matchScore > 0 && (
-                            <Badge variant={item.matchScore >= 70 ? 'default' : 'secondary'}>
+                            <Badge variant={item.matchScore >= 65 ? 'default' : 'secondary'}>
                               {item.matchScore}
                             </Badge>
                           )}
@@ -301,7 +331,7 @@ export default function ExpenseClaimVerification() {
                                       <td className="py-1 text-right font-mono">{formatAmount(e.amount)}</td>
                                       <td className="py-1 text-center">
                                         <span className={`px-1.5 py-0.5 rounded ${
-                                          e.score >= 70 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                          e.score >= 65 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                                         }`}>
                                           {e.score}점
                                         </span>

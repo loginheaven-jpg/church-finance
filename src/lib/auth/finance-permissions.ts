@@ -56,7 +56,7 @@ export const MENU_MIN_ROLE: Record<string, FinanceRole> = {
   '/reports/custom': 'super_admin',      // super_admin만
 
   // MANAGEMENTS - admin 이상 (카드내역 입력은 member도 가능)
-  '/expense-claim': 'admin',
+  '/expense-claim': 'member',            // 처리내역 점검은 member도 가능 (지출청구 탭은 admin만 표시)
   '/data-entry': 'admin',
   '/match': 'admin',
   '/card-expense-integration': 'member', // 카드내역 입력은 member도 가능

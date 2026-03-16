@@ -35,6 +35,7 @@ interface ExpenseClaimData {
 export default function ExpenseClaimPage() {
   const session = useFinanceSession();
   const isSuperAdmin = session?.finance_role === 'super_admin';
+  const isAdmin = session?.finance_role === 'admin' || isSuperAdmin;
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [data, setData] = useState<ExpenseClaimData[]>([]);
@@ -193,13 +194,13 @@ export default function ExpenseClaimPage() {
         <h1 className="text-3xl font-bold text-slate-900">지출청구</h1>
       </div>
 
-      <Tabs defaultValue="claim">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="claim">지출청구</TabsTrigger>
+      <Tabs defaultValue={isAdmin ? 'claim' : 'verification'}>
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {isAdmin && <TabsTrigger value="claim">지출청구</TabsTrigger>}
           <TabsTrigger value="verification">처리내역 점검</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="claim" className="mt-6">
+        {isAdmin && <TabsContent value="claim" className="mt-6">
       <div className="flex items-center justify-end">
         <div className="flex gap-2">
           {isSuperAdmin && (
@@ -356,7 +357,7 @@ export default function ExpenseClaimPage() {
           </CardContent>
         </Card>
       )}
-        </TabsContent>
+        </TabsContent>}
 
         <TabsContent value="verification" className="mt-6">
           <ExpenseClaimVerification />

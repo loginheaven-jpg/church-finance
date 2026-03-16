@@ -29,6 +29,7 @@ interface MatchedExpense {
 interface VerificationItem {
   claim: {
     rowIndex: number;
+    claimDate: string;
     claimant: string;
     amount: number;
     bankName: string;
@@ -230,11 +231,12 @@ export default function ExpenseClaimVerification() {
                   <TableRow>
                     <TableHead className="w-20">상태</TableHead>
                     <TableHead>청구자</TableHead>
+                    <TableHead>청구일</TableHead>
                     <TableHead className="text-right">금액</TableHead>
                     <TableHead>은행</TableHead>
                     <TableHead>계좌번호</TableHead>
                     <TableHead>내역</TableHead>
-                    <TableHead>처리일</TableHead>
+                    <TableHead>지출확인</TableHead>
                     <TableHead className="text-center w-16">점수</TableHead>
                     <TableHead className="w-8"></TableHead>
                   </TableRow>
@@ -249,11 +251,17 @@ export default function ExpenseClaimVerification() {
                       >
                         <TableCell>{statusBadge(item.status)}</TableCell>
                         <TableCell className="font-medium">{item.claim.claimant}</TableCell>
+                        <TableCell className="text-sm text-slate-500">{item.claim.claimDate}</TableCell>
                         <TableCell className="text-right font-mono">{formatAmount(item.claim.amount)}</TableCell>
                         <TableCell className="text-xs text-slate-500">{item.claim.bankName}</TableCell>
                         <TableCell className="text-xs text-slate-500 font-mono">{item.claim.accountNumber}</TableCell>
                         <TableCell className="text-sm text-slate-600 max-w-48 truncate">{item.claim.description}</TableCell>
-                        <TableCell className="text-sm">{item.claim.processedDate}</TableCell>
+                        <TableCell className="text-sm">
+                          {item.status === 'matched'
+                            ? item.matchedExpenses[0]?.date || item.claim.processedDate
+                            : <span className="text-red-500">미처리</span>
+                          }
+                        </TableCell>
                         <TableCell className="text-center">
                           {item.matchScore > 0 && (
                             <Badge variant={item.matchScore >= 70 ? 'default' : 'secondary'}>
@@ -271,7 +279,7 @@ export default function ExpenseClaimVerification() {
                       </TableRow>
                       {expandedRow === idx && item.matchedExpenses.length > 0 && (
                         <TableRow key={`detail-${item.claim.rowIndex}`}>
-                          <TableCell colSpan={9} className="bg-slate-50 p-0">
+                          <TableCell colSpan={10} className="bg-slate-50 p-0">
                             <div className="px-6 py-3">
                               <div className="text-xs font-medium text-slate-500 mb-2">매칭 후보 (지출원장)</div>
                               <table className="w-full text-xs">

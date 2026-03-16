@@ -2342,9 +2342,10 @@ export async function addBusinessInfo(info: Omit<BusinessInfo, 'created_at'>): P
 
 export interface ExpenseClaimRow {
   rowIndex: number;       // 시트 행 번호 (1-based, 헤더 포함)
-  bankName: string;       // A: 은행명
-  accountNumber: string;  // B: 입금계좌
-  amount: number;         // C: 이체금액
+  claimDate: string;      // B: 청구일
+  bankName: string;       // J: 은행명
+  accountNumber: string;  // H: 입금계좌
+  amount: number;         // F: 이체금액
   claimant: string;       // D: 청구자
   accountCode: string;    // E: 계정
   description: string;    // G: 내역
@@ -2441,8 +2442,13 @@ export async function getUnprocessedExpenseClaims(): Promise<ExpenseClaimRow[]> 
     // 은행/계좌가 여전히 비어있으면 스킵 (필수 정보)
     if (!bankName || !accountNumber) continue;
 
+    // B컬럼(index 1) = 청구일
+    const rawClaimDate = row[1] || '';
+    const claimDate = normalizeDateString(rawClaimDate.trim()) || rawClaimDate.trim();
+
     claims.push({
       rowIndex: i + 1, // 1-based (시트 행 번호)
+      claimDate,
       bankName,
       accountNumber,
       amount,
@@ -2495,6 +2501,9 @@ export async function getProcessedExpenseClaims(
 
   if (!rows || rows.length <= 1) return [];
 
+  // 계정 정보 캐시 (같은 청구자 중복 조회 방지)
+  const accountCache = new Map<string, AccountInfo | null>();
+
   const claims: ExpenseClaimRow[] = [];
 
   // 헤더 스킵, 데이터 행부터 처리 (i=1부터)
@@ -2513,7 +2522,9 @@ export async function getProcessedExpenseClaims(
     if (startDate && processedDate < startDate) continue;
     if (endDate && processedDate > endDate) continue;
 
-    // 컬럼 매핑: D=청구자, E=계정, F=금액, G=내역, H=계좌번호, J=은행명
+    // 컬럼 매핑: B=청구일, D=청구자, E=계정, F=금액, G=내역, H=계좌번호, J=은행명
+    const rawClaimDate = row[1] || '';
+    const claimDate = normalizeDateString(rawClaimDate.trim()) || rawClaimDate.trim();
     let bankName = row[9] || '';      // J컬럼 (index 9)
     let accountNumber = '';
     const rawAccount = row[7] || '';  // H컬럼 (index 7)
@@ -2529,12 +2540,26 @@ export async function getProcessedExpenseClaims(
       accountNumber = rawAccount.replace(/[^0-9]/g, '');
     }
 
+    // 은행/계좌가 비어있고 청구자가 있으면 계정 시트에서 조회
+    if ((!bankName || !accountNumber) && claimant) {
+      if (!accountCache.has(claimant)) {
+        const accountInfo = await getAccountInfoByName(claimant);
+        accountCache.set(claimant, accountInfo);
+      }
+      const cached = accountCache.get(claimant);
+      if (cached) {
+        if (!bankName) bankName = cached.bankName;
+        if (!accountNumber) accountNumber = cached.accountNumber;
+      }
+    }
+
     // 금액 파싱
     const amount = parseFloat(String(amountStr).replace(/[,원\s]/g, '')) || 0;
     if (amount <= 0) continue;
 
     claims.push({
       rowIndex: i + 1,
+      claimDate,
       bankName,
       accountNumber,
       amount,

@@ -17,6 +17,7 @@ interface MatchedExpense {
 interface VerificationItem {
   claim: {
     rowIndex: number;
+    claimDate: string;
     claimant: string;
     amount: number;
     bankName: string;
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest) {
         items.push({
           claim: {
             rowIndex: claim.rowIndex,
+            claimDate: claim.claimDate,
             claimant: claim.claimant,
             amount: claim.amount,
             bankName: claim.bankName,
@@ -166,6 +168,7 @@ export async function GET(request: NextRequest) {
       items.push({
         claim: {
           rowIndex: claim.rowIndex,
+          claimDate: claim.claimDate,
           claimant: claim.claimant,
           amount: claim.amount,
           bankName: claim.bankName,

@@ -4,6 +4,7 @@ import "./globals.css";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { YearProvider } from "@/contexts/YearContext";
+import PwaInstall from "@/components/pwa-install";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -62,6 +63,7 @@ export default function RootLayout({
             </MainLayout>
           </YearProvider>
         </QueryProvider>
+        <PwaInstall />
       </body>
     </html>
   );

@@ -72,7 +72,16 @@ src/
 │       └── use-finance-session.ts  # 세션 훅
 ├── middleware.ts          # SSO 감지 및 리다이렉트
 └── types/                 # TypeScript 타입 정의 (index.ts)
+public/
+├── manifest.json          # PWA 매니페스트
+├── sw.js                  # 최소 서비스 워커 (PWA 설치 요건 충족)
+└── icons/                 # PWA 아이콘 (192x192, 512x512)
 ```
+
+### PWA 자동설치
+
+- `src/components/pwa-install.tsx` — 카카오톡/인앱 브라우저 감지→Chrome/Safari 리다이렉트, PWA 설치 유도 UI
+- `public/sw.js` — 최소 서비스 워커 (beforeinstallprompt 이벤트 발동 요건)
 
 ### SSO 관련 주요 파일
 

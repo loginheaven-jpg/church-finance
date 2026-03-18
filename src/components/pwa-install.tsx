@@ -50,30 +50,52 @@ export default function PwaInstall() {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches
       || (navigator as unknown as { standalone?: boolean }).standalone === true
     if (isStandalone) return
+    if (localStorage.getItem('pwa-installed') === '1') return
 
-    setShowInstallBtn(true)
+    // 설치 유도 팝업 표시 함수
+    const showPromotionIfNeeded = () => {
+      const params = new URLSearchParams(location.search)
+      if (params.get('pwa') === '1') {
+        const clean = new URL(location.href)
+        clean.searchParams.delete('pwa')
+        history.replaceState(null, '', clean.toString())
+        setTimeout(() => setShowPromotion(true), 1000)
+      } else if (!sessionStorage.getItem('pwa-prompt-shown')) {
+        setTimeout(() => {
+          setShowPromotion(true)
+          sessionStorage.setItem('pwa-prompt-shown', '1')
+        }, 2000)
+      }
+    }
 
+    // Android/PC Chrome: beforeinstallprompt가 발동해야만 설치 가능
     const handler = (e: Event) => {
       e.preventDefault()
       deferredPrompt.current = e as BeforeInstallPromptEvent
+      setShowInstallBtn(true)
+      showPromotionIfNeeded()
     }
     window.addEventListener('beforeinstallprompt', handler)
 
-    // pwa=1 파라미터 처리
-    const params = new URLSearchParams(location.search)
-    if (params.get('pwa') === '1') {
-      const clean = new URL(location.href)
-      clean.searchParams.delete('pwa')
-      history.replaceState(null, '', clean.toString())
-      setTimeout(() => setShowPromotion(true), 1000)
-    } else if (!sessionStorage.getItem('pwa-prompt-shown')) {
-      setTimeout(() => {
-        setShowPromotion(true)
-        sessionStorage.setItem('pwa-prompt-shown', '1')
-      }, 2000)
+    // iOS Safari: beforeinstallprompt 없음, 수동 가이드 제공
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !('beforeinstallprompt' in window)
+    if (isIOS) {
+      setShowInstallBtn(true)
+      showPromotionIfNeeded()
     }
 
-    return () => window.removeEventListener('beforeinstallprompt', handler)
+    // 앱 설치 완료 이벤트
+    const installedHandler = () => {
+      localStorage.setItem('pwa-installed', '1')
+      setShowInstallBtn(false)
+      setShowPromotion(false)
+    }
+    window.addEventListener('appinstalled', installedHandler)
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler)
+      window.removeEventListener('appinstalled', installedHandler)
+    }
   }, [])
 
   const handleInstall = async () => {
@@ -87,6 +109,7 @@ export default function PwaInstall() {
       deferredPrompt.current.prompt()
       const { outcome } = await deferredPrompt.current.userChoice
       if (outcome === 'accepted') {
+        localStorage.setItem('pwa-installed', '1')
         setShowInstallBtn(false)
         setShowPromotion(false)
       }

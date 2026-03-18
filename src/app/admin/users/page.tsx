@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Shield, UserCheck, UserX, Users, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { FinanceRole, ROLE_LABELS } from '@/lib/auth/finance-permissions';
+import { toast } from 'sonner';
 
 interface User {
   user_id: string;
@@ -42,7 +43,7 @@ export default function AdminUsersPage() {
     const timer = setTimeout(() => {
       setSessionChecked(true);
       if (!session || session.finance_role !== 'super_admin') {
-        alert('접근 권한이 없습니다.');
+        toast.error('접근 권한이 없습니다.');
         router.push('/dashboard');
       }
     }, 500);
@@ -91,7 +92,7 @@ export default function AdminUsersPage() {
         await supabase.from('users').update({ is_approved: true }).eq('user_id', userId);
       }
       await loadUsers();
-    } catch (e) { console.error(e); alert('오류'); }
+    } catch (e) { console.error(e); toast.error('사용자 승인 중 오류가 발생했습니다'); }
     setActionLoading(null);
   };
 
@@ -113,7 +114,7 @@ export default function AdminUsersPage() {
     try {
       await supabase.from('users').update({ finance_role: newRole }).eq('user_id', userId);
       await loadUsers();
-    } catch (e) { console.error(e); alert('오류'); }
+    } catch (e) { console.error(e); toast.error('권한 변경 중 오류가 발생했습니다'); }
     setActionLoading(null);
   };
 

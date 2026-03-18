@@ -2133,7 +2133,7 @@ export async function getBuildingMaster(): Promise<BuildingMasterData> {
 
   const parseNum = (val: string | undefined) => {
     if (!val) return 0;
-    return Number(String(val).replace(/,/g, '')) || 0;
+    return Number(String(val).replace(/,/g, '').trim()) || 0;
   };
 
   // 건축비 (D열, index 3)

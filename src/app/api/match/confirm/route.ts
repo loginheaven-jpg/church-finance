@@ -44,20 +44,12 @@ export async function POST(request: NextRequest) {
     suppressed: BankTransaction[];
   };
 
-  // 디버깅: 수신된 데이터 확인
-  console.log('[match/confirm] 수신 데이터:', {
-    incomeCount: income?.length || 0,
-    expenseCount: expense?.length || 0,
-    suppressedCount: suppressed?.length || 0,
-  });
-
   // 중복 반영 방지: 서버에서 실제 은행원장 상태만 조회 (수입/지출 전체 조회 제거로 성능 개선)
   let bankStatusMap = new Map<string, string>();
 
   try {
     const bankTransactions = await getBankTransactions();
     bankStatusMap = new Map(bankTransactions.map(tx => [tx.id, tx.matched_status || 'pending']));
-    console.log('[match/confirm] 은행원장 상태 조회 완료:', bankStatusMap.size, '건');
   } catch (error) {
     console.error('[match/confirm] 은행원장 상태 조회 실패:', error);
     // 조회 실패 시 계속 진행 (클라이언트 상태 기준으로 처리)
@@ -86,7 +78,6 @@ export async function POST(request: NextRequest) {
       });
 
       if (newIncomeItems.length === 0) {
-        console.log('[match/confirm] 모든 수입 거래가 이미 반영됨');
         incomeSuccess = true;
         incomeCount = 0;
       } else {
@@ -99,7 +90,6 @@ export async function POST(request: NextRequest) {
         }));
 
         const batchResult = await updateBankTransactionsBatch(batchUpdates);
-        console.log('[match/confirm] 수입 배치 업데이트 결과 - 성공:', batchResult.success.length, '실패:', batchResult.failed.length);
 
         // 성공한 항목만 수입부에 추가
         const successIdSet = new Set(batchResult.success);
@@ -109,7 +99,6 @@ export async function POST(request: NextRequest) {
           const incomeRecords = successfulItems.map(item => item.record);
           await addIncomeRecords(incomeRecords);
           incomeCount = incomeRecords.length;
-          console.log('[match/confirm] 수입 레코드 저장 완료:', incomeCount, '건');
 
           // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
           const ruleIds = successfulItems.filter(item => item.match?.id).map(item => item.match!.id);
@@ -135,9 +124,6 @@ export async function POST(request: NextRequest) {
 
   // 지출 레코드 저장 (독립적 처리)
   if (expense && expense.length > 0) {
-    console.log('[match/confirm] 지출 수신:', expense.length, '건');
-    console.log('[match/confirm] 지출 ID 목록:', expense.map(e => e.transaction?.id).join(', '));
-
     try {
       // undefined record 필터링, 유효성 검사, 중복 반영 방지 (서버 상태 기준)
       const validExpenseItems = expense.filter(item => {
@@ -158,11 +144,7 @@ export async function POST(request: NextRequest) {
         return true;
       });
 
-      console.log('[match/confirm] 필터 후 유효 지출:', validExpenseItems.length, '건');
-
       if (validExpenseItems.length > 0) {
-        console.log('[match/confirm] 지출 처리 시작:', validExpenseItems.length, '건');
-
         // 배치 업데이트로 은행거래 상태 일괄 업데이트 (API 호출 1회)
         const batchUpdates = validExpenseItems.map(item => ({
           id: item.transaction.id,
@@ -172,7 +154,6 @@ export async function POST(request: NextRequest) {
         }));
 
         const batchResult = await updateBankTransactionsBatch(batchUpdates);
-        console.log('[match/confirm] 배치 업데이트 결과 - 성공:', batchResult.success.length, '실패:', batchResult.failed.length);
 
         // 성공한 항목만 지출부에 추가
         const successIdSet = new Set(batchResult.success);
@@ -182,7 +163,6 @@ export async function POST(request: NextRequest) {
           const expenseRecords = successfulItems.map(item => item.record);
           await addExpenseRecords(expenseRecords);
           expenseCount = expenseRecords.length;
-          console.log('[match/confirm] 지출 레코드 저장 완료:', expenseCount, '건');
 
           // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
           const ruleIds = successfulItems.filter(item => item.match?.id).map(item => item.match!.id);
@@ -229,7 +209,6 @@ export async function POST(request: NextRequest) {
         }));
 
         const batchResult = await updateBankTransactionsBatch(batchUpdates);
-        console.log('[match/confirm] 말소 배치 업데이트 결과 - 성공:', batchResult.success.length, '실패:', batchResult.failed.length);
 
         suppressedCount = batchResult.success.length;
 

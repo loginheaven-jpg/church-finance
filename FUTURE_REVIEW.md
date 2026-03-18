@@ -1,7 +1,32 @@
 # 향후 검토 사항
 
-> 2026-03-11 코드 점검 시 발견된 항목 중, side effect 위험으로 즉시 수정하지 않은 항목입니다.
+> 코드 점검 시 발견된 항목 중, side effect 위험으로 즉시 수정하지 않은 항목입니다.
 > 각 항목을 개별적으로 재검토하고, 충분한 테스트 후 신중히 진행해야 합니다.
+
+---
+
+## 0. 코드 안정성 개선 (2026-03-18 추가)
+
+### 0-1. receipts useEffect AbortController 추가
+
+**파일**: `src/app/donors/receipts/page.tsx` (174행)
+**현상**: `useEffect(() => fetchReceipts(), [year])` — 연도 빠르게 변경 시 이전 요청이 취소되지 않아 race condition 발생 가능
+**수정안**: AbortController 또는 cancelled 플래그 패턴 적용
+**보류 사유**: `fetchReceipts` 함수가 독립 함수로 정의되어 있어 구조 변경 필요. 다수 호출처에 영향.
+
+### 0-2. google-sheets.ts 파일 분리 (3,320줄)
+
+**파일**: `src/lib/google-sheets.ts`
+**현상**: 모든 시트 접근 함수가 단일 파일에 집중. 유지보수 난이도 높음.
+**수정안**: 시트별로 분리 (income-sheet.ts, expense-sheet.ts, donor-sheet.ts 등)
+**보류 사유**: import 경로 전면 변경 (수십 개 파일 영향), 내부 공유 의존성(FINANCE_CONFIG, sheets 인스턴스, parseNum 등) 파악 필요
+
+### 0-3. receipts/page.tsx 컴포넌트 분리 (1,950줄, useState 23개)
+
+**파일**: `src/app/donors/receipts/page.tsx`
+**현상**: 수동/분할/사업자 3가지 영수증 발급 모달이 단일 컴포넌트에 집중
+**수정안**: 모달별 서브컴포넌트 분리, 공통 상태(선택된 헌금자 목록)를 부모에서 관리
+**보류 사유**: 대규모 컴포넌트 리팩토링. 상태 간 의존성이 복잡하여 분리 설계 필요.
 
 ---
 

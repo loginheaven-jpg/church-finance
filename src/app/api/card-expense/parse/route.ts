@@ -71,23 +71,12 @@ export async function POST(request: NextRequest) {
       transactionAmount: findColumnIndex(headers, ['거래금액', '청구금액', '이용금액']),
     };
 
-    // 디버그: 컬럼 매핑 정보 로깅
-    console.log('Column mapping:', {
-      headers: headers.slice(0, 15),
-      colIndex,
-    });
-
     // 카드 소유자 목록 조회
     let cardOwners: CardOwner[] = [];
     try {
       cardOwners = await getCardOwners();
-      // 디버그: 카드소유자 목록 로깅
-      console.log('Card owners:', cardOwners.map(o => ({
-        card_number: o.card_number,
-        owner_name: o.owner_name
-      })));
     } catch (err) {
-      console.log('Failed to get card owners:', err);
+      // ignore - proceed without card owners
     }
 
     // 데이터 변환
@@ -133,16 +122,7 @@ export async function POST(request: NextRequest) {
       transactions.push(item);
       totalAmount += amount;
 
-      // 디버그: 첫 3개 행의 전체 데이터 로깅
-      if (transactions.length <= 3) {
-        const rawSaleDate = row[colIndex.saleDate];
-        console.log(`Row ${i} full data:`, JSON.stringify(row.slice(0, 12)));
-        console.log(`Row ${i}: saleDate col[${colIndex.saleDate}]=[${rawSaleDate}] type=${typeof rawSaleDate}, parsed="${parseDate(rawSaleDate)}"`);
-      }
     }
-
-    // 디버그: 총 금액 로깅
-    console.log(`Total parsed: ${transactions.length} transactions, amount=${totalAmount}`);
 
     if (transactions.length === 0) {
       return NextResponse.json<CardExpenseParseResponse>(
@@ -192,7 +172,6 @@ export async function POST(request: NextRequest) {
       // 시트가 없으면 생성 (헤더 포함)
       await initCardExpenseTempSheet();
       await saveCardExpenseTemp(tempRecords);
-      console.log(`Saved ${tempRecords.length} records to temp sheet`);
     } catch (saveError) {
       console.error('Failed to save to temp sheet:', saveError);
       return NextResponse.json<CardExpenseParseResponse>({
@@ -250,7 +229,6 @@ function findColumnIndexWithFallback(headers: string[], candidates: string[], fa
   if (found >= 0) return found;
   // 헤더 매칭 실패 시 fallback 인덱스 반환 (단, 헤더 범위 내일 때만)
   if (fallbackIndex >= 0 && fallbackIndex < headers.length) {
-    console.log(`Column not found by header, using fallback index ${fallbackIndex} for: ${candidates.join(', ')}`);
     return fallbackIndex;
   }
   return -1;

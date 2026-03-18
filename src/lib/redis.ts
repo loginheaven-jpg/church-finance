@@ -75,11 +75,8 @@ export async function getWithCache<T>(
     // 캐시 조회 시도
     const cached = await redis.get<T>(key);
     if (cached !== null) {
-      console.log(`[Cache HIT] ${key}`);
       return cached;
     }
-
-    console.log(`[Cache MISS] ${key}`);
   } catch (error) {
     // Redis 연결 실패 시 로그만 남기고 계속 진행
     console.error('[Redis Error]', error);
@@ -91,7 +88,6 @@ export async function getWithCache<T>(
   // 캐시 저장 (백그라운드)
   try {
     await redis.set(key, data, { ex: ttl });
-    console.log(`[Cache SET] ${key} (TTL: ${ttl}s)`);
   } catch (error) {
     console.error('[Redis SET Error]', error);
   }
@@ -108,7 +104,6 @@ export async function invalidateCache(pattern: string): Promise<void> {
     const keys = await redis.keys(pattern);
     if (keys.length > 0) {
       await redis.del(...keys);
-      console.log(`[Cache INVALIDATED] ${pattern} (${keys.length} keys)`);
     }
   } catch (error) {
     console.error('[Redis INVALIDATE Error]', error);
@@ -121,7 +116,6 @@ export async function deleteCache(key: string): Promise<void> {
 
   try {
     await redis.del(key);
-    console.log(`[Cache DELETED] ${key}`);
   } catch (error) {
     console.error('[Redis DELETE Error]', error);
   }
@@ -133,7 +127,6 @@ export async function deleteCacheMultiple(...keys: string[]): Promise<void> {
 
   try {
     await redis.del(...keys);
-    console.log(`[Cache DELETED] ${keys.length} keys`);
   } catch (error) {
     console.error('[Redis DELETE Error]', error);
   }

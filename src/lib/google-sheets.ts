@@ -140,8 +140,6 @@ export async function updateSheet(
   const expectedCells = data.reduce((sum, row) => sum + row.length, 0);
   const actualCells = response.data.updatedCells || 0;
 
-  console.log('[updateSheet]', sheetName, range, '- 예상:', expectedCells, '셀, 실제:', actualCells, '셀');
-
   if (actualCells === 0) {
     console.error('[updateSheet] 경고: 업데이트된 셀 없음!', sheetName, range);
   }
@@ -445,7 +443,6 @@ export async function fetchCashOfferings(
 
   // 1. 모든 탭 목록 조회
   const allTabs = await getSheetTabs(spreadsheetId);
-  console.log(`[fetchCashOfferings] Found ${allTabs.length} total tabs`);
 
   // 2. 날짜 형식 탭 분석 및 필터링
   const validTabs: string[] = [];
@@ -453,21 +450,10 @@ export async function fetchCashOfferings(
 
   for (const tabName of allTabs) {
     if (isDateTabName(tabName)) {
-      const normalized = tabNameToDate(tabName);
       validTabs.push(tabName);
-      console.log(`[fetchCashOfferings] ✓ Recognized: "${tabName}" → ${normalized}`);
     } else {
       invalidTabs.push(tabName);
     }
-  }
-
-  console.log(
-    `[fetchCashOfferings] Summary: ${validTabs.length} date tabs, ` +
-    `${invalidTabs.length} other tabs`
-  );
-
-  if (invalidTabs.length > 0) {
-    console.log(`[fetchCashOfferings] Ignored tabs: ${invalidTabs.join(', ')}`);
   }
 
   const dateTabs = validTabs;
@@ -511,10 +497,6 @@ export async function fetchCashOfferings(
       const tabDate = tabNameToDate(tabName);
       return tabDate >= startDate && tabDate <= endDate;
     });
-    console.log(
-      `[fetchCashOfferings] Filtered to ${targetTabs.length} tabs ` +
-      `in range ${startDate} to ${endDate}`
-    );
   }
 
   if (targetTabs.length === 0) {
@@ -527,8 +509,6 @@ export async function fetchCashOfferings(
 
   for (const tabName of targetTabs) {
     try {
-      console.log(`[fetchCashOfferings] Reading tab: "${tabName}"`);
-
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: `'${tabName}'!A:H`, // 탭명에 /가 있으므로 따옴표 필요
@@ -536,7 +516,6 @@ export async function fetchCashOfferings(
 
       const rows = response.data.values;
       if (!rows || rows.length <= 1) {
-        console.log(`[fetchCashOfferings] Tab "${tabName}" has no data`);
         continue;
       }
 
@@ -558,7 +537,6 @@ export async function fetchCashOfferings(
         }));
 
       allOfferings.push(...offerings);
-      console.log(`[fetchCashOfferings] ✓ Loaded ${offerings.length} offerings from "${tabName}"`);
     } catch (error) {
       console.error(
         `[fetchCashOfferings] ✗ Failed to read tab "${tabName}":`,
@@ -567,11 +545,6 @@ export async function fetchCashOfferings(
       continue;
     }
   }
-
-  console.log(
-    `[fetchCashOfferings] ✓ Complete: ${allOfferings.length} total offerings ` +
-    `from ${targetTabs.length} tabs`
-  );
 
   return allOfferings;
 }
@@ -779,9 +752,6 @@ export async function findNhCardExpenseRecord(
     return Number(str) || 0;
   };
 
-  // 디버그: 찾고자 하는 금액 로깅
-  console.log(`Finding NH카드대금 with amount: ${totalAmount}`);
-
   // 헤더 제외한 데이터 검색
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -793,11 +763,6 @@ export async function findNhCardExpenseRecord(
     const isNhCard = nhCardKeywords.some(
       (keyword) => description.includes(keyword) || vendor.includes(keyword)
     );
-
-    // 디버그: NH카드 관련 행 발견 시 로깅
-    if (isNhCard) {
-      console.log(`Found NH카드 row: vendor="${vendor}", desc="${description}", amount=${amount} (raw: ${row[5]})`);
-    }
 
     if (isNhCard && amount === totalAmount) {
       return {
@@ -818,7 +783,6 @@ export async function findNhCardExpenseRecord(
     }
   }
 
-  console.log('No matching NH카드대금 record found');
   return null;
 }
 
@@ -964,16 +928,11 @@ export async function updateBankTransaction(
   const lastColLetter = String.fromCharCode(65 + lastColIndex);
   const range = `A${rowIndex + 1}:${lastColLetter}${rowIndex + 1}`;
 
-  console.log('[updateBankTransaction] ID:', id, '상태:', currentStatus, '→', updates.matched_status,
-    '(row:', rowIndex + 1, ', statusCol:', matchedStatusIdx + 1, ', range:', range, ')');
-
   await updateSheet(
     FINANCE_CONFIG.sheets.bank,
     range,
     [updatedRow.slice(0, lastColIndex + 1) as (string | number | boolean)[]]
   );
-
-  console.log('[updateBankTransaction] 완료:', id);
 }
 
 // 배치 업데이트: 여러 은행거래 상태를 한 번의 API 호출로 업데이트
@@ -1073,8 +1032,6 @@ export async function updateBankTransactionsBatch(
   }
 
   // 4. 배치 업데이트 실행 (한 번의 API 호출)
-  console.log('[updateBankTransactionsBatch] 배치 업데이트 시작:', batchRequests.length, '건');
-
   try {
     const response = await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: FINANCE_CONFIG.spreadsheetId,
@@ -1083,9 +1040,6 @@ export async function updateBankTransactionsBatch(
         data: batchRequests,
       },
     });
-
-    const updatedCells = response.data.totalUpdatedCells || 0;
-    console.log('[updateBankTransactionsBatch] 완료:', successIds.length, '건, 업데이트된 셀:', updatedCells);
 
     return { success: successIds, failed: failedIds };
   } catch (error) {

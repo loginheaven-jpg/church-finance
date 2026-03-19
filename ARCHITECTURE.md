@@ -58,6 +58,7 @@ src/
 │   ├── ui/               # shadcn/ui 컴포넌트
 │   ├── layout/           # 레이아웃 (Sidebar, MainLayout)
 │   ├── dashboard/        # 대시보드 위젯
+│   ├── expense-claim/    # 지출청구 (ClaimSubmitForm, ClaimList, ExpenseClaimVerification)
 │   └── pledge/           # 작정헌금 관련
 ├── lib/                   # 유틸리티
 │   ├── google-sheets.ts  # Google Sheets 연동
@@ -149,7 +150,7 @@ public/
 
 | 메뉴 | 경로 | 최소 권한 | 비고 |
 |------|------|----------|------|
-| 지출청구 | `/expense-claim` | admin | 2탭: 지출청구, 처리내역 점검 |
+| 지출청구 | `/expense-claim` | **member** | 3탭: 청구 입력(member↑), 청구 현황(member↑), 처리내역 점검(member↑) |
 | 데이터 입력 | `/data-entry` | admin | 4탭: 현금헌금 동기화, 은행원장 입력, 미반영 처리, 수입부 데이터보정 |
 | 거래 매칭 | `/match` | admin | 미분류 거래 분류 |
 | 카드내역 입력 | `/card-expense-integration` | **member** | 카드 사용 내역 업로드 |
@@ -327,6 +328,53 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 ---
 
 ## 최근 변경사항
+
+### 2026-03-19 업데이트 (자체 지출청구 시스템 구현)
+
+1. **지출청구 자체 시스템 (구글폼 대체)**
+   - 전교인 SSO 로그인을 활용한 자체 지출청구 UI 구현
+   - `/expense-claim` 최소 권한: admin → **member** (전교인 접근 가능)
+
+2. **지출청구 탭 구조 3탭으로 개편**
+   | 탭 | 내용 | 비고 |
+   |----|------|------|
+   | 청구 입력 | ClaimSubmitForm | 2단계 계정과목, 영수증 첨부 |
+   | 청구 현황 | ClaimList | 상태 배지, 취소, admin 처리완료/엑셀 다운로드 |
+   | 처리내역 점검 | ExpenseClaimVerification | 기존 무수정 |
+
+3. **신규 API 라우트**
+   | 경로 | 메서드 | 용도 |
+   |------|--------|------|
+   | `/api/expense-claim/submit` | POST | 지출청구 등록 (multipart/form-data, 영수증 포함) |
+   | `/api/expense-claim/list` | GET | 청구 목록 (member=본인, admin=전체) |
+   | `/api/expense-claim/cancel` | DELETE | 미처리 청구 취소 (본인 또는 admin) |
+   | `/api/expense-claim/account-info` | GET | 세션 사용자 계좌 자동조회 |
+   | `/api/expense-claim/receipt` | GET | 영수증 signed URL 생성 (1시간 만료) |
+
+4. **google-sheets.ts 신규 함수**
+   - `addExpenseClaim()` — 시트에 새 행 추가 (A: claimId, L: receiptUrl)
+   - `getExpenseClaimsByClaimant(claimant)` — 청구자별 전체 내역
+   - `getAllExpenseClaims(options?)` — 전체 청구 내역 (날짜 범위 옵션)
+   - `deleteExpenseClaimRow(rowIndex)` — 행 삭제 (취소용)
+   - `getAccountInfoByNamePublic(name)` — 계좌 조회 (기존 private → public 래퍼)
+
+5. **Supabase Storage (expense-receipts 버킷)**
+   - 경로: `{claimant}/{year}/{claimId}.{ext}` (private 버킷)
+   - 조회: `createSignedUrl()` 1시간 만료 (서버사이드)
+   - 삭제: 청구 취소 시 파일도 함께 삭제
+
+6. **지출청구 상태 계산 로직**
+   - 처리일(K컬럼) 있음 → `'processed'` (처리 완료)
+   - 없음 + 청구일 이후 일요일 0~1회 → `'pending'` (미처리 추정)
+   - 없음 + 일요일 2회↑ → `'suspicious'` (누락 의심)
+
+7. **신규/수정 컴포넌트**
+   ```
+   src/components/expense-claim/
+   ├── ClaimSubmitForm.tsx    # 청구 입력 폼 (신규)
+   ├── ClaimList.tsx          # 청구 현황 목록 (신규)
+   └── ExpenseClaimVerification.tsx  # 처리내역 점검 (무수정)
+   ```
 
 ### 2026-03-16 업데이트 (지출청구 처리내역 점검 + 분석 개선)
 

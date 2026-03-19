@@ -13,7 +13,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Eye, Trash2, Download, CheckCircle2, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
+import {
+  Loader2, Eye, Trash2, Download, CheckCircle2, AlertTriangle,
+  Clock, RefreshCw, ShieldCheck, ShieldAlert, ShieldQuestion,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
@@ -33,9 +36,21 @@ interface ClaimItem {
   status: 'pending' | 'suspicious' | 'processed';
 }
 
+type VerifStatus = 'matched' | 'pending' | 'missing';
+
 interface ClaimListProps {
   onCancelSuccess?: () => void;
 }
+
+// KST 날짜 문자열 (YYYY-MM-DD)
+const kstDateString = (date: Date) =>
+  new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const todayKST = () => kstDateString(new Date());
+const threeMonthsAgoKST = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 3);
+  return kstDateString(d);
+};
 
 export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   const session = useFinanceSession();
@@ -45,9 +60,12 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [marking, setMarking] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [cancelling, setCancelling] = useState<number | null>(null);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [verifMap, setVerifMap] = useState<Map<number, VerifStatus>>(new Map());
+  // 기본 기간: 최근 3개월
+  const [startDate, setStartDate] = useState(threeMonthsAgoKST());
+  const [endDate, setEndDate] = useState(todayKST());
 
   const fetchClaims = useCallback(async () => {
     setLoading(true);
@@ -60,6 +78,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       if (data.success) {
         setClaims(data.data);
         setIsAdmin(data.isAdmin);
+        setVerifMap(new Map()); // 조회 시 대조 결과 초기화
       } else {
         toast.error(data.error || '목록 조회 실패');
       }
@@ -84,17 +103,18 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   };
 
   const toggleSelectAll = () => {
-    const pendingRows = claims
+    const unpaidRows = claims
       .filter(c => c.status !== 'processed')
       .map(c => c.rowIndex);
-    if (selected.size === pendingRows.length) {
+    if (selected.size === unpaidRows.length && unpaidRows.length > 0) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(pendingRows));
+      setSelected(new Set(unpaidRows));
     }
   };
 
-  const handleMarkProcessed = async () => {
+  // 1차 점검: 입금완료 표시 (K컬럼 기재)
+  const handleMarkPaid = async () => {
     if (selected.size === 0) { toast.error('처리할 항목을 선택해주세요'); return; }
     setMarking(true);
     try {
@@ -105,7 +125,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`${selected.size}건을 처리 완료로 표시했습니다`);
+        toast.success(`${selected.size}건 입금완료 표시했습니다`);
         setSelected(new Set());
         await fetchClaims();
       } else {
@@ -115,6 +135,44 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       toast.error('처리 중 오류가 발생했습니다');
     } finally {
       setMarking(false);
+    }
+  };
+
+  // 2차 점검: 지출부 대조 (주일 동기화 후)
+  const handleVerify = async () => {
+    const processedClaims = claims.filter(c => c.status === 'processed' && c.processedDate);
+    if (processedClaims.length === 0) {
+      toast.info('대조할 입금완료 건이 없습니다');
+      return;
+    }
+    setVerifying(true);
+    try {
+      // 처리완료 건들의 processedDate 범위로 verification API 호출
+      const dates = processedClaims.map(c => c.processedDate).sort();
+      const vs = dates[0];
+      const ve = dates[dates.length - 1];
+      const res = await fetch(
+        `/api/expense-claim/verification?startDate=${vs}&endDate=${ve}`
+      );
+      const data = await res.json();
+      if (data.success) {
+        const map = new Map<number, VerifStatus>();
+        (data.items as { claim: { rowIndex: number }; status: VerifStatus }[]).forEach(item => {
+          map.set(item.claim.rowIndex, item.status);
+        });
+        setVerifMap(map);
+        const matched = data.items.filter((i: { status: string }) => i.status === 'matched').length;
+        const missing = data.items.filter((i: { status: string }) => i.status === 'missing').length;
+        toast.success(
+          `지출부 대조 완료 — 확인됨 ${matched}건${missing > 0 ? `, 미기재 ${missing}건` : ''}`
+        );
+      } else {
+        toast.error(data.error || '대조 실패');
+      }
+    } catch {
+      toast.error('지출부 대조 중 오류가 발생했습니다');
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -156,10 +214,10 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '지출청구');
 
-      const kstDate = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-      const dateStr = kstDate.toISOString().slice(0, 10).replace(/-/g, '');
+      const dateStr = todayKST().replace(/-/g, '');
       XLSX.writeFile(wb, `지출청구_${dateStr}.xls`, { bookType: 'biff8' });
 
+      // 다운로드 즉시 K컬럼 입금완료 처리 (1차 점검)
       const rowIndices = result.data.map((item: { rowIndex: number }) => item.rowIndex);
       const updateRes = await fetch('/api/expense-claim', {
         method: 'POST',
@@ -168,10 +226,10 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       });
       const updateResult = await updateRes.json();
       if (updateResult.success) {
-        toast.success(`${result.data.length}건 다운로드 완료, 처리일자 기입됨`);
+        toast.success(`${result.data.length}건 다운로드 + 입금완료 처리됨`);
         await fetchClaims();
       } else {
-        toast.warning('다운로드는 완료했으나 처리일자 기입 실패');
+        toast.warning('다운로드는 완료했으나 입금완료 처리 실패');
       }
     } catch {
       toast.error('다운로드 중 오류가 발생했습니다');
@@ -218,15 +276,24 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
     }
   };
 
-  const statusBadge = (status: ClaimItem['status']) => {
-    if (status === 'processed') {
+  // 4단계 상태 배지
+  const statusBadge = (claim: ClaimItem) => {
+    if (claim.status === 'processed') {
+      const verif = verifMap.get(claim.rowIndex);
+      if (verif === 'matched') {
+        return (
+          <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0">
+            <ShieldCheck className="h-3 w-3 mr-1" />최종확인
+          </Badge>
+        );
+      }
       return (
-        <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0">
-          <CheckCircle2 className="h-3 w-3 mr-1" />처리 완료
+        <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-0">
+          <CheckCircle2 className="h-3 w-3 mr-1" />입금완료
         </Badge>
       );
     }
-    if (status === 'suspicious') {
+    if (claim.status === 'suspicious') {
       return (
         <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0">
           <AlertTriangle className="h-3 w-3 mr-1" />누락 의심
@@ -235,14 +302,24 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
     }
     return (
       <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100 border-0">
-        <Clock className="h-3 w-3 mr-1" />미처리 추정
+        <Clock className="h-3 w-3 mr-1" />미처리
       </Badge>
     );
   };
 
-  const pendingClaims = claims.filter(c => c.status !== 'processed');
-  const pendingRows = pendingClaims.map(c => c.rowIndex);
-  const allPendingSelected = pendingRows.length > 0 && selected.size === pendingRows.length;
+  // 지출부 대조 결과 아이콘 (admin 전용)
+  const verifIcon = (rowIndex: number) => {
+    const v = verifMap.get(rowIndex);
+    if (v === 'matched') return <span title="지출원장 확인됨"><ShieldCheck className="h-4 w-4 text-green-600" /></span>;
+    if (v === 'missing') return <span title="지출원장 미기재"><ShieldAlert className="h-4 w-4 text-red-500" /></span>;
+    if (v === 'pending') return <span title="지출원장 확인 대기"><ShieldQuestion className="h-4 w-4 text-slate-400" /></span>;
+    return null;
+  };
+
+  const unpaidClaims = claims.filter(c => c.status !== 'processed');
+  const unpaidRows = unpaidClaims.map(c => c.rowIndex);
+  const allUnpaidSelected = unpaidRows.length > 0 && selected.size === unpaidRows.length;
+  const hasVerifRun = verifMap.size > 0;
 
   return (
     <div className="space-y-4">
@@ -265,19 +342,35 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
           <RefreshCw className="h-4 w-4 mr-1" />
           조회
         </Button>
+
         {isAdmin && (
           <div className="ml-auto flex gap-2">
+            {/* 1차 점검: 입금완료 표시 */}
             <Button
               size="sm"
               variant="outline"
-              onClick={handleMarkProcessed}
+              onClick={handleMarkPaid}
               disabled={marking || selected.size === 0}
             >
               {marking
                 ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 : <CheckCircle2 className="h-4 w-4 mr-1" />}
-              처리 완료 표시 ({selected.size})
+              입금완료 표시 ({selected.size})
             </Button>
+            {/* 2차 점검: 지출부 대조 */}
+            <Button
+              size="sm"
+              variant={hasVerifRun ? 'default' : 'outline'}
+              onClick={handleVerify}
+              disabled={verifying}
+              className={hasVerifRun ? 'bg-green-600 hover:bg-green-700' : ''}
+            >
+              {verifying
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <ShieldCheck className="h-4 w-4 mr-1" />}
+              지출부 대조
+            </Button>
+            {/* 엑셀 다운로드 (이체파일 + 1차처리 동시) */}
             <Button
               size="sm"
               onClick={handleExcelDownload}
@@ -320,7 +413,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                       <TableHead className="w-8 pl-4">
                         <input
                           type="checkbox"
-                          checked={allPendingSelected}
+                          checked={allUnpaidSelected}
                           onChange={toggleSelectAll}
                           className="h-4 w-4"
                           title="미처리 전체 선택"
@@ -333,6 +426,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                     <TableHead>내역</TableHead>
                     <TableHead className="text-right">금액</TableHead>
                     <TableHead>상태</TableHead>
+                    {isAdmin && <TableHead className="w-8 text-center" title="지출부 대조 결과">지출부</TableHead>}
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -358,13 +452,21 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                         <TableCell className="text-sm whitespace-nowrap">{claim.claimDate}</TableCell>
                         {isAdmin && <TableCell className="text-sm">{claim.claimant}</TableCell>}
                         <TableCell className="text-sm">{claim.accountCode}</TableCell>
-                        <TableCell className="text-sm max-w-[160px] truncate" title={claim.description}>
+                        <TableCell
+                          className="text-sm max-w-[160px] truncate"
+                          title={claim.description}
+                        >
                           {claim.description}
                         </TableCell>
                         <TableCell className="text-right text-sm whitespace-nowrap">
                           {claim.amount.toLocaleString()}원
                         </TableCell>
-                        <TableCell>{statusBadge(claim.status)}</TableCell>
+                        <TableCell>{statusBadge(claim)}</TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-center">
+                            {claim.status === 'processed' && verifIcon(claim.rowIndex)}
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex items-center gap-1">
                             {claim.receiptUrl && (
@@ -400,18 +502,33 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                 </TableBody>
               </Table>
             </div>
-            {pendingClaims.length > 0 && (
-              <div className="px-4 py-3 border-t bg-slate-50 flex justify-end gap-4">
-                <span className="text-sm text-slate-500">
-                  미처리 {pendingClaims.length}건
+
+            {/* 하단 요약 */}
+            <div className="px-4 py-3 border-t bg-slate-50 flex flex-wrap justify-end gap-4 text-sm">
+              {unpaidClaims.length > 0 && (
+                <span className="text-slate-500">
+                  미처리 <span className="font-semibold text-slate-700">{unpaidClaims.length}건</span>
+                  {' / '}
+                  {unpaidClaims.reduce((s, c) => s + c.amount, 0).toLocaleString()}원
                 </span>
-                <span className="text-sm font-semibold text-slate-700">
-                  합계: {pendingClaims.reduce((s, c) => s + c.amount, 0).toLocaleString()}원
-                </span>
-              </div>
-            )}
+              )}
+              <span className="text-slate-500">
+                전체 <span className="font-semibold text-slate-700">{claims.length}건</span>
+                {' / '}
+                {claims.reduce((s, c) => s + c.amount, 0).toLocaleString()}원
+              </span>
+            </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* 처리 안내 (admin 전용) */}
+      {isAdmin && !loading && (
+        <div className="text-xs text-slate-400 space-y-0.5 pl-1">
+          <p>• <strong>입금완료 표시</strong>: 이체 당일, 체크박스 선택 후 클릭 → 청구자에게 즉시 입금완료 표시</p>
+          <p>• <strong>지출부 대조</strong>: 주일 지출부 동기화 후 클릭 → 지출원장 교차검증 결과 표시</p>
+          <p>• <strong>엑셀 다운로드</strong>: 이체 파일 생성과 동시에 전체 미처리 건 입금완료 처리</p>
+        </div>
       )}
     </div>
   );

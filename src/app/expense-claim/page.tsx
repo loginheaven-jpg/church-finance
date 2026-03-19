@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ExternalLink } from 'lucide-react';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
-import ExpenseClaimVerification from '@/components/expense-claim/ExpenseClaimVerification';
 import { ClaimSubmitForm } from '@/components/expense-claim/ClaimSubmitForm';
 import { ClaimList } from '@/components/expense-claim/ClaimList';
 
@@ -34,10 +33,9 @@ export default function ExpenseClaimPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="submit">청구 입력</TabsTrigger>
           <TabsTrigger value="list">청구 현황</TabsTrigger>
-          <TabsTrigger value="verification">처리내역 점검</TabsTrigger>
         </TabsList>
 
         <TabsContent value="submit" className="mt-6">
@@ -49,10 +47,6 @@ export default function ExpenseClaimPage() {
 
         <TabsContent value="list" className="mt-6">
           <ClaimList />
-        </TabsContent>
-
-        <TabsContent value="verification" className="mt-6">
-          <ExpenseClaimVerification />
         </TabsContent>
       </Tabs>
     </div>

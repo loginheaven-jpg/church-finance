@@ -2304,6 +2304,8 @@ export interface ExpenseClaimRow {
   accountCode: string;    // E: 계정
   description: string;    // G: 내역
   processedDate: string;  // K: 입금처리
+  claimId?: string;       // A: 자체 시스템 입력 시 UUID (구글폼 입력 건은 빈칸)
+  receiptUrl?: string;    // L: 영수증 URL (Supabase Storage)
 }
 
 export interface AccountInfo {
@@ -2335,6 +2337,11 @@ async function getAccountInfoByName(name: string): Promise<AccountInfo | null> {
     }
   }
   return null;
+}
+
+/** 계정 시트 조회 (외부 공개용 래퍼) */
+export async function getAccountInfoByNamePublic(name: string): Promise<AccountInfo | null> {
+  return getAccountInfoByName(name);
 }
 
 /**
@@ -2525,6 +2532,165 @@ export async function getProcessedExpenseClaims(
   }
 
   return claims;
+}
+
+/**
+ * 지출청구 시트에 새 행 추가 (자체 시스템 입력)
+ * 컬럼: A=claimId, B=claimDate, C='', D=claimant, E=accountCode,
+ *        F=amount, G=description, H=accountNumber, I='', J=bankName, K='', L=receiptUrl
+ */
+export async function addExpenseClaim(claim: {
+  claimId: string;
+  claimDate: string;
+  claimant: string;
+  accountCode: string;
+  amount: number;
+  description: string;
+  accountNumber: string;
+  bankName: string;
+  receiptUrl?: string;
+}): Promise<void> {
+  const row = [
+    claim.claimId,
+    claim.claimDate,
+    '',
+    claim.claimant,
+    claim.accountCode,
+    claim.amount,
+    claim.description,
+    claim.accountNumber,
+    '',
+    claim.bankName,
+    '',
+    claim.receiptUrl || '',
+  ];
+  await appendToSheet(FINANCE_CONFIG.sheets.expenseClaim, [row]);
+}
+
+/**
+ * 특정 청구자의 전체 지출청구 내역 조회 (처리완료 + 미처리 모두)
+ */
+export async function getExpenseClaimsByClaimant(claimant: string): Promise<ExpenseClaimRow[]> {
+  const all = await getAllExpenseClaims();
+  return all.filter(c => c.claimant === claimant);
+}
+
+/**
+ * 전체 지출청구 내역 조회 (admin용, 처리완료 + 미처리 모두)
+ * @param options startDate/endDate: 청구일 기준 필터 (선택)
+ */
+export async function getAllExpenseClaims(options?: {
+  startDate?: string;
+  endDate?: string;
+}): Promise<ExpenseClaimRow[]> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.expenseClaim, 'A:L');
+
+  if (!rows || rows.length <= 1) return [];
+
+  const accountCache = new Map<string, AccountInfo | null>();
+  const claims: ExpenseClaimRow[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+
+    const claimId = row[0] || '';      // A
+    const rawClaimDate = row[1] || ''; // B
+    const claimant = row[3] || '';     // D
+    const accountCode = row[4] || '';  // E
+    const amountStr = row[5] || '0';   // F
+    const description = row[6] || '';  // G
+    const rawAccount = row[7] || '';   // H
+    let bankName = row[9] || '';       // J
+    const processedRaw = row[10] || '';// K
+    const receiptUrl = row[11] || '';  // L
+
+    const claimDate = normalizeDateString(rawClaimDate.trim()) || rawClaimDate.trim();
+
+    // 청구일 범위 필터
+    if (options?.startDate && claimDate < options.startDate) continue;
+    if (options?.endDate && claimDate > options.endDate) continue;
+
+    // 계좌번호 파싱
+    let accountNumber = '';
+    if (rawAccount.includes('/')) {
+      const parts = rawAccount.split('/').map((s: string) => s.trim());
+      accountNumber = parts[0].replace(/[^0-9]/g, '');
+      if (!bankName && parts[1]) bankName = parts[1];
+    } else {
+      accountNumber = rawAccount.replace(/[^0-9]/g, '');
+    }
+
+    // 계정 시트에서 조회
+    if ((!bankName || !accountNumber) && claimant) {
+      if (!accountCache.has(claimant)) {
+        const accountInfo = await getAccountInfoByName(claimant);
+        accountCache.set(claimant, accountInfo);
+      }
+      const cached = accountCache.get(claimant);
+      if (cached) {
+        if (!bankName) bankName = cached.bankName;
+        if (!accountNumber) accountNumber = cached.accountNumber;
+      }
+    }
+
+    const amount = parseFloat(String(amountStr).replace(/[,원\s]/g, '')) || 0;
+    if (amount <= 0) continue;
+
+    const processedDate = processedRaw.trim()
+      ? (normalizeDateString(processedRaw.trim()) || processedRaw.trim())
+      : '';
+
+    claims.push({
+      rowIndex: i + 1,
+      claimId: claimId || undefined,
+      claimDate,
+      bankName,
+      accountNumber,
+      amount,
+      claimant,
+      accountCode,
+      description,
+      processedDate,
+      receiptUrl: receiptUrl || undefined,
+    });
+  }
+
+  return claims;
+}
+
+/**
+ * 지출청구 행 삭제 (취소용, rowIndex는 1-based 시트 행 번호)
+ */
+export async function deleteExpenseClaimRow(rowIndex: number): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+
+  const sheet = spreadsheet.data.sheets?.find(
+    s => s.properties?.title === FINANCE_CONFIG.sheets.expenseClaim
+  );
+  if (!sheet?.properties?.sheetId) {
+    throw new Error('지출청구 시트를 찾을 수 없습니다');
+  }
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId: sheet.properties.sheetId,
+            dimension: 'ROWS',
+            startIndex: rowIndex - 1, // 0-based
+            endIndex: rowIndex,
+          },
+        },
+      }],
+    },
+  });
 }
 
 // ============================================

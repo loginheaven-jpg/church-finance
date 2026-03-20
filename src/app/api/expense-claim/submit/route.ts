@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
 
       const year = claimDate.substring(0, 4);
       const ext = receiptFile.name.split('.').pop() || 'jpg';
-      const filePath = `${session.name}/${year}/${claimId}.${ext}`;
+      // Supabase Storage는 한글 키를 허용하지 않으므로 user_id 사용
+      const filePath = `${session.user_id}/${year}/${claimId}.${ext}`;
 
       const arrayBuffer = await receiptFile.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);

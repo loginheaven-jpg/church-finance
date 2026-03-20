@@ -189,8 +189,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
               </button>
             </div>
             {showGuide && (
-              <div className="text-xs bg-blue-50 border border-blue-200 rounded-md p-3 space-y-0.5">
-                <p className="font-semibold text-blue-700 mb-1">어떤 코드를 선택해야 하나요?</p>
+              <div className="inline-block text-xs border border-blue-200 rounded-md overflow-hidden max-w-[280px]">
+                <div className="bg-blue-100 px-3 py-1.5 font-semibold text-blue-700">어떤 코드를 선택해야 하나요?</div>
                 {[
                   ['교역자 식대', '14'],
                   ['선교사/강사비, 접대비', '32'],
@@ -206,13 +206,13 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                   ['주유, 차수리', '65'],
                   ['시설 수리비', '66'],
                   ['사무용품', '74'],
-                ].map(([desc, code]) => (
-                  <div key={`${desc}-${code}`} className="flex justify-between text-slate-600">
-                    <span>{desc}</span>
-                    <span className="font-mono text-blue-600">{code}</span>
+                ].map(([desc, code], i) => (
+                  <div key={`${desc}-${code}`} className={`flex justify-between px-3 py-0.5 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                    <span className="text-slate-600">{desc}</span>
+                    <span className="font-mono text-blue-600 ml-4">{code}</span>
                   </div>
                 ))}
-                <p className="text-slate-400 mt-1 pt-1 border-t">코드 번호에 해당하는 카테고리를 먼저 선택하세요</p>
+                <div className="px-3 py-1.5 text-slate-400 bg-slate-50 border-t">카테고리 코드 앞 2자리로 선택</div>
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">

@@ -38,14 +38,17 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: '이미 처리된 청구는 취소할 수 없습니다' }, { status: 400 });
     }
 
-    // Supabase Storage 영수증 삭제
-    if (claim.receiptUrl && supabaseAdmin) {
-      const { error: deleteFileError } = await supabaseAdmin.storage
-        .from(BUCKET)
-        .remove([claim.receiptUrl]);
-      if (deleteFileError) {
-        console.error('Receipt delete error:', deleteFileError);
-        // 파일 삭제 실패는 경고만 (행 삭제는 진행)
+    // Supabase Storage 영수증 삭제 (쉼표 구분 복수 파일 지원)
+    if (claim.receiptUrl && supabaseAdmin && !claim.receiptUrl.startsWith('http')) {
+      const paths = claim.receiptUrl.split(',').map(p => p.trim()).filter(Boolean);
+      if (paths.length > 0) {
+        const { error: deleteFileError } = await supabaseAdmin.storage
+          .from(BUCKET)
+          .remove(paths);
+        if (deleteFileError) {
+          console.error('Receipt delete error:', deleteFileError);
+          // 파일 삭제 실패는 경고만 (행 삭제는 진행)
+        }
       }
     }
 

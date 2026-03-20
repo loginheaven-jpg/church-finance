@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Paperclip, X, HelpCircle } from 'lucide-react';
+import { Loader2, Paperclip, X, HelpCircle, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ExpenseCode {
@@ -17,35 +17,54 @@ interface ExpenseCode {
   active: boolean;
 }
 
+interface LineItem {
+  id: string;
+  categoryCode: string;
+  accountCode: string;
+  amount: string;
+  description: string;
+  receiptFile: File | null;
+}
+
+interface GroupedClaim {
+  accountCode: string;
+  accountCodeName: string;
+  totalAmount: number;
+  descriptions: string[];
+  receiptFiles: File[];
+  itemCount: number;
+}
+
 interface ClaimSubmitFormProps {
   userName: string;
   onSuccess?: () => void;
 }
 
+const todayKST = () =>
+  new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+const makeId = () => Math.random().toString(36).slice(2, 8);
+
+const parseAmount = (s: string) => Number(s.replace(/,/g, '')) || 0;
+
 export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
   const [loading, setLoading] = useState(false);
   const [codes, setCodes] = useState<ExpenseCode[]>([]);
-  // 서버에서 읽어온 기본 계좌 (변경 감지용)
   const [defaultAccount, setDefaultAccount] = useState({ bankName: '', accountNumber: '' });
+  const [showGuide, setShowGuide] = useState(false);
 
-  // 오늘 날짜 (KST) — toISOString은 항상 UTC이므로 +9h가 정확
-  const todayKST = () => {
-    return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  };
-
-  const [form, setForm] = useState({
+  // 공통 정보
+  const [shared, setShared] = useState({
     claimDate: todayKST(),
-    categoryCode: '',
-    accountCode: '',
-    amount: '',
-    description: '',
     bankName: '',
     accountNumber: '',
     accountHolder: userName,
   });
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
-  const [showGuide, setShowGuide] = useState(false);
+  // 라인 아이템 배열
+  const [items, setItems] = useState<LineItem[]>([
+    { id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFile: null },
+  ]);
 
   // 계정과목 코드 조회
   useEffect(() => {
@@ -63,7 +82,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
         if (d.success && d.data) {
           const bk = d.data.bankName || '';
           const ac = d.data.accountNumber || '';
-          setForm(prev => ({ ...prev, bankName: bk, accountNumber: ac }));
+          setShared(prev => ({ ...prev, bankName: bk, accountNumber: ac }));
           setDefaultAccount({ bankName: bk, accountNumber: ac });
         }
       })
@@ -75,40 +94,120 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
     new Map(codes.map(c => [c.category_code, c.category_item])).entries()
   ).sort((a, b) => a[0] - b[0]);
 
-  const itemsInCategory = codes.filter(
-    c => String(c.category_code) === form.categoryCode
-  );
+  const getItemsInCategory = (catCode: string) =>
+    codes.filter(c => String(c.category_code) === catCode);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const getCodeName = (code: string) => {
+    const found = codes.find(c => String(c.code) === code);
+    return found ? `${found.code} ${found.item}` : code;
+  };
+
+  // 라인 아이템 조작
+  const updateItem = (id: string, field: keyof LineItem, value: string | File | null) => {
+    setItems(prev => prev.map(item =>
+      item.id === id ? { ...item, [field]: value } : item
+    ));
+  };
+
+  const addItem = () => {
+    const lastItem = items[items.length - 1];
+    setItems(prev => [...prev, {
+      id: makeId(),
+      categoryCode: lastItem?.categoryCode || '',
+      accountCode: '',
+      amount: '',
+      description: '',
+      receiptFile: null,
+    }]);
+  };
+
+  const removeItem = (id: string) => {
+    if (items.length <= 1) return;
+    setItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  // 계정코드별 자동 그룹핑
+  const grouped = useMemo((): GroupedClaim[] => {
+    const map = new Map<string, GroupedClaim>();
+    for (const item of items) {
+      if (!item.accountCode || !item.amount) continue;
+      const amt = parseAmount(item.amount);
+      if (amt <= 0) continue;
+      const existing = map.get(item.accountCode);
+      if (existing) {
+        existing.totalAmount += amt;
+        if (item.description) existing.descriptions.push(item.description);
+        if (item.receiptFile) existing.receiptFiles.push(item.receiptFile);
+        existing.itemCount++;
+      } else {
+        map.set(item.accountCode, {
+          accountCode: item.accountCode,
+          accountCodeName: getCodeName(item.accountCode),
+          totalAmount: amt,
+          descriptions: item.description ? [item.description] : [],
+          receiptFiles: item.receiptFile ? [item.receiptFile] : [],
+          itemCount: 1,
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [items, codes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const totalAmount = grouped.reduce((s, g) => s + g.totalAmount, 0);
+
+  const handleFileChange = (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     if (file && file.size > 10 * 1024 * 1024) {
       toast.error('파일 크기는 10MB 이하여야 합니다');
       return;
     }
-    setReceiptFile(file);
+    updateItem(itemId, 'receiptFile', file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.accountCode) { toast.error('계정과목을 선택해주세요'); return; }
-    if (!form.amount || Number(form.amount.replace(/,/g, '')) <= 0) {
-      toast.error('금액을 올바르게 입력해주세요'); return;
+
+    // 유효성 검증
+    const validItems = items.filter(item => item.accountCode && parseAmount(item.amount) > 0);
+    if (validItems.length === 0) {
+      toast.error('최소 1개 이상의 항목을 입력해주세요');
+      return;
     }
-    if (!form.bankName || !form.accountNumber) {
-      toast.error('입금 은행과 계좌번호를 입력해주세요'); return;
+    for (const item of validItems) {
+      if (!item.description) {
+        toast.error(`내역을 입력해주세요 (${getCodeName(item.accountCode)})`);
+        return;
+      }
+    }
+    if (!shared.bankName || !shared.accountNumber) {
+      toast.error('입금 은행과 계좌번호를 입력해주세요');
+      return;
     }
 
     setLoading(true);
     try {
       const fd = new FormData();
-      fd.append('claimDate', form.claimDate);
-      fd.append('accountCode', form.accountCode);
-      fd.append('amount', form.amount.replace(/,/g, ''));
-      fd.append('description', form.description);
-      fd.append('bankName', form.bankName);
-      fd.append('accountNumber', form.accountNumber);
-      fd.append('accountHolder', form.accountHolder);
-      if (receiptFile) fd.append('receipt', receiptFile);
+      fd.append('claimDate', shared.claimDate);
+      fd.append('bankName', shared.bankName);
+      fd.append('accountNumber', shared.accountNumber);
+      fd.append('accountHolder', shared.accountHolder);
+
+      // 그룹 정보 JSON
+      const groupsData = grouped.map((g, gi) => ({
+        accountCode: g.accountCode,
+        amount: g.totalAmount,
+        description: g.descriptions.join(', '),
+        fileCount: g.receiptFiles.length,
+        groupIndex: gi,
+      }));
+      fd.append('groups', JSON.stringify(groupsData));
+
+      // 파일 첨부: receipt_{groupIndex}_{fileIndex}
+      grouped.forEach((g, gi) => {
+        g.receiptFiles.forEach((file, fi) => {
+          fd.append(`receipt_${gi}_${fi}`, file);
+        });
+      });
 
       const res = await fetch('/api/expense-claim/submit', { method: 'POST', body: fd });
       const data = await res.json();
@@ -117,37 +216,30 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
         throw new Error(data.error || '등록 실패');
       }
 
-      toast.success('지출청구가 등록되었습니다');
+      const claimCount = grouped.length;
+      toast.success(`${claimCount}건의 지출청구가 등록되었습니다`);
 
-      // 계좌가 변경된 경우 기본계좌 저장 여부 확인
+      // 계좌 변경 시 기본계좌 저장 확인
       const accountChanged =
-        form.bankName !== defaultAccount.bankName ||
-        form.accountNumber !== defaultAccount.accountNumber;
-      if (accountChanged && form.bankName && form.accountNumber) {
+        shared.bankName !== defaultAccount.bankName ||
+        shared.accountNumber !== defaultAccount.accountNumber;
+      if (accountChanged && shared.bankName && shared.accountNumber) {
         if (confirm('이 계좌를 기본계좌로 저장하시겠습니까?')) {
           try {
             await fetch('/api/expense-claim/account-info', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ bankName: form.bankName, accountNumber: form.accountNumber }),
+              body: JSON.stringify({ bankName: shared.bankName, accountNumber: shared.accountNumber }),
             });
-            setDefaultAccount({ bankName: form.bankName, accountNumber: form.accountNumber });
+            setDefaultAccount({ bankName: shared.bankName, accountNumber: shared.accountNumber });
             toast.success('기본계좌가 변경되었습니다');
-          } catch {
-            // 기본계좌 변경 실패해도 청구 자체는 성공
-          }
+          } catch { /* 실패해도 청구 자체는 성공 */ }
         }
       }
 
-      setForm(prev => ({
-        ...prev,
-        claimDate: todayKST(),
-        categoryCode: '',
-        accountCode: '',
-        amount: '',
-        description: '',
-      }));
-      setReceiptFile(null);
+      // 초기화
+      setShared(prev => ({ ...prev, claimDate: todayKST() }));
+      setItems([{ id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFile: null }]);
       onSuccess?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '등록 중 오류가 발생했습니다');
@@ -163,173 +255,227 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 청구자 (read-only) */}
-          <div className="space-y-1">
-            <Label>청구자</Label>
-            <Input value={userName} readOnly className="bg-slate-50 text-slate-500" />
-          </div>
-
-          {/* 청구일 */}
-          <div className="space-y-1">
-            <Label>청구일 <span className="text-red-500">*</span></Label>
-            <Input
-              type="date"
-              value={form.claimDate}
-              onChange={e => setForm(p => ({ ...p, claimDate: e.target.value }))}
-              required
-            />
-          </div>
-
-          {/* 계정과목 (2단계) */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-1">
-              <Label>계정과목 <span className="text-red-500">*</span></Label>
-              <button type="button" onClick={() => setShowGuide(p => !p)} className="text-slate-400 hover:text-blue-500">
-                <HelpCircle className="h-4 w-4" />
-              </button>
+          {/* 공통: 청구자 + 청구일 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>청구자</Label>
+              <Input value={userName} readOnly className="bg-slate-50 text-slate-500" />
             </div>
-            {showGuide && (
-              <div className="inline-block text-xs border border-blue-200 rounded-md overflow-hidden max-w-[280px]">
-                <div className="bg-blue-100 px-3 py-1.5 font-semibold text-blue-700">어떤 코드를 선택해야 하나요?</div>
-                {[
-                  ['교역자 식대', '14'],
-                  ['선교사/강사비, 접대비', '32'],
-                  ['큐티책, 강사료, 수련회', '41'],
-                  ['가정교회 세미나', '45'],
-                  ['목자목녀 행사', '45'],
-                  ['생일, 세례 축하', '46'],
-                  ['예봄성도 심방', '46'],
-                  ['만나실 식재료', '47'],
-                  ['행복쉼터 (카페)', '47'],
-                  ['내부성도 구호', '52'],
-                  ['외부/지역 구호', '53'],
-                  ['주유, 차수리', '65'],
-                  ['시설 수리비', '66'],
-                  ['사무용품', '74'],
-                ].map(([desc, code], i) => (
-                  <div key={`${desc}-${code}`} className={`flex justify-between px-3 py-0.5 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                    <span className="text-slate-600">{desc}</span>
-                    <span className="font-mono text-blue-600 ml-4">{code}</span>
-                  </div>
-                ))}
-                <div className="px-3 py-1.5 text-slate-400 bg-slate-50 border-t">카테고리 코드 앞 2자리로 선택</div>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              <Select
-                value={form.categoryCode}
-                onValueChange={v => setForm(p => ({ ...p, categoryCode: v, accountCode: '' }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="카테고리 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map(([code, name]) => (
-                    <SelectItem key={code} value={String(code)}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={form.accountCode}
-                onValueChange={v => setForm(p => ({ ...p, accountCode: v }))}
-                disabled={!form.categoryCode}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="항목 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {itemsInCategory.map(c => (
-                    <SelectItem key={c.code} value={String(c.code)}>
-                      {c.code} {c.item}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-1">
+              <Label>청구일 <span className="text-red-500">*</span></Label>
+              <Input
+                type="date"
+                value={shared.claimDate}
+                onChange={e => setShared(p => ({ ...p, claimDate: e.target.value }))}
+                required
+              />
             </div>
           </div>
 
-          {/* 금액 */}
-          <div className="space-y-1">
-            <Label>금액 <span className="text-red-500">*</span></Label>
-            <Input
-              type="text"
-              inputMode="numeric"
-              placeholder="0"
-              value={form.amount}
-              onChange={e => {
-                const v = e.target.value.replace(/[^0-9]/g, '');
-                setForm(p => ({ ...p, amount: v ? Number(v).toLocaleString() : '' }));
-              }}
-              required
-            />
-          </div>
-
-          {/* 내역 */}
-          <div className="space-y-1">
-            <Label>내역 <span className="text-red-500">*</span></Label>
-            <Input
-              placeholder="지출 내용을 입력하세요"
-              value={form.description}
-              onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-              required
-            />
-          </div>
-
-          {/* 은행 / 계좌번호 / 예금주 */}
+          {/* 공통: 입금 계좌 정보 */}
           <div className="space-y-1">
             <Label>입금 계좌 정보 <span className="text-red-500">*</span></Label>
             <div className="grid grid-cols-3 gap-2">
               <Input
                 placeholder="은행명"
-                value={form.bankName}
-                onChange={e => setForm(p => ({ ...p, bankName: e.target.value }))}
+                value={shared.bankName}
+                onChange={e => setShared(p => ({ ...p, bankName: e.target.value }))}
                 required
               />
               <Input
                 placeholder="계좌번호"
-                value={form.accountNumber}
+                value={shared.accountNumber}
                 onChange={e => {
                   const v = e.target.value.replace(/[^0-9]/g, '');
-                  setForm(p => ({ ...p, accountNumber: v }));
+                  setShared(p => ({ ...p, accountNumber: v }));
                 }}
                 required
               />
               <Input
                 placeholder="예금주"
-                value={form.accountHolder}
-                onChange={e => setForm(p => ({ ...p, accountHolder: e.target.value }))}
+                value={shared.accountHolder}
+                onChange={e => setShared(p => ({ ...p, accountHolder: e.target.value }))}
                 required
               />
             </div>
           </div>
 
-          {/* 영수증 첨부 */}
-          <div className="space-y-1">
-            <Label>영수증 첨부 <span className="text-slate-400 text-xs">(선택, 최대 10MB)</span></Label>
-            {receiptFile ? (
-              <div className="flex items-center gap-2 p-2 border rounded-md bg-slate-50">
-                <Paperclip className="h-4 w-4 text-slate-400" />
-                <span className="text-sm flex-1 truncate">{receiptFile.name}</span>
-                <button type="button" onClick={() => setReceiptFile(null)}>
-                  <X className="h-4 w-4 text-slate-400 hover:text-red-500" />
-                </button>
-              </div>
-            ) : (
-              <label className="flex items-center gap-2 p-2 border border-dashed rounded-md cursor-pointer hover:bg-slate-50 transition-colors">
-                <Paperclip className="h-4 w-4 text-slate-400" />
-                <span className="text-sm text-slate-500">파일 선택 (이미지, PDF)</span>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-              </label>
-            )}
+          {/* 계정과목 가이드 */}
+          <div className="flex items-center gap-1">
+            <Label>지출 항목</Label>
+            <button type="button" onClick={() => setShowGuide(p => !p)} className="text-slate-400 hover:text-blue-500">
+              <HelpCircle className="h-4 w-4" />
+            </button>
+          </div>
+          {showGuide && (
+            <div className="inline-block text-xs border border-blue-200 rounded-md overflow-hidden max-w-[280px]">
+              <div className="bg-blue-100 px-3 py-1.5 font-semibold text-blue-700">어떤 코드를 선택해야 하나요?</div>
+              {[
+                ['교역자 식대', '14'],
+                ['선교사/강사비, 접대비', '32'],
+                ['큐티책, 강사료, 수련회', '41'],
+                ['가정교회 세미나', '45'],
+                ['목자목녀 행사', '45'],
+                ['생일, 세례 축하', '46'],
+                ['예봄성도 심방', '46'],
+                ['만나실 식재료', '47'],
+                ['행복쉼터 (카페)', '47'],
+                ['내부성도 구호', '52'],
+                ['외부/지역 구호', '53'],
+                ['주유, 차수리', '65'],
+                ['시설 수리비', '66'],
+                ['사무용품', '74'],
+              ].map(([desc, code], i) => (
+                <div key={`${desc}-${code}`} className={`flex justify-between px-3 py-0.5 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                  <span className="text-slate-600">{desc}</span>
+                  <span className="font-mono text-blue-600 ml-4">{code}</span>
+                </div>
+              ))}
+              <div className="px-3 py-1.5 text-slate-400 bg-slate-50 border-t">카테고리 코드 앞 2자리로 선택</div>
+            </div>
+          )}
+
+          {/* 라인 아이템 목록 */}
+          <div className="space-y-3">
+            {items.map((item, idx) => {
+              const catItems = getItemsInCategory(item.categoryCode);
+              return (
+                <div key={item.id} className="relative border rounded-lg p-3 space-y-2 bg-slate-50/50">
+                  {/* 항목 번호 + 삭제 */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-400">항목 {idx + 1}</span>
+                    {items.length > 1 && (
+                      <button type="button" onClick={() => removeItem(item.id)} className="text-slate-400 hover:text-red-500">
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 계정코드 (2단계) */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select
+                      value={item.categoryCode}
+                      onValueChange={v => {
+                        updateItem(item.id, 'categoryCode', v);
+                        updateItem(item.id, 'accountCode', '');
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="카테고리" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map(([code, name]) => (
+                          <SelectItem key={code} value={String(code)}>{name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={item.accountCode}
+                      onValueChange={v => updateItem(item.id, 'accountCode', v)}
+                      disabled={!item.categoryCode}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="항목" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {catItems.map(c => (
+                          <SelectItem key={c.code} value={String(c.code)}>
+                            {c.code} {c.item}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* 금액 + 내역 */}
+                  <div className="grid grid-cols-[120px_1fr] gap-2">
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="금액"
+                      className="h-9 text-sm"
+                      value={item.amount}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^0-9]/g, '');
+                        updateItem(item.id, 'amount', v ? Number(v).toLocaleString() : '');
+                      }}
+                    />
+                    <Input
+                      placeholder="내역"
+                      className="h-9 text-sm"
+                      value={item.description}
+                      onChange={e => updateItem(item.id, 'description', e.target.value)}
+                    />
+                  </div>
+
+                  {/* 영수증 */}
+                  {item.receiptFile ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Paperclip className="h-3 w-3" />
+                      <span className="truncate flex-1">{item.receiptFile.name}</span>
+                      <button type="button" onClick={() => updateItem(item.id, 'receiptFile', null)}>
+                        <X className="h-3 w-3 text-slate-400 hover:text-red-500" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer hover:text-blue-500">
+                      <Paperclip className="h-3 w-3" />
+                      <span>영수증 첨부</span>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        onChange={e => handleFileChange(item.id, e)}
+                      />
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* 항목 추가 버튼 */}
+            <Button type="button" variant="outline" size="sm" onClick={addItem} className="w-full border-dashed">
+              <Plus className="h-4 w-4 mr-1" />
+              항목 추가
+            </Button>
           </div>
 
+          {/* 그룹핑 요약 (2건 이상일 때만) */}
+          {grouped.length > 1 && (
+            <div className="border border-blue-200 rounded-lg p-3 bg-blue-50/50 space-y-1.5">
+              <div className="text-xs font-semibold text-blue-700">
+                📋 청구 요약 ({grouped.length}건으로 그룹화)
+              </div>
+              {grouped.map(g => (
+                <div key={g.accountCode} className="text-xs text-slate-700">
+                  <span className="font-mono text-blue-600">[{g.accountCode}]</span>{' '}
+                  {g.accountCodeName.replace(/^\d+\s*/, '')}: {g.totalAmount.toLocaleString()}원
+                  <span className="text-slate-400 ml-1">
+                    — {g.descriptions.join(', ')}
+                    {g.receiptFiles.length > 0 && ` | 영수증 ${g.receiptFiles.length}장`}
+                  </span>
+                </div>
+              ))}
+              <div className="pt-1 border-t border-blue-200 text-xs font-semibold text-slate-700">
+                총 합계: {totalAmount.toLocaleString()}원
+              </div>
+            </div>
+          )}
+
+          {/* 단건일 때 합계 표시 */}
+          {grouped.length === 1 && totalAmount > 0 && (
+            <div className="text-right text-sm text-slate-500">
+              합계: <span className="font-semibold text-slate-700">{totalAmount.toLocaleString()}원</span>
+            </div>
+          )}
+
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />등록 중...</> : '청구 등록'}
+            {loading
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />등록 중...</>
+              : grouped.length > 1
+                ? `청구 등록 (${grouped.length}건)`
+                : '청구 등록'
+            }
           </Button>
         </form>
       </CardContent>

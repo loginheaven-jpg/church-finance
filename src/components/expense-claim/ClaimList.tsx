@@ -275,11 +275,13 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       urls.forEach(url => window.open(url, '_blank'));
       return;
     }
-    // Supabase 경로 → signed URL 생성
+    // Supabase 경로 → signed URL 생성 (쉼표 구분 복수 지원)
     try {
       const res = await fetch(`/api/expense-claim/receipt?path=${encodeURIComponent(receiptUrl)}`);
       const data = await res.json();
-      if (data.success && data.url) {
+      if (data.success && data.urls) {
+        data.urls.forEach((url: string) => window.open(url, '_blank'));
+      } else if (data.success && data.url) {
         window.open(data.url, '_blank');
       } else {
         toast.error('영수증 조회 실패');
@@ -635,12 +637,14 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                                 );
                               })
                             ) : claim.receiptUrl ? (
-                              // Supabase 영수증
+                              // Supabase 영수증 (쉼표 구분 복수 지원)
                               <button
                                 className="ml-3 text-blue-500 hover:text-blue-700 hover:underline"
                                 onClick={e => { e.stopPropagation(); handleViewReceipt(claim.receiptUrl!); }}
                               >
-                                영수증 보기
+                                {claim.receiptUrl.includes(',')
+                                  ? `영수증 ${claim.receiptUrl.split(',').length}장`
+                                  : '영수증 보기'}
                               </button>
                             ) : null}
                           </TableCell>

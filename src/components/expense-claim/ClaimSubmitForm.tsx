@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Paperclip, X, HelpCircle, Plus } from 'lucide-react';
+import { Loader2, Paperclip, X, HelpCircle, Plus, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { compressImage } from '@/lib/image-compress';
 
 interface ExpenseCode {
   category_code: number;
@@ -24,6 +25,8 @@ interface LineItem {
   amount: string;
   description: string;
   receiptFile: File | null;
+  receiptPath: string;      // Supabase 업로드 완료 후 경로
+  uploading: boolean;       // 업로드 중 여부
 }
 
 interface GroupedClaim {
@@ -31,7 +34,7 @@ interface GroupedClaim {
   accountCodeName: string;
   totalAmount: number;
   descriptions: string[];
-  receiptFiles: File[];
+  receiptPaths: string[];   // Supabase에 업로드된 파일 경로들
   itemCount: number;
 }
 
@@ -63,7 +66,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
 
   // 라인 아이템 배열
   const [items, setItems] = useState<LineItem[]>([
-    { id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFile: null },
+    { id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFile: null, receiptPath: '', uploading: false },
   ]);
 
   // 계정과목 코드 조회
@@ -118,6 +121,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       amount: '',
       description: '',
       receiptFile: null,
+      receiptPath: '',
+      uploading: false,
     }]);
   };
 
@@ -137,7 +142,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       if (existing) {
         existing.totalAmount += amt;
         if (item.description) existing.descriptions.push(item.description);
-        if (item.receiptFile) existing.receiptFiles.push(item.receiptFile);
+        if (item.receiptPath) existing.receiptPaths.push(item.receiptPath);
         existing.itemCount++;
       } else {
         map.set(item.accountCode, {
@@ -145,7 +150,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
           accountCodeName: getCodeName(item.accountCode),
           totalAmount: amt,
           descriptions: item.description ? [item.description] : [],
-          receiptFiles: item.receiptFile ? [item.receiptFile] : [],
+          receiptPaths: item.receiptPath ? [item.receiptPath] : [],
           itemCount: 1,
         });
       }
@@ -155,13 +160,56 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
 
   const totalAmount = grouped.reduce((s, g) => s + g.totalAmount, 0);
 
-  const handleFileChange = (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    if (file && file.size > 10 * 1024 * 1024) {
-      toast.error('파일 크기는 10MB 이하여야 합니다');
+  // 파일 선택 → 압축 → Supabase 직접 업로드
+  const handleFileChange = async (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawFile = e.target.files?.[0] || null;
+    if (!rawFile) return;
+    if (rawFile.size > 20 * 1024 * 1024) {
+      toast.error('파일 크기는 20MB 이하여야 합니다');
       return;
     }
-    updateItem(itemId, 'receiptFile', file);
+
+    // 압축 시작 표시
+    updateItem(itemId, 'uploading', true as unknown as string);
+    updateItem(itemId, 'receiptFile', rawFile);
+
+    try {
+      // 이미지 압축 (800px, JPEG 80%)
+      const compressed = await compressImage(rawFile);
+
+      // signed upload URL 요청
+      const urlRes = await fetch('/api/expense-claim/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: compressed.name, contentType: compressed.type }),
+      });
+      const urlData = await urlRes.json();
+      if (!urlData.success) throw new Error(urlData.error || 'URL 발급 실패');
+
+      // Supabase에 직접 업로드
+      const uploadRes = await fetch(urlData.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': compressed.type },
+        body: compressed,
+      });
+      if (!uploadRes.ok) throw new Error('업로드 실패');
+
+      // 경로 저장
+      updateItem(itemId, 'receiptPath', urlData.filePath);
+      const sizeMB = (rawFile.size / 1024 / 1024).toFixed(1);
+      const compMB = (compressed.size / 1024 / 1024).toFixed(1);
+      if (rawFile.size !== compressed.size) {
+        toast.success(`영수증 업로드 완료 (${sizeMB}MB → ${compMB}MB)`);
+      } else {
+        toast.success('영수증 업로드 완료');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '영수증 업로드 실패');
+      updateItem(itemId, 'receiptFile', null as unknown as string);
+      updateItem(itemId, 'receiptPath', '');
+    } finally {
+      updateItem(itemId, 'uploading', false as unknown as string);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -184,46 +232,33 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       return;
     }
 
-    // 총 파일 크기 검증 (Vercel 4.5MB 제한)
-    const allFiles = grouped.flatMap(g => g.receiptFiles);
-    const totalFileSize = allFiles.reduce((s, f) => s + f.size, 0);
-    if (totalFileSize > 4 * 1024 * 1024) {
-      toast.error('첨부 파일 총 크기가 4MB를 초과합니다. 파일 수를 줄여주세요.');
+    // 업로드 중인 파일이 있는지 확인
+    if (items.some(item => item.uploading)) {
+      toast.error('영수증 업로드가 진행 중입니다. 잠시 후 다시 시도해주세요.');
       return;
     }
 
     setLoading(true);
     try {
-      const fd = new FormData();
-      fd.append('claimDate', shared.claimDate);
-      fd.append('bankName', shared.bankName);
-      fd.append('accountNumber', shared.accountNumber);
-      fd.append('accountHolder', shared.accountHolder);
-
-      // 그룹 정보 JSON
-      const groupsData = grouped.map((g, gi) => ({
+      // 파일은 이미 Supabase에 업로드됨 → 경로만 JSON으로 전송
+      const groupsData = grouped.map(g => ({
         accountCode: g.accountCode,
         amount: g.totalAmount,
         description: g.descriptions.join(', '),
-        fileCount: g.receiptFiles.length,
-        groupIndex: gi,
+        receiptPaths: g.receiptPaths,  // 이미 업로드된 경로 배열
       }));
-      fd.append('groups', JSON.stringify(groupsData));
 
-      // 파일 첨부: receipt_{groupIndex}_{fileIndex}
-      grouped.forEach((g, gi) => {
-        g.receiptFiles.forEach((file, fi) => {
-          fd.append(`receipt_${gi}_${fi}`, file);
-        });
+      const res = await fetch('/api/expense-claim/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          claimDate: shared.claimDate,
+          bankName: shared.bankName,
+          accountNumber: shared.accountNumber,
+          accountHolder: shared.accountHolder,
+          groups: groupsData,
+        }),
       });
-
-      const res = await fetch('/api/expense-claim/submit', { method: 'POST', body: fd });
-
-      // non-JSON 응답 처리 (Vercel 크기제한 등)
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error(`서버 오류 (${res.status}). 파일 크기를 줄여 다시 시도해주세요.`);
-      }
       const data = await res.json();
 
       if (!res.ok || !data.success) {
@@ -253,7 +288,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
 
       // 초기화
       setShared(prev => ({ ...prev, claimDate: todayKST() }));
-      setItems([{ id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFile: null }]);
+      setItems([{ id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFile: null, receiptPath: '', uploading: false }]);
       onSuccess?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '등록 중 오류가 발생했습니다');
@@ -425,11 +460,22 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                   {/* 영수증 */}
                   {item.receiptFile ? (
                     <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <Paperclip className="h-3 w-3" />
-                      <span className="truncate flex-1">{item.receiptFile.name}</span>
-                      <button type="button" onClick={() => updateItem(item.id, 'receiptFile', null)}>
-                        <X className="h-3 w-3 text-slate-400 hover:text-red-500" />
-                      </button>
+                      {item.uploading
+                        ? <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                        : item.receiptPath
+                          ? <Check className="h-3 w-3 text-green-500" />
+                          : <Paperclip className="h-3 w-3" />}
+                      <span className="truncate flex-1">
+                        {item.uploading ? '업로드 중...' : item.receiptFile.name}
+                      </span>
+                      {!item.uploading && (
+                        <button type="button" onClick={() => {
+                          updateItem(item.id, 'receiptFile', null as unknown as string);
+                          updateItem(item.id, 'receiptPath', '');
+                        }}>
+                          <X className="h-3 w-3 text-slate-400 hover:text-red-500" />
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer hover:text-blue-500">
@@ -466,7 +512,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                   {g.accountCodeName.replace(/^\d+\s*/, '')}: {g.totalAmount.toLocaleString()}원
                   <span className="text-slate-400 ml-1">
                     — {g.descriptions.join(', ')}
-                    {g.receiptFiles.length > 0 && ` | 영수증 ${g.receiptFiles.length}장`}
+                    {g.receiptPaths.length > 0 && ` | 영수증 ${g.receiptPaths.length}장`}
                   </span>
                 </div>
               ))}

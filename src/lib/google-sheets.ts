@@ -2376,7 +2376,7 @@ export async function updateAccountInfo(
  * 은행/계좌가 비어있으면 청구자 이름으로 계정 시트에서 조회
  */
 export async function getUnprocessedExpenseClaims(): Promise<ExpenseClaimRow[]> {
-  const rows = await readSheet(FINANCE_CONFIG.sheets.expenseClaim, 'A:K');
+  const rows = await readSheet(FINANCE_CONFIG.sheets.expenseClaim, 'A:L');
 
   if (!rows || rows.length <= 1) return [];
 
@@ -2510,7 +2510,7 @@ export async function getProcessedExpenseClaims(
   startDate?: string,
   endDate?: string
 ): Promise<ExpenseClaimRow[]> {
-  const rows = await readSheet(FINANCE_CONFIG.sheets.expenseClaim, 'A:K');
+  const rows = await readSheet(FINANCE_CONFIG.sheets.expenseClaim, 'A:L');
 
   if (!rows || rows.length <= 1) return [];
 

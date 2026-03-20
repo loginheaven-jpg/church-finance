@@ -202,8 +202,12 @@ export async function GET(request: NextRequest) {
       const topCandidates = scored.slice(0, 3);
       const bestScore = topCandidates[0].score;
 
+      // 최고 점수 후보에 청구자명이 포함되어 있는지 확인
+      const bestCandidate = topCandidates[0];
+      const nameMatched = claimantMatchScore(claim.claimant, bestCandidate.vendor, bestCandidate.description) > 0;
+
       let status: VerificationStatus;
-      if (bestScore >= 65) {
+      if (bestScore >= 65 && nameMatched) {
         status = 'matched';
       } else {
         // 후보는 있지만 확신 부족 → 일요일 횟수로 판정

@@ -329,6 +329,31 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 
 ## 최근 변경사항
 
+### 2026-03-20 업데이트 (지출청구 일원화 + 다이렉트 링크)
+
+1. **구글폼 → 재정부 UI 일원화**: 구글폼 입력 중단, 모든 지출청구는 재정부 `/expense-claim`에서 입력
+   - IMPORTRANGE 수식 → 값으로 변환 필요 (구글시트에서 수동 작업)
+   - `addExpenseClaim()`이 '지출청구' 시트에 직접 행 추가
+
+2. **엑셀 다운로드 분리**: 선택 건만 다운로드 (K컬럼 자동 기재 제거)
+
+3. **입금완료 취소 기능**: 잘못 처리된 건의 K컬럼 초기화
+   - `POST /api/expense-claim/unmark` API 추가
+   - `unmarkExpenseClaimsProcessed()` 함수 추가
+
+4. **체크박스 전체 행 표시**: 미처리/처리 건 모두 선택 가능, 선택 상태에 따라 버튼 활성/비활성
+   - 미처리 선택 → 입금완료 표시 + 엑셀 다운로드 활성
+   - 처리 건 선택 → 입금완료 취소 활성
+   - 혼합 선택 → 모두 비활성
+
+5. **다이렉트 링크 지원**: 로그인 후 원래 URL로 복귀
+   - middleware: `redirect` 파라미터 전달
+   - login page: `redirect` 파라미터로 원래 페이지 복귀
+   - 성도 안내용 다이렉트 링크:
+     - 지출청구: `https://finance.yebom.org/expense-claim`
+     - 카드내역입력: `https://finance.yebom.org/card-expense-integration`
+     - 내 헌금: `https://finance.yebom.org/my-offering`
+
 ### 2026-03-20 업데이트 (지출청구 2단계 처리 체계)
 
 1. **청구현황 2탭으로 통합** — 처리내역 점검 탭 제거, 청구 현황 탭에 지출부 대조 기능 흡수

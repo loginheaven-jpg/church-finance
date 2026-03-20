@@ -516,8 +516,8 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                     )}
                     <TableHead>청구일</TableHead>
                     {isAdmin && <TableHead>청구자</TableHead>}
-                    <TableHead className="w-16">코드</TableHead>
-                    <TableHead className="max-w-[100px]">내역</TableHead>
+                    <TableHead className="w-20">코드</TableHead>
+                    <TableHead className="w-20">내역</TableHead>
                     <TableHead className="text-right">금액</TableHead>
                     <TableHead>상태</TableHead>
                     <TableHead>처리일</TableHead>
@@ -574,8 +574,8 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                               {claim.claimDate}
                             </TableCell>
                             {isAdmin && <TableCell className="text-sm">{claim.claimant}</TableCell>}
-                            <TableCell className="text-sm w-16 truncate" title={claim.accountCode}>{claim.accountCode}</TableCell>
-                            <TableCell className="text-sm max-w-[100px] truncate" title={claim.description}>{claim.description}</TableCell>
+                            <TableCell className="text-sm w-20 truncate" title={claim.accountCode}>{claim.accountCode}</TableCell>
+                            <TableCell className="text-sm w-20 truncate" title={claim.description}>{claim.description}</TableCell>
                             <TableCell className="text-right text-sm whitespace-nowrap">{claim.amount.toLocaleString()}원</TableCell>
                             <TableCell>{statusBadge(claim)}</TableCell>
                             <TableCell className="text-sm text-slate-500 whitespace-nowrap">{claim.processedDate || '-'}</TableCell>

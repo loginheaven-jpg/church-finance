@@ -133,34 +133,27 @@ function LoginContent() {
                   </div>
                 </button>
 
-                {/* 재정시스템 로그인 버튼 */}
-                <button
-                  onClick={() => setMode('login')}
-                  className="w-full p-3 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all text-left group"
+                {/* 예봄성도 로그인 (교적부 SSO) */}
+                <a
+                  href={`https://saint.yebom.org/login?redirect=https://finance.yebom.org${redirectTo !== '/dashboard' ? redirectTo : ''}`}
+                  className="w-full p-3 rounded-xl border-2 border-[#C9A962]/30 bg-[#faf8f3] hover:bg-[#f5f0e5] hover:border-[#C9A962]/50 transition-all text-left group block"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-[#2C3E50] flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform"
+                      style={{ background: 'linear-gradient(135deg, #C9A962 0%, #D4B87A 100%)' }}
+                    >
                       <LogIn className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-base text-slate-800">
-                        재정시스템 로그인
+                      <h3 className="font-semibold text-base text-[#2C3E50]">
+                        예봄성도 로그인
                       </h3>
+                      <p className="text-xs text-slate-500">
+                        카카오톡 또는 교적부 계정
+                      </p>
                     </div>
                   </div>
-                </button>
-
-                {/* 교적부 로그인 안내 */}
-                <div className="pt-2 border-t border-slate-100 text-center">
-                  <p className="text-xs text-gray-400 mb-1.5">교적부 계정이 있으신가요?</p>
-                  <a
-                    href="https://saint.yebom.org/login?redirect=https://finance.yebom.org"
-                    className="inline-flex items-center gap-1 text-sm text-[#C9A962] hover:text-[#b8953a] font-medium"
-                  >
-                    교적부에서 로그인하기
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
+                </a>
               </div>
             </CardContent>
           </Card>

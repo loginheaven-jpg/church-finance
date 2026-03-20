@@ -2344,6 +2344,32 @@ export async function getAccountInfoByNamePublic(name: string): Promise<AccountI
   return getAccountInfoByName(name);
 }
 
+/** 계정 시트 은행/계좌 업데이트 (기본계좌 변경) */
+export async function updateAccountInfo(
+  name: string,
+  bankName: string,
+  accountNumber: string
+): Promise<boolean> {
+  const sheets = getGoogleSheetsClient();
+  const rows = await readSheet(FINANCE_CONFIG.sheets.accounts, 'A:C');
+  if (!rows || rows.length <= 1) return false;
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length === 0) continue;
+    if ((row[0] || '').trim() === name.trim()) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+        range: `${FINANCE_CONFIG.sheets.accounts}!B${i + 1}:C${i + 1}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[bankName, accountNumber]] },
+      });
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * 지출청구 시트에서 미처리 데이터 조회 (K컬럼이 비어있는 행)
  * 은행/계좌가 비어있으면 청구자 이름으로 계정 시트에서 조회

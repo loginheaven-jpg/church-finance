@@ -25,6 +25,8 @@ interface ClaimSubmitFormProps {
 export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
   const [loading, setLoading] = useState(false);
   const [codes, setCodes] = useState<ExpenseCode[]>([]);
+  // 서버에서 읽어온 기본 계좌 (변경 감지용)
+  const [defaultAccount, setDefaultAccount] = useState({ bankName: '', accountNumber: '' });
 
   // 오늘 날짜 (KST)
   const todayKST = () => {
@@ -58,11 +60,10 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       .then(r => r.json())
       .then(d => {
         if (d.success && d.data) {
-          setForm(prev => ({
-            ...prev,
-            bankName: d.data.bankName || '',
-            accountNumber: d.data.accountNumber || '',
-          }));
+          const bk = d.data.bankName || '';
+          const ac = d.data.accountNumber || '';
+          setForm(prev => ({ ...prev, bankName: bk, accountNumber: ac }));
+          setDefaultAccount({ bankName: bk, accountNumber: ac });
         }
       })
       .catch(() => {});
@@ -115,6 +116,27 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       }
 
       toast.success('지출청구가 등록되었습니다');
+
+      // 계좌가 변경된 경우 기본계좌 저장 여부 확인
+      const accountChanged =
+        form.bankName !== defaultAccount.bankName ||
+        form.accountNumber !== defaultAccount.accountNumber;
+      if (accountChanged && form.bankName && form.accountNumber) {
+        if (confirm('이 계좌를 기본계좌로 저장하시겠습니까?')) {
+          try {
+            await fetch('/api/expense-claim/account-info', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bankName: form.bankName, accountNumber: form.accountNumber }),
+            });
+            setDefaultAccount({ bankName: form.bankName, accountNumber: form.accountNumber });
+            toast.success('기본계좌가 변경되었습니다');
+          } catch {
+            // 기본계좌 변경 실패해도 청구 자체는 성공
+          }
+        }
+      }
+
       setForm(prev => ({
         ...prev,
         claimDate: todayKST(),

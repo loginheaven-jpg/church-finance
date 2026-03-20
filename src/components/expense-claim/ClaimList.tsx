@@ -75,7 +75,12 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       const res = await fetch(`/api/expense-claim/list?${params}`);
       const data = await res.json();
       if (data.success) {
-        setClaims(data.data);
+        // 최근것 순 정렬 (청구일 내림차순, 같으면 rowIndex 내림차순)
+        const sorted = [...data.data].sort((a: ClaimItem, b: ClaimItem) => {
+          const dateCompare = b.claimDate.localeCompare(a.claimDate);
+          return dateCompare !== 0 ? dateCompare : b.rowIndex - a.rowIndex;
+        });
+        setClaims(sorted);
         setIsAdmin(data.isAdmin);
         setVerifMap(new Map()); // 조회 시 대조 결과 초기화
       } else {

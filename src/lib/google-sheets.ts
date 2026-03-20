@@ -2299,6 +2299,7 @@ export interface ExpenseClaimRow {
   claimDate: string;      // B: 청구일
   bankName: string;       // J: 은행명
   accountNumber: string;  // H: 입금계좌
+  accountHolder: string;  // I: 예금주명
   amount: number;         // F: 이체금액
   claimant: string;       // D: 청구자
   accountCode: string;    // E: 계정
@@ -2438,6 +2439,7 @@ export async function getUnprocessedExpenseClaims(): Promise<ExpenseClaimRow[]> 
       claimDate,
       bankName,
       accountNumber,
+      accountHolder: (row[8] || '') || claimant,
       amount,
       claimant,
       accountCode: row[4] || '',
@@ -2572,6 +2574,7 @@ export async function getProcessedExpenseClaims(
       claimDate,
       bankName,
       accountNumber,
+      accountHolder: (row[8] || '') || claimant,
       amount,
       claimant,
       accountCode: row[4] || '',
@@ -2596,6 +2599,7 @@ export async function addExpenseClaim(claim: {
   amount: number;
   description: string;
   accountNumber: string;
+  accountHolder: string;
   bankName: string;
   receiptUrl?: string;
 }): Promise<void> {
@@ -2608,7 +2612,7 @@ export async function addExpenseClaim(claim: {
     claim.amount,
     claim.description,
     claim.accountNumber,
-    '',
+    claim.accountHolder,
     claim.bankName,
     '',
     claim.receiptUrl || '',
@@ -2618,7 +2622,7 @@ export async function addExpenseClaim(claim: {
 
 /**
  * 지출청구 행 수정 (admin용)
- * 수정 가능 필드: 청구일(B), 계정코드(E), 금액(F), 내역(G), 계좌번호(H), 은행명(J)
+ * 수정 가능 필드: 청구일(B), 계정코드(E), 금액(F), 내역(G), 계좌번호(H), 예금주(I), 은행명(J)
  */
 export async function updateExpenseClaim(
   rowIndex: number,
@@ -2628,6 +2632,7 @@ export async function updateExpenseClaim(
     amount?: number;
     description?: string;
     accountNumber?: string;
+    accountHolder?: string;
     bankName?: string;
   }
 ): Promise<void> {
@@ -2640,6 +2645,7 @@ export async function updateExpenseClaim(
   if (updates.amount !== undefined) data.push({ range: `${sheet}!F${rowIndex}`, values: [[updates.amount]] });
   if (updates.description !== undefined) data.push({ range: `${sheet}!G${rowIndex}`, values: [[updates.description]] });
   if (updates.accountNumber !== undefined) data.push({ range: `${sheet}!H${rowIndex}`, values: [[updates.accountNumber]] });
+  if (updates.accountHolder !== undefined) data.push({ range: `${sheet}!I${rowIndex}`, values: [[updates.accountHolder]] });
   if (updates.bankName !== undefined) data.push({ range: `${sheet}!J${rowIndex}`, values: [[updates.bankName]] });
 
   if (data.length === 0) return;
@@ -2687,6 +2693,7 @@ export async function getAllExpenseClaims(options?: {
     const amountStr = row[5] || '0';   // F
     const description = row[6] || '';  // G
     const rawAccount = row[7] || '';   // H
+    const accountHolder = row[8] || '';// I: 예금주명
     let bankName = row[9] || '';       // J
     const processedRaw = row[10] || '';// K
     const receiptUrl = row[11] || '';  // L
@@ -2733,6 +2740,7 @@ export async function getAllExpenseClaims(options?: {
       claimDate,
       bankName,
       accountNumber,
+      accountHolder: accountHolder || claimant,
       amount,
       claimant,
       accountCode,

@@ -43,6 +43,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
     description: '',
     bankName: '',
     accountNumber: '',
+    accountHolder: userName,
   });
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
@@ -106,6 +107,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       fd.append('description', form.description);
       fd.append('bankName', form.bankName);
       fd.append('accountNumber', form.accountNumber);
+      fd.append('accountHolder', form.accountHolder);
       if (receiptFile) fd.append('receipt', receiptFile);
 
       const res = await fetch('/api/expense-claim/submit', { method: 'POST', body: fd });
@@ -241,10 +243,10 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
             />
           </div>
 
-          {/* 은행 / 계좌번호 */}
+          {/* 은행 / 계좌번호 / 예금주 */}
           <div className="space-y-1">
-            <Label>입금 은행 / 계좌번호 <span className="text-red-500">*</span></Label>
-            <div className="grid grid-cols-2 gap-2">
+            <Label>입금 계좌 정보 <span className="text-red-500">*</span></Label>
+            <div className="grid grid-cols-3 gap-2">
               <Input
                 placeholder="은행명"
                 value={form.bankName}
@@ -252,12 +254,18 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                 required
               />
               <Input
-                placeholder="계좌번호 (숫자만)"
+                placeholder="계좌번호"
                 value={form.accountNumber}
                 onChange={e => {
                   const v = e.target.value.replace(/[^0-9]/g, '');
                   setForm(p => ({ ...p, accountNumber: v }));
                 }}
+                required
+              />
+              <Input
+                placeholder="예금주"
+                value={form.accountHolder}
+                onChange={e => setForm(p => ({ ...p, accountHolder: e.target.value }))}
                 required
               />
             </div>

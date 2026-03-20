@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     const description = (formData.get('description') as string || '').trim();
     const accountNumber = (formData.get('accountNumber') as string || '').replace(/[^0-9]/g, '');
     const bankName = (formData.get('bankName') as string || '').trim();
+    const accountHolder = (formData.get('accountHolder') as string || session.name).trim();
     const receiptFile = formData.get('receipt') as File | null;
 
     // 필수 필드 검증
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
       amount,
       description,
       accountNumber,
+      accountHolder,
       bankName,
       receiptUrl,
     });

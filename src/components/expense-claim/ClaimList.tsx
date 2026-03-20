@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/table';
 import {
   Loader2, Eye, Trash2, Download, CheckCircle2, AlertTriangle,
-  Clock, RefreshCw, ShieldCheck, ShieldAlert, ShieldQuestion, Pencil, Save, X,
+  Clock, RefreshCw, ShieldCheck, ShieldAlert, ShieldQuestion, Pencil, Save, X, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -31,6 +31,7 @@ interface ClaimItem {
   description: string;
   bankName: string;
   accountNumber: string;
+  accountHolder: string;
   processedDate: string;
   receiptUrl?: string;
   status: 'pending' | 'suspicious' | 'processed';
@@ -66,6 +67,16 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<ClaimItem>>({});
   const [saving, setSaving] = useState(false);
+  // 상세 행 토글
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const toggleExpand = (rowIndex: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(rowIndex)) next.delete(rowIndex);
+      else next.add(rowIndex);
+      return next;
+    });
+  };
   // 기본 기간: 최근 1개월
   const [startDate, setStartDate] = useState(oneMonthAgoKST());
   const [endDate, setEndDate] = useState(todayKST());
@@ -508,10 +519,13 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                     const isOwn = claim.claimant === session?.name;
                     const canCancel = (isOwn || isAdmin) && claim.status !== 'processed';
                     const isEditing = editingRow === claim.rowIndex;
+                    const isExpanded = expandedRows.has(claim.rowIndex);
+                    const colCount = isAdmin ? 10 : 7;
                     return (
-                      <TableRow key={claim.rowIndex}>
+                      <Fragment key={claim.rowIndex}>
+                      <TableRow className="cursor-pointer" onClick={() => !isEditing && toggleExpand(claim.rowIndex)}>
                         {isAdmin && (
-                          <TableCell className="pl-4">
+                          <TableCell className="pl-4" onClick={e => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               checked={selected.has(claim.rowIndex)}
@@ -523,15 +537,15 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                         )}
                         {isEditing ? (
                           <>
-                            <TableCell><Input type="date" value={editForm.claimDate || ''} onChange={e => setEditForm(p => ({ ...p, claimDate: e.target.value }))} className="h-7 text-xs w-32" /></TableCell>
+                            <TableCell onClick={e => e.stopPropagation()}><Input type="date" value={editForm.claimDate || ''} onChange={e => setEditForm(p => ({ ...p, claimDate: e.target.value }))} className="h-7 text-xs w-32" /></TableCell>
                             {isAdmin && <TableCell className="text-sm">{claim.claimant}</TableCell>}
-                            <TableCell><Input value={editForm.accountCode || ''} onChange={e => setEditForm(p => ({ ...p, accountCode: e.target.value }))} className="h-7 text-xs w-16" /></TableCell>
-                            <TableCell><Input value={editForm.description || ''} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} className="h-7 text-xs w-28" /></TableCell>
-                            <TableCell><Input type="number" value={editForm.amount || ''} onChange={e => setEditForm(p => ({ ...p, amount: Number(e.target.value) }))} className="h-7 text-xs w-24 text-right" /></TableCell>
+                            <TableCell onClick={e => e.stopPropagation()}><Input value={editForm.accountCode || ''} onChange={e => setEditForm(p => ({ ...p, accountCode: e.target.value }))} className="h-7 text-xs w-16" /></TableCell>
+                            <TableCell onClick={e => e.stopPropagation()}><Input value={editForm.description || ''} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} className="h-7 text-xs w-28" /></TableCell>
+                            <TableCell onClick={e => e.stopPropagation()}><Input type="number" value={editForm.amount || ''} onChange={e => setEditForm(p => ({ ...p, amount: Number(e.target.value) }))} className="h-7 text-xs w-24 text-right" /></TableCell>
                             <TableCell>{statusBadge(claim)}</TableCell>
                             <TableCell className="text-sm text-slate-500 whitespace-nowrap">{claim.processedDate || '-'}</TableCell>
                             {isAdmin && <TableCell />}
-                            <TableCell>
+                            <TableCell onClick={e => e.stopPropagation()}>
                               <div className="flex items-center gap-1">
                                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" onClick={saveEdit} disabled={saving} title="저장">
                                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -544,7 +558,10 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                           </>
                         ) : (
                           <>
-                            <TableCell className="text-sm whitespace-nowrap">{claim.claimDate}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">
+                              {isExpanded ? <ChevronDown className="h-3 w-3 inline mr-1 text-slate-400" /> : <ChevronRight className="h-3 w-3 inline mr-1 text-slate-400" />}
+                              {claim.claimDate}
+                            </TableCell>
                             {isAdmin && <TableCell className="text-sm">{claim.claimant}</TableCell>}
                             <TableCell className="text-sm w-16 truncate" title={claim.accountCode}>{claim.accountCode}</TableCell>
                             <TableCell className="text-sm max-w-[100px] truncate" title={claim.description}>{claim.description}</TableCell>
@@ -556,7 +573,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                                 {claim.status === 'processed' && verifIcon(claim.rowIndex)}
                               </TableCell>
                             )}
-                            <TableCell>
+                            <TableCell onClick={e => e.stopPropagation()}>
                               <div className="flex items-center gap-1">
                                 {isAdmin && (
                                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-amber-600" onClick={() => startEdit(claim)} title="수정">
@@ -578,6 +595,22 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                           </>
                         )}
                       </TableRow>
+                      {isExpanded && !isEditing && (
+                        <TableRow className="bg-slate-50/80">
+                          <TableCell colSpan={colCount} className="py-2 px-6 text-xs text-slate-600">
+                            <span className="font-medium">{claim.bankName}</span>
+                            {' '}{claim.accountNumber}
+                            {claim.accountHolder && claim.accountHolder !== claim.claimant && (
+                              <span className="text-slate-500"> (예금주: {claim.accountHolder})</span>
+                            )}
+                            {claim.accountHolder && claim.accountHolder === claim.claimant && (
+                              <span className="text-slate-400"> (본인)</span>
+                            )}
+                            {claim.receiptUrl && <span className="ml-3 text-blue-500">영수증 첨부됨</span>}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </TableBody>

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/table';
 import {
   Loader2, Eye, Trash2, Download, CheckCircle2, AlertTriangle,
-  Clock, RefreshCw, ShieldCheck, ShieldAlert, ShieldQuestion,
+  Clock, RefreshCw, ShieldCheck, ShieldAlert, ShieldQuestion, Pencil, Save, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -62,6 +62,10 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   const [verifying, setVerifying] = useState(false);
   const [cancelling, setCancelling] = useState<number | null>(null);
   const [verifMap, setVerifMap] = useState<Map<number, VerifStatus>>(new Map());
+  // 인라인 편집 (admin 전용)
+  const [editingRow, setEditingRow] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<Partial<ClaimItem>>({});
+  const [saving, setSaving] = useState(false);
   // 기본 기간: 최근 1개월
   const [startDate, setStartDate] = useState(oneMonthAgoKST());
   const [endDate, setEndDate] = useState(todayKST());
@@ -290,6 +294,44 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
     }
   };
 
+  // 인라인 편집 시작
+  const startEdit = (claim: ClaimItem) => {
+    setEditingRow(claim.rowIndex);
+    setEditForm({
+      claimDate: claim.claimDate,
+      accountCode: claim.accountCode,
+      amount: claim.amount,
+      description: claim.description,
+      bankName: claim.bankName,
+      accountNumber: claim.accountNumber,
+    });
+  };
+
+  // 인라인 편집 저장
+  const saveEdit = async () => {
+    if (!editingRow) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/expense-claim/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rowIndex: editingRow, ...editForm }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('청구 내역이 수정되었습니다');
+        setEditingRow(null);
+        await fetchClaims();
+      } else {
+        toast.error(data.error || '수정 실패');
+      }
+    } catch {
+      toast.error('수정 중 오류가 발생했습니다');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // 4단계 상태 배지
   const statusBadge = (claim: ClaimItem) => {
     if (claim.status === 'processed') {
@@ -465,6 +507,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                   {claims.map(claim => {
                     const isOwn = claim.claimant === session?.name;
                     const canCancel = (isOwn || isAdmin) && claim.status !== 'processed';
+                    const isEditing = editingRow === claim.rowIndex;
                     return (
                       <TableRow key={claim.rowIndex}>
                         {isAdmin && (
@@ -474,59 +517,66 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                               checked={selected.has(claim.rowIndex)}
                               onChange={() => toggleSelect(claim.rowIndex)}
                               className="h-4 w-4"
+                              disabled={isEditing}
                             />
                           </TableCell>
                         )}
-                        <TableCell className="text-sm whitespace-nowrap">{claim.claimDate}</TableCell>
-                        {isAdmin && <TableCell className="text-sm">{claim.claimant}</TableCell>}
-                        <TableCell className="text-sm w-16 truncate" title={claim.accountCode}>{claim.accountCode}</TableCell>
-                        <TableCell
-                          className="text-sm max-w-[100px] truncate"
-                          title={claim.description}
-                        >
-                          {claim.description}
-                        </TableCell>
-                        <TableCell className="text-right text-sm whitespace-nowrap">
-                          {claim.amount.toLocaleString()}원
-                        </TableCell>
-                        <TableCell>{statusBadge(claim)}</TableCell>
-                        <TableCell className="text-sm text-slate-500 whitespace-nowrap">
-                          {claim.processedDate || '-'}
-                        </TableCell>
-                        {isAdmin && (
-                          <TableCell className="text-center">
-                            {claim.status === 'processed' && verifIcon(claim.rowIndex)}
-                          </TableCell>
+                        {isEditing ? (
+                          <>
+                            <TableCell><Input type="date" value={editForm.claimDate || ''} onChange={e => setEditForm(p => ({ ...p, claimDate: e.target.value }))} className="h-7 text-xs w-32" /></TableCell>
+                            {isAdmin && <TableCell className="text-sm">{claim.claimant}</TableCell>}
+                            <TableCell><Input value={editForm.accountCode || ''} onChange={e => setEditForm(p => ({ ...p, accountCode: e.target.value }))} className="h-7 text-xs w-16" /></TableCell>
+                            <TableCell><Input value={editForm.description || ''} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} className="h-7 text-xs w-28" /></TableCell>
+                            <TableCell><Input type="number" value={editForm.amount || ''} onChange={e => setEditForm(p => ({ ...p, amount: Number(e.target.value) }))} className="h-7 text-xs w-24 text-right" /></TableCell>
+                            <TableCell>{statusBadge(claim)}</TableCell>
+                            <TableCell className="text-sm text-slate-500 whitespace-nowrap">{claim.processedDate || '-'}</TableCell>
+                            {isAdmin && <TableCell />}
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-green-600" onClick={saveEdit} disabled={saving} title="저장">
+                                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                </Button>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500" onClick={() => setEditingRow(null)} title="취소">
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell className="text-sm whitespace-nowrap">{claim.claimDate}</TableCell>
+                            {isAdmin && <TableCell className="text-sm">{claim.claimant}</TableCell>}
+                            <TableCell className="text-sm w-16 truncate" title={claim.accountCode}>{claim.accountCode}</TableCell>
+                            <TableCell className="text-sm max-w-[100px] truncate" title={claim.description}>{claim.description}</TableCell>
+                            <TableCell className="text-right text-sm whitespace-nowrap">{claim.amount.toLocaleString()}원</TableCell>
+                            <TableCell>{statusBadge(claim)}</TableCell>
+                            <TableCell className="text-sm text-slate-500 whitespace-nowrap">{claim.processedDate || '-'}</TableCell>
+                            {isAdmin && (
+                              <TableCell className="text-center">
+                                {claim.status === 'processed' && verifIcon(claim.rowIndex)}
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {isAdmin && (
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-amber-600" onClick={() => startEdit(claim)} title="수정">
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {claim.receiptUrl && (
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600" onClick={() => handleViewReceipt(claim.receiptUrl!)} title="영수증 보기">
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {canCancel && (
+                                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-red-600" onClick={() => handleCancel(claim.rowIndex)} disabled={cancelling === claim.rowIndex} title="청구 취소">
+                                    {cancelling === claim.rowIndex ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </>
                         )}
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {claim.receiptUrl && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600"
-                                onClick={() => handleViewReceipt(claim.receiptUrl!)}
-                                title="영수증 보기"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {canCancel && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0 text-slate-500 hover:text-red-600"
-                                onClick={() => handleCancel(claim.rowIndex)}
-                                disabled={cancelling === claim.rowIndex}
-                                title="청구 취소"
-                              >
-                                {cancelling === claim.rowIndex
-                                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                                  : <Trash2 className="h-4 w-4" />}
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
                       </TableRow>
                     );
                   })}

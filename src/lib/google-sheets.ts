@@ -2617,6 +2617,43 @@ export async function addExpenseClaim(claim: {
 }
 
 /**
+ * 지출청구 행 수정 (admin용)
+ * 수정 가능 필드: 청구일(B), 계정코드(E), 금액(F), 내역(G), 계좌번호(H), 은행명(J)
+ */
+export async function updateExpenseClaim(
+  rowIndex: number,
+  updates: {
+    claimDate?: string;
+    accountCode?: string;
+    amount?: number;
+    description?: string;
+    accountNumber?: string;
+    bankName?: string;
+  }
+): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const data: { range: string; values: (string | number)[][] }[] = [];
+  const sheet = FINANCE_CONFIG.sheets.expenseClaim;
+
+  if (updates.claimDate !== undefined) data.push({ range: `${sheet}!B${rowIndex}`, values: [[updates.claimDate]] });
+  if (updates.accountCode !== undefined) data.push({ range: `${sheet}!E${rowIndex}`, values: [[updates.accountCode]] });
+  if (updates.amount !== undefined) data.push({ range: `${sheet}!F${rowIndex}`, values: [[updates.amount]] });
+  if (updates.description !== undefined) data.push({ range: `${sheet}!G${rowIndex}`, values: [[updates.description]] });
+  if (updates.accountNumber !== undefined) data.push({ range: `${sheet}!H${rowIndex}`, values: [[updates.accountNumber]] });
+  if (updates.bankName !== undefined) data.push({ range: `${sheet}!J${rowIndex}`, values: [[updates.bankName]] });
+
+  if (data.length === 0) return;
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data,
+    },
+  });
+}
+
+/**
  * 특정 청구자의 전체 지출청구 내역 조회 (처리완료 + 미처리 모두)
  */
 export async function getExpenseClaimsByClaimant(claimant: string): Promise<ExpenseClaimRow[]> {

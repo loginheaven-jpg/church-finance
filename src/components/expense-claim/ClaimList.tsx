@@ -637,15 +637,16 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                                 );
                               })
                             ) : claim.receiptUrl ? (
-                              // Supabase 영수증 (쉼표 구분 복수 지원)
-                              <button
-                                className="ml-3 text-blue-500 hover:text-blue-700 hover:underline"
-                                onClick={e => { e.stopPropagation(); handleViewReceipt(claim.receiptUrl!); }}
-                              >
-                                {claim.receiptUrl.includes(',')
-                                  ? `영수증 ${claim.receiptUrl.split(',').length}장`
-                                  : '영수증 보기'}
-                              </button>
+                              // Supabase 영수증 (쉼표 구분 복수 → 개별 링크)
+                              claim.receiptUrl.split(',').map((path, i) => (
+                                <button
+                                  key={i}
+                                  className="ml-2 text-blue-500 hover:text-blue-700 hover:underline"
+                                  onClick={e => { e.stopPropagation(); handleViewReceipt(path.trim()); }}
+                                >
+                                  영수증{claim.receiptUrl!.includes(',') ? ` ${i + 1}` : ' 보기'}
+                                </button>
+                              ))
                             ) : null}
                           </TableCell>
                         </TableRow>

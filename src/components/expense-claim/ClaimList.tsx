@@ -93,6 +93,13 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
     fetchClaims();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // admin: 목록 로드 후 자동으로 지출부 대조 실행
+  useEffect(() => {
+    if (!loading && isAdmin && claims.some(c => c.status === 'processed') && verifMap.size === 0) {
+      handleVerify(true);
+    }
+  }, [loading, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggleSelect = (rowIndex: number) => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -138,11 +145,11 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
     }
   };
 
-  // 2차 점검: 지출부 대조 (주일 동기화 후)
-  const handleVerify = async () => {
+  // 2차 점검: 지출부 대조 (silent=true 이면 toast 생략)
+  const handleVerify = useCallback(async (silent = false) => {
     const processedClaims = claims.filter(c => c.status === 'processed' && c.processedDate);
     if (processedClaims.length === 0) {
-      toast.info('대조할 입금완료 건이 없습니다');
+      if (!silent) toast.info('대조할 입금완료 건이 없습니다');
       return;
     }
     setVerifying(true);
@@ -154,27 +161,30 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       const res = await fetch(
         `/api/expense-claim/verification?startDate=${vs}&endDate=${ve}`
       );
-      const data = await res.json();
-      if (data.success) {
+      const result = await res.json();
+      if (result.success) {
+        const items = result.data?.items || [];
         const map = new Map<number, VerifStatus>();
-        (data.items as { claim: { rowIndex: number }; status: VerifStatus }[]).forEach(item => {
+        (items as { claim: { rowIndex: number }; status: VerifStatus }[]).forEach(item => {
           map.set(item.claim.rowIndex, item.status);
         });
         setVerifMap(map);
-        const matched = data.items.filter((i: { status: string }) => i.status === 'matched').length;
-        const missing = data.items.filter((i: { status: string }) => i.status === 'missing').length;
-        toast.success(
-          `지출부 대조 완료 — 확인됨 ${matched}건${missing > 0 ? `, 미기재 ${missing}건` : ''}`
-        );
+        if (!silent) {
+          const matched = items.filter((i: { status: string }) => i.status === 'matched').length;
+          const missing = items.filter((i: { status: string }) => i.status === 'missing').length;
+          toast.success(
+            `지출부 대조 완료 — 확인됨 ${matched}건${missing > 0 ? `, 미기재 ${missing}건` : ''}`
+          );
+        }
       } else {
-        toast.error(data.error || '대조 실패');
+        if (!silent) toast.error(result.error || '대조 실패');
       }
     } catch {
-      toast.error('지출부 대조 중 오류가 발생했습니다');
+      if (!silent) toast.error('지출부 대조 중 오류가 발생했습니다');
     } finally {
       setVerifying(false);
     }
-  };
+  }, [claims]);
 
   const handleExcelDownload = async () => {
     setDownloading(true);
@@ -361,7 +371,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
             <Button
               size="sm"
               variant={hasVerifRun ? 'default' : 'outline'}
-              onClick={handleVerify}
+              onClick={() => handleVerify(false)}
               disabled={verifying}
               className={hasVerifRun ? 'bg-green-600 hover:bg-green-700' : ''}
             >

@@ -105,13 +105,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 지출원장 조회 범위: 처리일 전후 21일 확장
+    // 지출원장 조회 범위: 처리일(가장 빠른) ~ 처리일(가장 늦은) + 21일
+    // 처리일 이전 기록은 다른 건이므로 조회하지 않음
     const processedDates = filteredClaims.map(c => c.processedDate).sort();
     const earliestDate = processedDates[0];
     const latestDate = processedDates[processedDates.length - 1];
 
     const expenseStart = new Date(earliestDate);
-    expenseStart.setDate(expenseStart.getDate() - 21);
     const expenseEnd = new Date(latestDate);
     expenseEnd.setDate(expenseEnd.getDate() + 21);
 
@@ -132,8 +132,14 @@ export async function GET(request: NextRequest) {
     const items: VerificationItem[] = [];
 
     for (const claim of filteredClaims) {
-      // 1단계: 금액 완전일치 후보 필터
-      const amountMatches = expenseRecords.filter(e => e.amount === claim.amount);
+      // 1단계: 금액 완전일치 + 처리일 이후 기록만 후보로 필터
+      // 지출부 기재는 처리일 이후 주일에 발생하므로, 처리일 이전 기록은 다른 건의 기록
+      const processedDateObj = new Date(claim.processedDate || claim.claimDate);
+      const amountMatches = expenseRecords.filter(e => {
+        if (e.amount !== claim.amount) return false;
+        const expDate = new Date(e.date);
+        return expDate >= processedDateObj; // 처리일 이후 기록만
+      });
 
       const claimObj = {
         rowIndex: claim.rowIndex,

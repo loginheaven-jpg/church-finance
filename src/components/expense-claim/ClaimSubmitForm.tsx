@@ -184,6 +184,14 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       return;
     }
 
+    // 총 파일 크기 검증 (Vercel 4.5MB 제한)
+    const allFiles = grouped.flatMap(g => g.receiptFiles);
+    const totalFileSize = allFiles.reduce((s, f) => s + f.size, 0);
+    if (totalFileSize > 4 * 1024 * 1024) {
+      toast.error('첨부 파일 총 크기가 4MB를 초과합니다. 파일 수를 줄여주세요.');
+      return;
+    }
+
     setLoading(true);
     try {
       const fd = new FormData();
@@ -210,6 +218,12 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       });
 
       const res = await fetch('/api/expense-claim/submit', { method: 'POST', body: fd });
+
+      // non-JSON 응답 처리 (Vercel 크기제한 등)
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`서버 오류 (${res.status}). 파일 크기를 줄여 다시 시도해주세요.`);
+      }
       const data = await res.json();
 
       if (!res.ok || !data.success) {

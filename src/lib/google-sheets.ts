@@ -2304,7 +2304,7 @@ export interface ExpenseClaimRow {
   accountCode: string;    // E: 계정
   description: string;    // G: 내역
   processedDate: string;  // K: 입금처리
-  claimId?: string;       // A: 자체 시스템 입력 시 UUID (구글폼 입력 건은 빈칸)
+  claimId?: string;       // A: 청구 ID (과거 구글폼 입력 건은 빈칸)
   receiptUrl?: string;    // L: 영수증 URL (Supabase Storage)
 }
 

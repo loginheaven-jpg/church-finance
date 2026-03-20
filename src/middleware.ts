@@ -37,6 +37,7 @@ export async function middleware(request: NextRequest) {
   // 인증 확인 (기존 auth-token 또는 새로운 finance-session)
   if (!authToken && !sessionCookie) {
     const loginUrl = new URL('/login', request.url);
+    if (pathname !== '/') loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -48,6 +49,7 @@ export async function middleware(request: NextRequest) {
       if (!session) {
         // 복호화 실패 시 로그인으로
         const loginUrl = new URL('/login', request.url);
+        if (pathname !== '/') loginUrl.searchParams.set('redirect', pathname);
         return NextResponse.redirect(loginUrl);
       }
 
@@ -71,6 +73,7 @@ export async function middleware(request: NextRequest) {
     } catch {
       // 세션 복호화 실패 시 로그인으로
       const loginUrl = new URL('/login', request.url);
+      if (pathname !== '/') loginUrl.searchParams.set('redirect', pathname);
       return NextResponse.redirect(loginUrl);
     }
   }

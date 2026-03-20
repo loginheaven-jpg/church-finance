@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,9 @@ import { PledgeEntryModal, TaxInfoEntryModal } from '@/components/pledge';
 
 type PageMode = 'choice' | 'login';
 
-export default function LoginPage() {
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/dashboard';
   const [mode, setMode] = useState<PageMode>('choice');
   const [showPledgeModal, setShowPledgeModal] = useState(false);
   const [showTaxInfoModal, setShowTaxInfoModal] = useState(false);
@@ -48,7 +51,7 @@ export default function LoginPage() {
 
       if (data.success) {
         // 전체 페이지 새로고침으로 세션 상태 완전 반영
-        window.location.href = '/dashboard';
+        window.location.href = redirectTo;
       } else {
         setError(data.error || '로그인에 실패했습니다');
         setFormData({ ...formData, password: '' });
@@ -277,5 +280,13 @@ export default function LoginPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   );
 }

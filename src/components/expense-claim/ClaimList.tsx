@@ -46,9 +46,9 @@ interface ClaimListProps {
 const kstDateString = (date: Date) =>
   new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 const todayKST = () => kstDateString(new Date());
-const threeMonthsAgoKST = () => {
+const oneMonthAgoKST = () => {
   const d = new Date();
-  d.setMonth(d.getMonth() - 3);
+  d.setMonth(d.getMonth() - 1);
   return kstDateString(d);
 };
 
@@ -62,8 +62,8 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   const [verifying, setVerifying] = useState(false);
   const [cancelling, setCancelling] = useState<number | null>(null);
   const [verifMap, setVerifMap] = useState<Map<number, VerifStatus>>(new Map());
-  // 기본 기간: 최근 3개월
-  const [startDate, setStartDate] = useState(threeMonthsAgoKST());
+  // 기본 기간: 최근 1개월
+  const [startDate, setStartDate] = useState(oneMonthAgoKST());
   const [endDate, setEndDate] = useState(todayKST());
 
   const fetchClaims = useCallback(async () => {
@@ -447,10 +447,11 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                     )}
                     <TableHead>청구일</TableHead>
                     {isAdmin && <TableHead>청구자</TableHead>}
-                    <TableHead>계정코드</TableHead>
-                    <TableHead>내역</TableHead>
+                    <TableHead className="w-16">코드</TableHead>
+                    <TableHead className="max-w-[100px]">내역</TableHead>
                     <TableHead className="text-right">금액</TableHead>
                     <TableHead>상태</TableHead>
+                    <TableHead>처리일</TableHead>
                     {isAdmin && <TableHead className="w-8 text-center" title="지출부 대조 결과">지출부</TableHead>}
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
@@ -473,9 +474,9 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                         )}
                         <TableCell className="text-sm whitespace-nowrap">{claim.claimDate}</TableCell>
                         {isAdmin && <TableCell className="text-sm">{claim.claimant}</TableCell>}
-                        <TableCell className="text-sm">{claim.accountCode}</TableCell>
+                        <TableCell className="text-sm w-16 truncate" title={claim.accountCode}>{claim.accountCode}</TableCell>
                         <TableCell
-                          className="text-sm max-w-[160px] truncate"
+                          className="text-sm max-w-[100px] truncate"
                           title={claim.description}
                         >
                           {claim.description}
@@ -484,6 +485,9 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                           {claim.amount.toLocaleString()}원
                         </TableCell>
                         <TableCell>{statusBadge(claim)}</TableCell>
+                        <TableCell className="text-sm text-slate-500 whitespace-nowrap">
+                          {claim.processedDate || '-'}
+                        </TableCell>
                         {isAdmin && (
                           <TableCell className="text-center">
                             {claim.status === 'processed' && verifIcon(claim.rowIndex)}

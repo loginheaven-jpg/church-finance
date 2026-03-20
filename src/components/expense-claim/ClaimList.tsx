@@ -269,9 +269,10 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   };
 
   const handleViewReceipt = async (receiptUrl: string) => {
-    // 구글드라이브 URL → 직접 열기
+    // 구글드라이브 URL (쉼표 구분 복수 가능) → 직접 열기
     if (receiptUrl.startsWith('http')) {
-      window.open(receiptUrl, '_blank');
+      const urls = receiptUrl.split(',').map(u => u.trim()).filter(u => u.startsWith('http'));
+      urls.forEach(url => window.open(url, '_blank'));
       return;
     }
     // Supabase 경로 → signed URL 생성
@@ -615,14 +616,33 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                             {claim.accountHolder && claim.accountHolder === claim.claimant && (
                               <span className="text-slate-400"> (본인)</span>
                             )}
-                            {claim.receiptUrl && (
+                            {claim.receiptUrl && claim.receiptUrl.startsWith('http') ? (
+                              // 구글드라이브 링크 (쉼표 구분 복수 가능)
+                              claim.receiptUrl.split(',').map((url, i) => {
+                                const trimmed = url.trim();
+                                if (!trimmed.startsWith('http')) return null;
+                                return (
+                                  <a
+                                    key={i}
+                                    href={trimmed}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-2 text-blue-500 hover:text-blue-700 hover:underline"
+                                    onClick={e => e.stopPropagation()}
+                                  >
+                                    영수증{claim.receiptUrl!.includes(',') ? ` ${i + 1}` : ''}
+                                  </a>
+                                );
+                              })
+                            ) : claim.receiptUrl ? (
+                              // Supabase 영수증
                               <button
                                 className="ml-3 text-blue-500 hover:text-blue-700 hover:underline"
                                 onClick={e => { e.stopPropagation(); handleViewReceipt(claim.receiptUrl!); }}
                               >
                                 영수증 보기
                               </button>
-                            )}
+                            ) : null}
                           </TableCell>
                         </TableRow>
                         {isAdmin && verifMap.get(claim.rowIndex)?.failReason && (

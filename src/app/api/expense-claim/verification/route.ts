@@ -21,6 +21,7 @@ interface VerificationItem {
     rowIndex: number;
     claimDate: string;
     claimant: string;
+    accountHolder: string;
     amount: number;
     bankName: string;
     accountNumber: string;
@@ -31,6 +32,7 @@ interface VerificationItem {
   status: VerificationStatus;
   matchedExpenses: MatchedExpense[];
   matchScore: number;
+  failReason?: string; // 매칭 실패 원인
 }
 
 // 내역 키워드 유사도 계산 (0~1)
@@ -49,11 +51,11 @@ function calculateTextSimilarity(claimDesc: string, expenseDesc: string, vendor:
   return matchCount / claimTokens.length;
 }
 
-// 청구자명이 지출원장의 vendor 또는 description에 포함되는지 확인
-function claimantMatchScore(claimant: string, vendor: string, description: string): number {
-  if (!claimant || claimant.length < 2) return 0;
+// 이름이 지출원장의 vendor 또는 description에 포함되는지 확인
+function nameMatchScore(name: string, vendor: string, description: string): number {
+  if (!name || name.length < 2) return 0;
   const target = `${vendor} ${description}`.toLowerCase();
-  return target.includes(claimant.toLowerCase()) ? 1 : 0;
+  return target.includes(name.toLowerCase()) ? 1 : 0;
 }
 
 // 두 날짜 사이의 일요일 횟수 계산
@@ -64,13 +66,16 @@ function countSundaysBetween(startDateStr: string, endDateStr: string): number {
 
   let count = 0;
   const current = new Date(start);
-  current.setDate(current.getDate() + 1); // 시작일 다음날부터
+  current.setDate(current.getDate() + 1);
   while (current <= end) {
-    if (current.getDay() === 0) count++; // 일요일 = 0
+    if (current.getDay() === 0) count++;
     current.setDate(current.getDate() + 1);
   }
   return count;
 }
+
+const formatDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 // GET: 처리완료 지출청구 ↔ 지출원장 교차대조
 export async function GET(request: NextRequest) {
@@ -83,7 +88,6 @@ export async function GET(request: NextRequest) {
     // 처리완료된 청구건 조회
     const claims = await getProcessedExpenseClaims(startDate, endDate);
 
-    // 청구자명 필터
     const filteredClaims = claimantFilter
       ? claims.filter(c => c.claimant.includes(claimantFilter))
       : claims;
@@ -93,30 +97,19 @@ export async function GET(request: NextRequest) {
         success: true,
         data: {
           items: [],
-          summary: {
-            total: 0,
-            matched: 0,
-            pending: 0,
-            missing: 0,
-            totalAmount: 0,
-            unmatchedAmount: 0,
-          },
+          summary: { total: 0, matched: 0, pending: 0, missing: 0, totalAmount: 0, unmatchedAmount: 0 },
         },
       });
     }
 
-    // 지출원장 조회 범위: 처리일(가장 빠른) ~ 처리일(가장 늦은) + 21일
-    // 처리일 이전 기록은 다른 건이므로 조회하지 않음
+    // 지출원장 조회 범위: 청구일(가장 빠른) - 7일 ~ 처리일(가장 늦은) + 14일
+    const claimDates = filteredClaims.map(c => c.claimDate).sort();
     const processedDates = filteredClaims.map(c => c.processedDate).sort();
-    const earliestDate = processedDates[0];
-    const latestDate = processedDates[processedDates.length - 1];
 
-    const expenseStart = new Date(earliestDate);
-    const expenseEnd = new Date(latestDate);
-    expenseEnd.setDate(expenseEnd.getDate() + 21);
-
-    const formatDate = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const expenseStart = new Date(claimDates[0]);
+    expenseStart.setDate(expenseStart.getDate() - 7);
+    const expenseEnd = new Date(processedDates[processedDates.length - 1]);
+    expenseEnd.setDate(expenseEnd.getDate() + 14);
 
     const expenseRecords = await getExpenseRecords(
       formatDate(expenseStart),
@@ -132,19 +125,26 @@ export async function GET(request: NextRequest) {
     const items: VerificationItem[] = [];
 
     for (const claim of filteredClaims) {
-      // 1단계: 금액 완전일치 + 처리일 이후 기록만 후보로 필터
-      // 지출부 기재는 처리일 이후 주일에 발생하므로, 처리일 이전 기록은 다른 건의 기록
-      const processedDateObj = new Date(claim.processedDate || claim.claimDate);
+      const holderName = claim.accountHolder || claim.claimant;
+
+      // 검색 범위: claimDate - 7일 ~ processedDate + 14일
+      const rangeStart = new Date(claim.claimDate);
+      rangeStart.setDate(rangeStart.getDate() - 7);
+      const rangeEnd = new Date(claim.processedDate || claim.claimDate);
+      rangeEnd.setDate(rangeEnd.getDate() + 14);
+
+      // 1단계: 금액 완전일치 + 날짜 범위 필터
       const amountMatches = expenseRecords.filter(e => {
         if (e.amount !== claim.amount) return false;
         const expDate = new Date(e.date);
-        return expDate >= processedDateObj; // 처리일 이후 기록만
+        return expDate >= rangeStart && expDate <= rangeEnd;
       });
 
       const claimObj = {
         rowIndex: claim.rowIndex,
         claimDate: claim.claimDate,
         claimant: claim.claimant,
+        accountHolder: holderName,
         amount: claim.amount,
         bankName: claim.bankName,
         accountNumber: claim.accountNumber,
@@ -154,27 +154,39 @@ export async function GET(request: NextRequest) {
       };
 
       if (amountMatches.length === 0) {
-        // 매칭 후보 없음 → 일요일 횟수로 상태 판정
+        // 금액 일치 후보 없음
         const sundays = countSundaysBetween(claim.processedDate || claim.claimDate, todayStr);
+        const rangeStr = `${formatDate(rangeStart)}~${formatDate(rangeEnd)}`;
+        // 전체 지출부에서 금액 일치 건 수 (범위 밖 포함)
+        const totalAmountHits = expenseRecords.filter(e => e.amount === claim.amount).length;
+        let failReason = `금액 ${claim.amount.toLocaleString()}원 후보 0건 (검색범위: ${rangeStr})`;
+        if (totalAmountHits > 0) {
+          failReason += ` — 범위 밖에 ${totalAmountHits}건 존재`;
+        }
         items.push({
           claim: claimObj,
           status: sundays >= 2 ? 'missing' : 'pending',
           matchedExpenses: [],
           matchScore: 0,
+          failReason,
         });
         continue;
       }
 
-      // 2단계: 각 후보에 점수 부여
-      // 금액일치(40) + 청구자명매칭(25) + 날짜근접(25) + 내역유사(10) = 100
+      // 2단계: 점수 부여
+      // 금액일치(40) + 이름매칭(25) + 날짜근접(25) + 내역유사(10) = 100
       const scored: MatchedExpense[] = amountMatches.map(e => {
-        let score = 40; // 금액 일치 기본 40점
+        let score = 40;
 
-        // 청구자명 매칭 (25점)
-        score += claimantMatchScore(claim.claimant, e.vendor, e.description) * 25;
+        // 이름 매칭 (25점) — 청구자 또는 예금주
+        const claimantScore = nameMatchScore(claim.claimant, e.vendor, e.description);
+        const holderScore = holderName !== claim.claimant
+          ? nameMatchScore(holderName, e.vendor, e.description)
+          : 0;
+        score += Math.max(claimantScore, holderScore) * 25;
 
-        // 날짜 근접도 (25점) - 처리일 기준
-        const baseDate = new Date(claim.processedDate || claim.claimDate);
+        // 날짜 근접도 (25점) - 청구일 기준
+        const baseDate = new Date(claim.claimDate);
         const expenseDate = new Date(e.date);
         const diffDays = Math.abs(
           (baseDate.getTime() - expenseDate.getTime()) / (24 * 60 * 60 * 1000)
@@ -197,22 +209,41 @@ export async function GET(request: NextRequest) {
         };
       });
 
-      // 점수 내림차순 정렬, 상위 3개
       scored.sort((a, b) => b.score - a.score);
       const topCandidates = scored.slice(0, 3);
-      const bestScore = topCandidates[0].score;
-
-      // 최고 점수 후보에 청구자명이 포함되어 있는지 확인
       const bestCandidate = topCandidates[0];
-      const nameMatched = claimantMatchScore(claim.claimant, bestCandidate.vendor, bestCandidate.description) > 0;
+      const bestScore = bestCandidate.score;
+
+      // 이름 매칭 여부 (청구자 또는 예금주)
+      const claimantMatched = nameMatchScore(claim.claimant, bestCandidate.vendor, bestCandidate.description) > 0;
+      const holderMatched = holderName !== claim.claimant
+        ? nameMatchScore(holderName, bestCandidate.vendor, bestCandidate.description) > 0
+        : false;
+      const anyNameMatched = claimantMatched || holderMatched;
 
       let status: VerificationStatus;
-      if (bestScore >= 65 && nameMatched) {
+      let failReason: string | undefined;
+
+      if (bestScore >= 65 && anyNameMatched) {
         status = 'matched';
       } else {
-        // 후보는 있지만 확신 부족 → 일요일 횟수로 판정
         const sundays = countSundaysBetween(claim.processedDate || claim.claimDate, todayStr);
         status = sundays >= 2 ? 'missing' : 'pending';
+
+        // 실패 원인 생성
+        const reasons: string[] = [];
+        if (!anyNameMatched) {
+          const vendorNames = [...new Set(topCandidates.map(c => c.vendor))].join(', ');
+          if (holderName !== claim.claimant) {
+            reasons.push(`이름 불일치 — 지출부: ${vendorNames} / 청구자: ${claim.claimant} / 예금주: ${holderName}`);
+          } else {
+            reasons.push(`이름 불일치 — 지출부: ${vendorNames} / 청구자: ${claim.claimant}`);
+          }
+        }
+        if (bestScore < 65) {
+          reasons.push(`점수 부족 (${bestScore}/65)`);
+        }
+        failReason = `금액 ${claim.amount.toLocaleString()}원 후보 ${amountMatches.length}건 — ${reasons.join(', ')}`;
       }
 
       items.push({
@@ -220,6 +251,7 @@ export async function GET(request: NextRequest) {
         status,
         matchedExpenses: topCandidates,
         matchScore: bestScore,
+        failReason,
       });
     }
 

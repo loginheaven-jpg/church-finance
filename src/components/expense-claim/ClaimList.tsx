@@ -38,6 +38,7 @@ interface ClaimItem {
 }
 
 type VerifStatus = 'matched' | 'pending' | 'missing';
+interface VerifInfo { status: VerifStatus; failReason?: string; }
 
 interface ClaimListProps {
   onCancelSuccess?: () => void;
@@ -62,7 +63,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   const [marking, setMarking] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [cancelling, setCancelling] = useState<number | null>(null);
-  const [verifMap, setVerifMap] = useState<Map<number, VerifStatus>>(new Map());
+  const [verifMap, setVerifMap] = useState<Map<number, VerifInfo>>(new Map());
   // 인라인 편집 (admin 전용)
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<ClaimItem>>({});
@@ -183,9 +184,9 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       const result = await res.json();
       if (result.success) {
         const items = result.data?.items || [];
-        const map = new Map<number, VerifStatus>();
-        (items as { claim: { rowIndex: number }; status: VerifStatus }[]).forEach(item => {
-          map.set(item.claim.rowIndex, item.status);
+        const map = new Map<number, VerifInfo>();
+        (items as { claim: { rowIndex: number }; status: VerifStatus; failReason?: string }[]).forEach(item => {
+          map.set(item.claim.rowIndex, { status: item.status, failReason: item.failReason });
         });
         setVerifMap(map);
         if (!silent) {
@@ -353,7 +354,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   const statusBadge = (claim: ClaimItem) => {
     if (claim.status === 'processed') {
       const verif = verifMap.get(claim.rowIndex);
-      if (verif === 'matched') {
+      if (verif?.status === 'matched') {
         return (
           <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0">
             <ShieldCheck className="h-3 w-3 mr-1" />최종확인
@@ -383,9 +384,10 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   // 지출부 대조 결과 아이콘 (admin 전용)
   const verifIcon = (rowIndex: number) => {
     const v = verifMap.get(rowIndex);
-    if (v === 'matched') return <span title="지출원장 확인됨"><ShieldCheck className="h-4 w-4 text-green-600" /></span>;
-    if (v === 'missing') return <span title="지출원장 미기재"><ShieldAlert className="h-4 w-4 text-red-500" /></span>;
-    if (v === 'pending') return <span title="지출원장 확인 대기"><ShieldQuestion className="h-4 w-4 text-slate-400" /></span>;
+    if (!v) return null;
+    if (v.status === 'matched') return <span title="지출원장 확인됨"><ShieldCheck className="h-4 w-4 text-green-600" /></span>;
+    if (v.status === 'missing') return <span title={v.failReason || '지출원장 미기재'}><ShieldAlert className="h-4 w-4 text-red-500" /></span>;
+    if (v.status === 'pending') return <span title={v.failReason || '지출원장 확인 대기'}><ShieldQuestion className="h-4 w-4 text-slate-400" /></span>;
     return null;
   };
 
@@ -602,6 +604,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                         )}
                       </TableRow>
                       {isExpanded && !isEditing && (
+                        <>
                         <TableRow className="bg-slate-50/80">
                           <TableCell colSpan={colCount} className="py-2 px-6 text-xs text-slate-600">
                             <span className="font-medium">{claim.bankName}</span>
@@ -622,6 +625,15 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                             )}
                           </TableCell>
                         </TableRow>
+                        {isAdmin && verifMap.get(claim.rowIndex)?.failReason && (
+                          <TableRow className="bg-amber-50/60">
+                            <TableCell colSpan={colCount} className="py-1.5 px-6 text-xs text-amber-700">
+                              <AlertTriangle className="h-3 w-3 inline mr-1" />
+                              {verifMap.get(claim.rowIndex)!.failReason}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        </>
                       )}
                       </Fragment>
                     );

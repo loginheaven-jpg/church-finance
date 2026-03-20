@@ -2299,14 +2299,14 @@ export interface ExpenseClaimRow {
   claimDate: string;      // B: 청구일
   bankName: string;       // J: 은행명
   accountNumber: string;  // H: 입금계좌
-  accountHolder: string;  // I: 예금주명
+  accountHolder: string;  // L: 예금주명
   amount: number;         // F: 이체금액
   claimant: string;       // D: 청구자
   accountCode: string;    // E: 계정
   description: string;    // G: 내역
   processedDate: string;  // K: 입금처리
   claimId?: string;       // A: 청구 ID (과거 구글폼 입력 건은 빈칸)
-  receiptUrl?: string;    // L: 영수증 URL (Supabase Storage)
+  receiptUrl?: string;    // I: 영수증 (구글드라이브 URL 또는 Supabase 경로)
 }
 
 export interface AccountInfo {
@@ -2439,12 +2439,13 @@ export async function getUnprocessedExpenseClaims(): Promise<ExpenseClaimRow[]> 
       claimDate,
       bankName,
       accountNumber,
-      accountHolder: (row[8] || '') || claimant,
+      accountHolder: (row[11] || '') || claimant, // L: 예금주
       amount,
       claimant,
       accountCode: row[4] || '',
       description: row[6] || '',
       processedDate: '',
+      receiptUrl: (row[8] || '') || undefined, // I: 영수증
     });
   }
 
@@ -2574,12 +2575,13 @@ export async function getProcessedExpenseClaims(
       claimDate,
       bankName,
       accountNumber,
-      accountHolder: (row[8] || '') || claimant,
+      accountHolder: (row[11] || '') || claimant, // L: 예금주
       amount,
       claimant,
       accountCode: row[4] || '',
       description: row[6] || '',
       processedDate,
+      receiptUrl: (row[8] || '') || undefined, // I: 영수증
     });
   }
 
@@ -2589,7 +2591,7 @@ export async function getProcessedExpenseClaims(
 /**
  * 지출청구 시트에 새 행 추가 (자체 시스템 입력)
  * 컬럼: A=claimId, B=claimDate, C='', D=claimant, E=accountCode,
- *        F=amount, G=description, H=accountNumber, I='', J=bankName, K='', L=receiptUrl
+ *        F=amount, G=description, H=accountNumber, I=receiptUrl, J=bankName, K='', L=accountHolder
  */
 export async function addExpenseClaim(claim: {
   claimId: string;
@@ -2612,17 +2614,17 @@ export async function addExpenseClaim(claim: {
     claim.amount,
     claim.description,
     claim.accountNumber,
-    claim.accountHolder,
+    claim.receiptUrl || '',   // I: 영수증
     claim.bankName,
     '',
-    claim.receiptUrl || '',
+    claim.accountHolder,      // L: 예금주
   ];
   await appendToSheet(FINANCE_CONFIG.sheets.expenseClaim, [row]);
 }
 
 /**
  * 지출청구 행 수정 (admin용)
- * 수정 가능 필드: 청구일(B), 계정코드(E), 금액(F), 내역(G), 계좌번호(H), 예금주(I), 은행명(J)
+ * 수정 가능 필드: 청구일(B), 계정코드(E), 금액(F), 내역(G), 계좌번호(H), 은행명(J), 예금주(L)
  */
 export async function updateExpenseClaim(
   rowIndex: number,
@@ -2645,7 +2647,7 @@ export async function updateExpenseClaim(
   if (updates.amount !== undefined) data.push({ range: `${sheet}!F${rowIndex}`, values: [[updates.amount]] });
   if (updates.description !== undefined) data.push({ range: `${sheet}!G${rowIndex}`, values: [[updates.description]] });
   if (updates.accountNumber !== undefined) data.push({ range: `${sheet}!H${rowIndex}`, values: [[updates.accountNumber]] });
-  if (updates.accountHolder !== undefined) data.push({ range: `${sheet}!I${rowIndex}`, values: [[updates.accountHolder]] });
+  if (updates.accountHolder !== undefined) data.push({ range: `${sheet}!L${rowIndex}`, values: [[updates.accountHolder]] });
   if (updates.bankName !== undefined) data.push({ range: `${sheet}!J${rowIndex}`, values: [[updates.bankName]] });
 
   if (data.length === 0) return;
@@ -2693,10 +2695,10 @@ export async function getAllExpenseClaims(options?: {
     const amountStr = row[5] || '0';   // F
     const description = row[6] || '';  // G
     const rawAccount = row[7] || '';   // H
-    const accountHolder = row[8] || '';// I: 예금주명
+    const receiptRaw = row[8] || '';   // I: 영수증 (구글드라이브 URL 또는 Supabase 경로)
     let bankName = row[9] || '';       // J
     const processedRaw = row[10] || '';// K
-    const receiptUrl = row[11] || '';  // L
+    const accountHolder = row[11] || '';// L: 예금주명
 
     const claimDate = normalizeDateString(rawClaimDate.trim()) || rawClaimDate.trim();
 
@@ -2746,7 +2748,7 @@ export async function getAllExpenseClaims(options?: {
       accountCode,
       description,
       processedDate,
-      receiptUrl: receiptUrl || undefined,
+      receiptUrl: receiptRaw || undefined,
     });
   }
 

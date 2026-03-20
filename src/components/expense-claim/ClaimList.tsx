@@ -268,6 +268,12 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   };
 
   const handleViewReceipt = async (receiptUrl: string) => {
+    // 구글드라이브 URL → 직접 열기
+    if (receiptUrl.startsWith('http')) {
+      window.open(receiptUrl, '_blank');
+      return;
+    }
+    // Supabase 경로 → signed URL 생성
     try {
       const res = await fetch(`/api/expense-claim/receipt?path=${encodeURIComponent(receiptUrl)}`);
       const data = await res.json();
@@ -606,7 +612,14 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                             {claim.accountHolder && claim.accountHolder === claim.claimant && (
                               <span className="text-slate-400"> (본인)</span>
                             )}
-                            {claim.receiptUrl && <span className="ml-3 text-blue-500">영수증 첨부됨</span>}
+                            {claim.receiptUrl && (
+                              <button
+                                className="ml-3 text-blue-500 hover:text-blue-700 hover:underline"
+                                onClick={e => { e.stopPropagation(); handleViewReceipt(claim.receiptUrl!); }}
+                              >
+                                영수증 보기
+                              </button>
+                            )}
                           </TableCell>
                         </TableRow>
                       )}

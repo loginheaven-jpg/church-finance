@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Paperclip, X } from 'lucide-react';
+import { Loader2, Paperclip, X, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ExpenseCode {
@@ -44,6 +44,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
     accountHolder: userName,
   });
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+
+  const [showGuide, setShowGuide] = useState(false);
 
   // 계정과목 코드 조회
   useEffect(() => {
@@ -180,7 +182,39 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
 
           {/* 계정과목 (2단계) */}
           <div className="space-y-1">
-            <Label>계정과목 <span className="text-red-500">*</span></Label>
+            <div className="flex items-center gap-1">
+              <Label>계정과목 <span className="text-red-500">*</span></Label>
+              <button type="button" onClick={() => setShowGuide(p => !p)} className="text-slate-400 hover:text-blue-500">
+                <HelpCircle className="h-4 w-4" />
+              </button>
+            </div>
+            {showGuide && (
+              <div className="text-xs bg-blue-50 border border-blue-200 rounded-md p-3 space-y-0.5">
+                <p className="font-semibold text-blue-700 mb-1">어떤 코드를 선택해야 하나요?</p>
+                {[
+                  ['교역자 식대', '14'],
+                  ['선교사/강사비, 접대비', '32'],
+                  ['큐티책, 강사료, 수련회', '41'],
+                  ['가정교회 세미나', '45'],
+                  ['목자목녀 행사', '45'],
+                  ['생일, 세례 축하', '46'],
+                  ['예봄성도 심방', '46'],
+                  ['만나실 식재료', '47'],
+                  ['행복쉼터 (카페)', '47'],
+                  ['내부성도 구호', '52'],
+                  ['외부/지역 구호', '53'],
+                  ['주유, 차수리', '65'],
+                  ['시설 수리비', '66'],
+                  ['사무용품', '74'],
+                ].map(([desc, code]) => (
+                  <div key={`${desc}-${code}`} className="flex justify-between text-slate-600">
+                    <span>{desc}</span>
+                    <span className="font-mono text-blue-600">{code}</span>
+                  </div>
+                ))}
+                <p className="text-slate-400 mt-1 pt-1 border-t">코드 번호에 해당하는 카테고리를 먼저 선택하세요</p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <Select
                 value={form.categoryCode}

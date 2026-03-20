@@ -28,11 +28,9 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
   // 서버에서 읽어온 기본 계좌 (변경 감지용)
   const [defaultAccount, setDefaultAccount] = useState({ bankName: '', accountNumber: '' });
 
-  // 오늘 날짜 (KST)
+  // 오늘 날짜 (KST) — toISOString은 항상 UTC이므로 +9h가 정확
   const todayKST = () => {
-    const now = new Date();
-    const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-    return `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')}`;
+    return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
   };
 
   const [form, setForm] = useState({

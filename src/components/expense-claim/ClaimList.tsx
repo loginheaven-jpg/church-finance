@@ -59,7 +59,6 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [marking, setMarking] = useState(false);
-  const [downloading, setDownloading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [cancelling, setCancelling] = useState<number | null>(null);
   const [verifMap, setVerifMap] = useState<Map<number, VerifStatus>>(new Map());
@@ -186,65 +185,65 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
     }
   }, [claims]);
 
-  const handleExcelDownload = async () => {
-    setDownloading(true);
+  // 선택 건만 엑셀 다운로드 (K컬럼 변경 없음)
+  const handleExcelDownload = () => {
+    if (selected.size === 0) { toast.error('다운로드할 항목을 선택해주세요'); return; }
+    const selectedClaims = claims.filter(c => selected.has(c.rowIndex));
+
+    const excelData = selectedClaims.map(item => {
+      const accountPrefix = item.accountCode ? item.accountCode.substring(0, 2) : '';
+      const cleanDescription = item.description
+        ? item.description.replace(/[^\w\sㄱ-ㅎㅏ-ㅣ가-힣]/g, '')
+        : '';
+      const withdrawNote = accountPrefix && cleanDescription
+        ? `${accountPrefix}${cleanDescription}`
+        : cleanDescription || accountPrefix;
+      return {
+        '은행명': item.bankName,
+        '계좌번호': item.accountNumber,
+        '금액': item.amount,
+        '입금통장': '예봄교회',
+        '출금통장': withdrawNote,
+        '이체메모': item.claimant,
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 15 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '지출청구');
+
+    const dateStr = todayKST().replace(/-/g, '');
+    XLSX.writeFile(wb, `지출청구_${dateStr}.xls`, { bookType: 'biff8' });
+    toast.success(`${selectedClaims.length}건 엑셀 다운로드 완료`);
+  };
+
+  // 입금완료 취소: K컬럼 초기화 (미처리로 복원)
+  const handleUnmarkPaid = async () => {
+    const paidSelected = claims.filter(c => selected.has(c.rowIndex) && c.status === 'processed');
+    if (paidSelected.length === 0) { toast.error('입금완료 상태인 항목을 선택해주세요'); return; }
+    if (!confirm(`${paidSelected.length}건의 입금완료를 취소하시겠습니까?`)) return;
+    setMarking(true);
     try {
-      const res = await fetch('/api/expense-claim');
-      const result = await res.json();
-      if (!result.success || result.data.length === 0) {
-        toast.info('다운로드할 미처리 청구가 없습니다');
-        return;
-      }
-
-      const excelData = result.data.map((item: {
-        bankName: string; accountNumber: string; amount: number;
-        claimant: string; accountCode: string; description: string;
-      }) => {
-        const accountPrefix = item.accountCode ? item.accountCode.substring(0, 2) : '';
-        const cleanDescription = item.description
-          ? item.description.replace(/[^\w\sㄱ-ㅎㅏ-ㅣ가-힣]/g, '')
-          : '';
-        const withdrawNote = accountPrefix && cleanDescription
-          ? `${accountPrefix}${cleanDescription}`
-          : cleanDescription || accountPrefix;
-        return {
-          '은행명': item.bankName,
-          '계좌번호': item.accountNumber,
-          '금액': item.amount,
-          '입금통장': '예봄교회',
-          '출금통장': withdrawNote,
-          '이체메모': item.claimant,
-        };
-      });
-
-      const ws = XLSX.utils.json_to_sheet(excelData);
-      ws['!cols'] = [
-        { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 15 },
-      ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '지출청구');
-
-      const dateStr = todayKST().replace(/-/g, '');
-      XLSX.writeFile(wb, `지출청구_${dateStr}.xls`, { bookType: 'biff8' });
-
-      // 다운로드 즉시 K컬럼 입금완료 처리 (1차 점검)
-      const rowIndices = result.data.map((item: { rowIndex: number }) => item.rowIndex);
-      const updateRes = await fetch('/api/expense-claim', {
+      const res = await fetch('/api/expense-claim/unmark', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rowIndices }),
+        body: JSON.stringify({ rowIndices: paidSelected.map(c => c.rowIndex) }),
       });
-      const updateResult = await updateRes.json();
-      if (updateResult.success) {
-        toast.success(`${result.data.length}건 다운로드 + 입금완료 처리됨`);
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`${paidSelected.length}건 입금완료 취소됨`);
+        setSelected(new Set());
         await fetchClaims();
       } else {
-        toast.warning('다운로드는 완료했으나 입금완료 처리 실패');
+        toast.error(data.error || '취소 실패');
       }
     } catch {
-      toast.error('다운로드 중 오류가 발생했습니다');
+      toast.error('입금완료 취소 중 오류가 발생했습니다');
     } finally {
-      setDownloading(false);
+      setMarking(false);
     }
   };
 
@@ -328,8 +327,15 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
 
   const unpaidClaims = claims.filter(c => c.status !== 'processed');
   const unpaidRows = unpaidClaims.map(c => c.rowIndex);
-  const allUnpaidSelected = unpaidRows.length > 0 && selected.size === unpaidRows.length;
+  const allUnpaidSelected = unpaidRows.length > 0 && unpaidRows.every(r => selected.has(r));
   const hasVerifRun = verifMap.size > 0;
+
+  // 선택 항목 상태 분석
+  const selectedUnpaid = claims.filter(c => selected.has(c.rowIndex) && c.status !== 'processed');
+  const selectedPaid = claims.filter(c => selected.has(c.rowIndex) && c.status === 'processed');
+  const hasUnpaidSelected = selectedUnpaid.length > 0;
+  const hasPaidSelected = selectedPaid.length > 0;
+  const isMixedSelection = hasUnpaidSelected && hasPaidSelected;
 
   return (
     <div className="space-y-4">
@@ -355,19 +361,39 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
 
         {isAdmin && (
           <div className="ml-auto flex gap-2">
-            {/* 1차 점검: 입금완료 표시 */}
+            {/* 미처리 건 선택 시: 입금완료 표시 + 엑셀 다운로드 */}
             <Button
               size="sm"
               variant="outline"
               onClick={handleMarkPaid}
-              disabled={marking || selected.size === 0}
+              disabled={marking || !hasUnpaidSelected || isMixedSelection}
+              title={isMixedSelection ? '미처리/처리 건을 섞어 선택할 수 없습니다' : ''}
             >
               {marking
                 ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 : <CheckCircle2 className="h-4 w-4 mr-1" />}
-              입금완료 표시 ({selected.size})
+              입금완료 표시 ({selectedUnpaid.length})
             </Button>
-            {/* 2차 점검: 지출부 대조 */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExcelDownload}
+              disabled={selected.size === 0}
+            >
+              <Download className="h-4 w-4 mr-1" />
+              엑셀 다운로드 ({selected.size})
+            </Button>
+            {/* 처리 건 선택 시: 입금완료 취소 */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleUnmarkPaid}
+              disabled={marking || !hasPaidSelected || isMixedSelection}
+              className={hasPaidSelected && !isMixedSelection ? 'text-orange-600 border-orange-300 hover:bg-orange-50' : ''}
+            >
+              입금완료 취소 ({selectedPaid.length})
+            </Button>
+            {/* 지출부 대조 */}
             <Button
               size="sm"
               variant={hasVerifRun ? 'default' : 'outline'}
@@ -379,17 +405,6 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                 ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 : <ShieldCheck className="h-4 w-4 mr-1" />}
               지출부 대조
-            </Button>
-            {/* 엑셀 다운로드 (이체파일 + 1차처리 동시) */}
-            <Button
-              size="sm"
-              onClick={handleExcelDownload}
-              disabled={downloading}
-            >
-              {downloading
-                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                : <Download className="h-4 w-4 mr-1" />}
-              엑셀 다운로드
             </Button>
           </div>
         )}
@@ -444,19 +459,16 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                   {claims.map(claim => {
                     const isOwn = claim.claimant === session?.name;
                     const canCancel = (isOwn || isAdmin) && claim.status !== 'processed';
-                    const canSelect = isAdmin && claim.status !== 'processed';
                     return (
                       <TableRow key={claim.rowIndex}>
                         {isAdmin && (
                           <TableCell className="pl-4">
-                            {canSelect && (
-                              <input
-                                type="checkbox"
-                                checked={selected.has(claim.rowIndex)}
-                                onChange={() => toggleSelect(claim.rowIndex)}
-                                className="h-4 w-4"
-                              />
-                            )}
+                            <input
+                              type="checkbox"
+                              checked={selected.has(claim.rowIndex)}
+                              onChange={() => toggleSelect(claim.rowIndex)}
+                              className="h-4 w-4"
+                            />
                           </TableCell>
                         )}
                         <TableCell className="text-sm whitespace-nowrap">{claim.claimDate}</TableCell>

@@ -2450,6 +2450,29 @@ export async function markExpenseClaimsAsProcessed(
 }
 
 /**
+ * 지출청구 입금완료 취소 (K컬럼 초기화)
+ * @param rowIndices 초기화할 행 번호 배열
+ */
+export async function unmarkExpenseClaimsProcessed(
+  rowIndices: number[]
+): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+
+  const requests = rowIndices.map(rowIndex => ({
+    range: `${FINANCE_CONFIG.sheets.expenseClaim}!K${rowIndex}`,
+    values: [['']],
+  }));
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: requests,
+    },
+  });
+}
+
+/**
  * 처리완료된 지출청구 조회 (K컬럼에 날짜가 있는 행)
  * @param startDate K컬럼(처리일) 시작 범위 (YYYY-MM-DD)
  * @param endDate K컬럼(처리일) 끝 범위 (YYYY-MM-DD)

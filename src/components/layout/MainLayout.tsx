@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Toaster } from 'sonner';
-import { Menu, X, CalendarCheck, AlertTriangle } from 'lucide-react';
+import { Menu, X, CalendarCheck, AlertTriangle, Wheat } from 'lucide-react';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { Button } from '@/components/ui/button';
 import { PledgePromptPopup } from '@/components/pledge';
@@ -146,16 +146,16 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Mobile Header - md 이하에서만 표시 */}
       <header
         className="fixed top-0 left-0 right-0 z-[60] md:hidden flex items-center justify-between px-4 py-3"
-        style={{ background: 'linear-gradient(135deg, #2C3E50 0%, #1a2a3a 100%)' }}
+        style={{ background: 'linear-gradient(135deg, #1B4332 0%, #143728 100%)' }}
       >
         <div className="flex items-center gap-2">
           <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center text-lg"
+            className="w-9 h-9 rounded-lg flex items-center justify-center"
             style={{
-              background: 'linear-gradient(135deg, #C9A962 0%, #D4B87A 100%)',
+              background: 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)',
             }}
           >
-            ⛪
+            <Wheat className="w-5 h-5 text-white" />
           </div>
           <span className="font-display font-semibold text-white text-[13px]">예봄교회 재정부</span>
         </div>

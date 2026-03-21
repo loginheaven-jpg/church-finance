@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -26,6 +25,7 @@ import {
   LogOut,
   User,
   CalendarCheck,
+  Wheat,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
@@ -157,24 +157,12 @@ export function Sidebar({ isOpen = true, onClose, userRole = 'member', userName 
         // PC: 항상 표시
         'md:translate-x-0'
       )}
-      style={{ background: 'linear-gradient(180deg, #2C3E50 0%, #1a2a3a 100%)' }}
+      style={{ background: 'linear-gradient(180deg, #1B4332 0%, #143728 100%)' }}
     >
       {/* Logo Section - PC에서만 표시 */}
       <div className="hidden md:flex items-center gap-3 px-3 py-5 border-b border-white/10">
-        <div className="w-[60px] h-[60px] rounded-full overflow-hidden bg-[#C9A962] flex items-center justify-center">
-          <Image
-            src="/yebom_logo.png"
-            alt="예봄교회 로고"
-            width={60}
-            height={60}
-            className="object-cover w-full h-full"
-            onError={(e) => {
-              // 이미지 로드 실패 시 이모지 표시
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              target.parentElement!.innerHTML = '<span style="font-size: 28px;">⛪</span>';
-            }}
-          />
+        <div className="w-[48px] h-[48px] rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)' }}>
+          <Wheat className="w-6 h-6 text-white" />
         </div>
         <div>
           <div className="font-display font-semibold text-[16px] text-white">예봄교회</div>

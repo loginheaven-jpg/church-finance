@@ -214,7 +214,8 @@ export function CashOfferingSync() {
           const verifyRes = await fetch(`/api/income/records?startDate=${startDate}&endDate=${endDate}`);
           const verifyData = await verifyRes.json();
           if (verifyData.success) {
-            const cashRecords = (verifyData.data || []).filter((r: { source: string }) => r.source === '헌금함');
+            const allRecords = verifyData.data?.records || verifyData.data || [];
+            const cashRecords = allRecords.filter((r: { source: string }) => r.source === '헌금함');
             const dbTotal = cashRecords.reduce((s: number, r: { amount: number }) => s + (r.amount || 0), 0);
             const syncTotal = result.totalAmount || 0;
             if (dbTotal >= syncTotal) {

@@ -97,6 +97,15 @@ export function BankUpload() {
   const [activeTab, setActiveTab] = useState<TabType>('income');
   const [unifiedIncome, setUnifiedIncome] = useState<UnifiedIncomeItem[]>([]);
   const [unifiedExpense, setUnifiedExpense] = useState<UnifiedExpenseItem[]>([]);
+  // 반영 상태
+  const [confirmingIncome, setConfirmingIncome] = useState(false);
+  const [confirmingExpense, setConfirmingExpense] = useState(false);
+  const [reflectionResult, setReflectionResult] = useState<{
+    type: 'income' | 'expense';
+    count: number;
+    suppressedCount: number;
+    amount: number;
+  } | null>(null);
   const [existingKeys, setExistingKeys] = useState<Set<string>>(new Set());
   const [duplicateIndices, setDuplicateIndices] = useState<Set<number>>(new Set());
   const [balanceVerification, setBalanceVerification] = useState<{
@@ -340,11 +349,9 @@ export function BankUpload() {
         setStep('matched');
         setActiveTab('income');
         toast.success(result.message);
-        // 2단계 완료 후 안내 팝업
+        // 2단계 완료 후 안내
         setTimeout(() => {
-          toast.info('헌금자 및 지출처와 계정코드를 확인하신 후\n수입부, 지출부에 각각 반영하십시오.', {
-            duration: 5000,
-          });
+          toast.info('확인 후 아래 반영 버튼을 클릭하세요.', { duration: 3000 });
         }, 500);
       } else {
         toast.error(result.error || '매칭 중 오류가 발생했습니다');
@@ -420,6 +427,86 @@ export function BankUpload() {
   // 지출 항목 삭제 (통합 리스트 기준)
   const handleRemoveUnifiedExpense = (index: number) => {
     setUnifiedExpense(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // === 수입부 반영 ===
+  const handleConfirmIncome = async () => {
+    if (confirmingIncome) return;
+    const incomeToSave = unifiedIncome
+      .filter(item => item.type === 'matched' && item.record)
+      .map(item => ({ transaction: item.transaction, record: item.record!, match: item.match }));
+    const suppressedToSave = unifiedIncome
+      .filter(item => item.type === 'suppressed')
+      .map(item => item.transaction);
+    if (incomeToSave.length === 0 && suppressedToSave.length === 0) {
+      toast.error('반영할 수입 데이터가 없습니다');
+      return;
+    }
+    setConfirmingIncome(true);
+    try {
+      const res = await fetch('/api/match/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ income: incomeToSave, expense: [], suppressed: suppressedToSave }),
+      });
+      const result = await res.json();
+      if (result.incomeSuccess) {
+        const totalAmount = incomeToSave.reduce((sum, item) => sum + (item.record?.amount || 0), 0);
+        setReflectionResult({ type: 'income', count: result.incomeCount, suppressedCount: result.suppressedCount || 0, amount: totalAmount });
+        setUnifiedIncome([]);
+        fetch('/api/cache/invalidate', { method: 'POST' });
+        toast.success(`수입 ${result.incomeCount}건 반영 완료`);
+      } else {
+        toast.error(result.error || '수입 반영 중 오류');
+      }
+    } catch {
+      toast.error('수입 반영 중 오류가 발생했습니다');
+    } finally {
+      setConfirmingIncome(false);
+    }
+  };
+
+  // === 지출부 반영 ===
+  const handleConfirmExpense = async () => {
+    if (confirmingExpense) return;
+    const expenseToSave = unifiedExpense
+      .filter(item => (item.type === 'matched' || item.type === 'needsReview') && item.record)
+      .map(item => ({ transaction: item.transaction, record: item.record!, match: item.match }));
+    const suppressedToSave = unifiedExpense
+      .filter(item => item.type === 'suppressed')
+      .map(item => item.transaction);
+    // needsReview 중 record 없는 건 (미편집) 확인
+    const unresolvedReview = unifiedExpense.filter(item => item.type === 'needsReview' && !item.record);
+    if (unresolvedReview.length > 0) {
+      toast.error(`검토 필요 항목 ${unresolvedReview.length}건이 미편집입니다. 계정코드를 입력해주세요.`);
+      return;
+    }
+    if (expenseToSave.length === 0 && suppressedToSave.length === 0) {
+      toast.error('반영할 지출 데이터가 없습니다');
+      return;
+    }
+    setConfirmingExpense(true);
+    try {
+      const res = await fetch('/api/match/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ income: [], expense: expenseToSave, suppressed: suppressedToSave }),
+      });
+      const result = await res.json();
+      if (result.expenseSuccess) {
+        const totalAmount = expenseToSave.reduce((sum, item) => sum + (item.record?.amount || 0), 0);
+        setReflectionResult({ type: 'expense', count: result.expenseCount, suppressedCount: result.suppressedCount || 0, amount: totalAmount });
+        setUnifiedExpense([]);
+        fetch('/api/cache/invalidate', { method: 'POST' });
+        toast.success(`지출 ${result.expenseCount}건 반영 완료`);
+      } else {
+        toast.error(result.error || '지출 반영 중 오류');
+      }
+    } catch {
+      toast.error('지출 반영 중 오류가 발생했습니다');
+    } finally {
+      setConfirmingExpense(false);
+    }
   };
 
   // 기준일별 합계 계산 (원본 데이터 기반)
@@ -1139,18 +1226,35 @@ export function BankUpload() {
                     </div>
                   )}
 
-                  {/* 매칭 완료 안내 */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                    <CheckCircle2 className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                    <div className="text-blue-700 font-medium">원장 매칭이 완료되었습니다</div>
-                    <p className="text-sm text-blue-600 mt-1">
-                      수입부/지출부 반영은 <span className="font-semibold">&apos;재정부 반영&apos;</span> 탭에서 진행해주세요.
-                    </p>
+                  {/* 반영 결과 표시 */}
+                  {reflectionResult && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+                      <CheckCircle2 className="h-4 w-4 inline mr-1" />
+                      {reflectionResult.type === 'income' ? '수입' : '지출'}부 {reflectionResult.count}건
+                      ({reflectionResult.amount.toLocaleString()}원) 반영 완료
+                      {reflectionResult.suppressedCount > 0 && ` (말소 ${reflectionResult.suppressedCount}건)`}
+                    </div>
+                  )}
+
+                  {/* 반영 버튼 */}
+                  <div className="flex gap-3 justify-center pt-2">
                     <Button
-                      variant="outline"
-                      className="mt-3"
-                      onClick={resetAll}
+                      onClick={handleConfirmIncome}
+                      disabled={confirmingIncome || unifiedIncome.filter(i => i.type === 'matched').length === 0}
+                      className="bg-green-600 hover:bg-green-700"
                     >
+                      {confirmingIncome ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+                      수입부 반영 ({unifiedIncome.filter(i => i.type === 'matched').length}건)
+                    </Button>
+                    <Button
+                      onClick={handleConfirmExpense}
+                      disabled={confirmingExpense || unifiedExpense.filter(i => i.type === 'matched' || i.type === 'needsReview').length === 0}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      {confirmingExpense ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+                      지출부 반영 ({unifiedExpense.filter(i => i.type === 'matched' || i.type === 'needsReview').length}건)
+                    </Button>
+                    <Button variant="outline" onClick={resetAll}>
                       새 파일 업로드
                     </Button>
                   </div>

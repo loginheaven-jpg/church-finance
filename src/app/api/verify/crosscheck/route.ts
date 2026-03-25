@@ -101,24 +101,9 @@ async function calculateCurrentBalance(referenceDate: string): Promise<number> {
   const incomeRecords = await getIncomeRecords(startOfYear, referenceDate);
   const expenseRecords = await getExpenseRecords(startOfYear, referenceDate);
 
-  // 자본이동 제외하고 합산 (주간보고와 동일)
-  let totalIncome = 0;
-  for (const r of incomeRecords) {
-    const code = r.offering_code;
-    // 자본수입(40번대) 제외
-    if (!(code >= 40 && code < 50)) {
-      totalIncome += r.amount || 0;
-    }
-  }
-
-  let totalExpense = 0;
-  for (const r of expenseRecords) {
-    const accountCode = r.account_code;
-    // 자본지출(92, 93) 제외
-    if (accountCode !== 92 && accountCode !== 93) {
-      totalExpense += r.amount || 0;
-    }
-  }
+  // 은행 잔액과 비교하기 위해 자본이동 포함 전체 합산
+  const totalIncome = incomeRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
+  const totalExpense = expenseRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
 
   return yearStartBalance + totalIncome - totalExpense;
 }

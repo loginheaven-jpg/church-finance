@@ -334,7 +334,7 @@ export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartPr
                         );
                       }}
                     />
-                    <Bar dataKey="amount" radius={[0, 4, 4, 0]} barSize={28}>
+                    <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
                       <Cell fill={COLORS.income} />
                       <Cell fill={COLORS.expense} />
                     </Bar>

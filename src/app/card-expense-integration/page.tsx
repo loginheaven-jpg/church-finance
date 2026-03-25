@@ -89,7 +89,7 @@ export default function CardExpenseIntegrationPage() {
   // 서버에서 임시 데이터 조회
   const fetchTempData = useCallback(async () => {
     try {
-      const res = await fetch('/api/card-expense/temp?status=pending');
+      const res = await fetch('/api/card-expense/temp?status=all');
       const data = await res.json();
       if (data.success) {
         // 초기 정렬: 내역 빈값 먼저 → 보유자 → 거래일
@@ -330,8 +330,11 @@ export default function CardExpenseIntegrationPage() {
   // 필터된 거래의 합계
   const filteredTotalAmount = filteredTransactions.reduce((sum, tx) => sum + tx.amount, 0);
 
-  // 미완료 항목 수 (필터된 데이터 기준)
-  const incompleteCount = filteredTransactions.filter(
+  // pending 건만 대상
+  const pendingTransactions = filteredTransactions.filter(tx => tx.status !== 'applied');
+  const appliedTransactions = filteredTransactions.filter(tx => tx.status === 'applied');
+  // 미완료 항목 수 (pending 중 내역/코드 미입력)
+  const incompleteCount = pendingTransactions.filter(
     (tx) => !tx.description || tx.account_code === null
   ).length;
 
@@ -521,19 +524,26 @@ export default function CardExpenseIntegrationPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredTransactions.map((tx) => {
-                    const isIncomplete = !tx.description || tx.account_code === null;
+                    const isApplied = tx.status === 'applied';
+                    const isIncomplete = !isApplied && (!tx.description || tx.account_code === null);
                     return (
                       <TableRow
                         key={tx.tempId}
-                        className={isIncomplete ? 'bg-amber-50' : ''}
+                        className={isApplied ? 'bg-green-50/60 opacity-75' : isIncomplete ? 'bg-amber-50' : ''}
                       >
-                        <TableCell className="text-sm">{tx.transaction_date || '-'}</TableCell>
+                        <TableCell className="text-sm">
+                          {tx.transaction_date || '-'}
+                          {isApplied && <span className="ml-1 text-[10px] text-green-600 font-medium">반영완료</span>}
+                        </TableCell>
                         <TableCell className="text-sm">{tx.vendor}</TableCell>
                         <TableCell className="text-sm">{tx.note}</TableCell>
                         <TableCell className="text-right font-medium">
                           {tx.amount.toLocaleString()}
                         </TableCell>
                         <TableCell>
+                          {isApplied ? (
+                            <span className="text-sm text-slate-600">{tx.description}</span>
+                          ) : (
                           <Input
                             value={tx.description}
                             onChange={(e) =>
@@ -542,8 +552,12 @@ export default function CardExpenseIntegrationPage() {
                             placeholder="내역 입력"
                             className={`h-8 text-sm ${!tx.description ? 'border-amber-400' : ''}`}
                           />
+                          )}
                         </TableCell>
                         <TableCell>
+                          {isApplied ? (
+                            <span className="text-sm text-slate-600">{tx.account_code}</span>
+                          ) : (
                           <Select
                             value={tx.account_code?.toString() || ''}
                             onValueChange={(val) =>
@@ -570,6 +584,7 @@ export default function CardExpenseIntegrationPage() {
                               ))}
                             </SelectContent>
                           </Select>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -599,7 +614,7 @@ export default function CardExpenseIntegrationPage() {
               {isAdmin && (
                 <Button
                   onClick={() => setConfirmDialogOpen(true)}
-                  disabled={incompleteCount > 0 || applying || filteredTransactions.length === 0}
+                  disabled={incompleteCount > 0 || applying || pendingTransactions.length === 0}
                 >
                   {applying ? (
                     <>

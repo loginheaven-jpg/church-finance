@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { supabaseAdmin } from '@/lib/supabase';
 import { FinanceSession } from '@/lib/auth/finance-permissions';
-import { sealFinanceSession, FINANCE_SESSION_COOKIE } from '@/lib/auth/finance-session';
+import { sealFinanceSession, FINANCE_SESSION_COOKIE, financeSessionOptions } from '@/lib/auth/finance-session';
 
 export async function POST(request: NextRequest) {
   try {
@@ -130,22 +130,10 @@ export async function POST(request: NextRequest) {
 
     // 세션 쿠키 설정 (iron-session 암호화)
     const sealed = await sealFinanceSession(sessionData);
-    response.cookies.set(FINANCE_SESSION_COOKIE, sealed, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7일
-      path: '/',
-    });
+    response.cookies.set(FINANCE_SESSION_COOKIE, sealed, financeSessionOptions.cookieOptions!);
 
     // 기존 auth-token도 설정 (기존 미들웨어 호환)
-    response.cookies.set('auth-token', 'authenticated', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7일
-      path: '/',
-    });
+    response.cookies.set('auth-token', 'authenticated', financeSessionOptions.cookieOptions!);
 
     return response;
   } catch (error) {
@@ -160,7 +148,14 @@ export async function POST(request: NextRequest) {
 // 로그아웃
 export async function DELETE() {
   const response = NextResponse.json({ success: true });
-  response.cookies.delete('auth-token');
-  response.cookies.delete(FINANCE_SESSION_COOKIE);
+  const cookieOpts = financeSessionOptions.cookieOptions!;
+  // 도메인 일치시켜 삭제해야 .yebom.org 쿠키도 삭제됨
+  response.cookies.set('auth-token', '', { ...cookieOpts, maxAge: 0 });
+  response.cookies.set(FINANCE_SESSION_COOKIE, '', { ...cookieOpts, maxAge: 0 });
+  // 교적부 SSO 쿠키도 삭제 (재정부에서 로그아웃 시)
+  response.cookies.set('saint_record_session', '', {
+    ...cookieOpts,
+    maxAge: 0,
+  });
   return response;
 }

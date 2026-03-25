@@ -6,6 +6,8 @@ import {
   getKSTDateTime,
   getCardExpenseTemp,
   updateCardExpenseTempStatus,
+  getBankTransactions,
+  updateBankTransaction,
 } from '@/lib/google-sheets';
 import {
   hasRole,
@@ -105,7 +107,34 @@ export async function POST() {
       }
     }
 
-    // 3. 임시 데이터 상태를 'applied'로 변경
+    // 3. 은행원장의 카드대금 출금을 suppressed로 변경
+    try {
+      const totalAmount = expenseRecords.reduce((sum, r) => sum + r.amount, 0);
+      const bankTransactions = await getBankTransactions();
+      const cardKeywords = ['nh카드대금', 'nh기업카드', 'nh카드', '농협카드', '카드대금'];
+      const cardBankTx = bankTransactions.find(tx => {
+        if (tx.withdrawal !== totalAmount) return false;
+        if (tx.matched_status === 'suppressed') return false;
+        const detail = (tx.detail || '').toLowerCase();
+        const desc = (tx.description || '').toLowerCase();
+        return cardKeywords.some(kw => detail.includes(kw) || desc.includes(kw));
+      });
+      if (cardBankTx) {
+        await updateBankTransaction(cardBankTx.id, {
+          matched_status: 'suppressed',
+          suppressed: true,
+          suppressed_reason: '카드 세부내역으로 대체 (법인카드)',
+        });
+        console.log('[card-expense/apply] 은행원장 카드대금 suppressed:', cardBankTx.id, totalAmount);
+      } else {
+        console.warn('[card-expense/apply] 은행원장에서 카드대금 출금을 찾지 못함 (금액:', totalAmount, ')');
+      }
+    } catch (bankError) {
+      console.error('[card-expense/apply] 은행원장 suppressed 처리 실패:', bankError);
+      // 실패해도 지출부 반영은 완료됨
+    }
+
+    // 4. 임시 데이터 상태를 'applied'로 변경
     const tempIds = pendingRecords.map((r) => r.tempId);
     try {
       await updateCardExpenseTempStatus(tempIds, 'applied');

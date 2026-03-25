@@ -249,6 +249,62 @@ export default function CardExpenseIntegrationPage() {
         // 서버에서 데이터 다시 조회 (status가 applied로 변경됨)
         await fetchTempData();
         setConfirmDialogOpen(false);
+
+        // ★ 크로스체크: 지출부 법인카드 합계 + 은행원장 suppressed 확인
+        try {
+          const appliedTotal = transactions.reduce((s, tx) => s + tx.amount, 0);
+          const [expRes, unmatchRes] = await Promise.all([
+            fetch(`/api/expense/records?startDate=${matchingRecord?.date || ''}&endDate=${matchingRecord?.date || ''}`),
+            fetch('/api/match/unmatched'),
+          ]);
+          const expData = await expRes.json();
+          const unmatchData = await unmatchRes.json();
+
+          const checks: string[] = [];
+          let allOk = true;
+
+          // 1. 지출부 법인카드 합계 확인
+          if (expData.success) {
+            const records = expData.data?.records || expData.data || [];
+            const cardRecords = records.filter((r: { payment_method: string }) => (r.payment_method || '').includes('법인카드'));
+            const cardTotal = cardRecords.reduce((s: number, r: { amount: number }) => s + (r.amount || 0), 0);
+            if (cardTotal === appliedTotal) {
+              checks.push(`법인카드 ${cardRecords.length}건 ${cardTotal.toLocaleString()}원`);
+            } else {
+              checks.push(`법인카드 불일치: 반영 ${appliedTotal.toLocaleString()} → 지출부 ${cardTotal.toLocaleString()}`);
+              allOk = false;
+            }
+          }
+
+          // 2. NH카드대금 총액 삭제 확인
+          if (data.deletedRecordId) {
+            checks.push('NH카드대금 총액 삭제됨');
+          } else {
+            checks.push('NH카드대금 총액 삭제 실패');
+            allOk = false;
+          }
+
+          // 3. 은행원장 카드출금 pending 확인
+          if (unmatchData.success) {
+            const pendingCard = (unmatchData.bank || []).filter((b: { detail: string; withdrawal: number }) =>
+              b.withdrawal > 0 && (b.detail || '').toLowerCase().includes('카드')
+            );
+            if (pendingCard.length === 0) {
+              checks.push('은행원장 카드대금 suppressed');
+            } else {
+              checks.push(`은행원장 카드 pending ${pendingCard.length}건 잔류`);
+              allOk = false;
+            }
+          }
+
+          if (allOk) {
+            toast.success(`✅ 카드내역 크로스체크 통과: ${checks.join(', ')}`, { duration: 5000 });
+          } else {
+            toast.warning(`⚠ 카드내역 크로스체크: ${checks.join(' / ')}`, { duration: 8000 });
+          }
+        } catch {
+          // 크로스체크 실패해도 반영은 완료
+        }
       } else {
         toast.error(data.error || '반영 실패');
       }

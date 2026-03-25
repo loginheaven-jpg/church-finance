@@ -309,6 +309,29 @@ export function BankUpload() {
         } else {
           toast.success(result.message);
         }
+
+        // ★ 크로스체크: 저장 후 은행원장에서 다시 읽어서 건수/금액 확인
+        try {
+          const verifyRes = await fetch('/api/match/unmatched');
+          const verifyData = await verifyRes.json();
+          if (verifyData.success) {
+            // 방금 저장한 ID 기준으로 은행원장에 있는지 확인
+            const bankItems = verifyData.bank || [];
+            const savedIds = new Set(newData.map((tx: { id: string }) => tx.id));
+            const verified = bankItems.filter((b: { id: string }) => savedIds.has(b.id));
+            const expectedDep = newData.reduce((s: number, tx: { deposit: number }) => s + (tx.deposit || 0), 0);
+            const expectedWdr = newData.reduce((s: number, tx: { withdrawal: number }) => s + (tx.withdrawal || 0), 0);
+            const actualDep = verified.reduce((s: number, b: { deposit: number }) => s + (b.deposit || 0), 0);
+            const actualWdr = verified.reduce((s: number, b: { withdrawal: number }) => s + (b.withdrawal || 0), 0);
+            if (verified.length === newData.length && actualDep === expectedDep && actualWdr === expectedWdr) {
+              toast.success(`✅ 크로스체크 통과: 은행원장 ${verified.length}건 (입금 ${expectedDep.toLocaleString()} / 출금 ${expectedWdr.toLocaleString()}) 확인`, { duration: 5000 });
+            } else {
+              toast.error(`❌ 크로스체크: 저장 ${newData.length}건 → 확인 ${verified.length}건 (입금 ${actualDep.toLocaleString()} / 출금 ${actualWdr.toLocaleString()})`, { duration: 8000 });
+            }
+          }
+        } catch {
+          toast.warning('은행원장 크로스체크 조회 실패');
+        }
       } else {
         toast.error(result.error || '저장 중 오류가 발생했습니다');
       }
@@ -452,10 +475,25 @@ export function BankUpload() {
       const result = await res.json();
       if (result.incomeSuccess) {
         const totalAmount = incomeToSave.reduce((sum, item) => sum + (item.record?.amount || 0), 0);
+        const suppAmount = suppressedToSave.reduce((sum, tx) => sum + (tx.deposit || 0), 0);
         setReflectionResult({ type: 'income', count: result.incomeCount, suppressedCount: result.suppressedCount || 0, amount: totalAmount });
         setUnifiedIncome([]);
         fetch('/api/cache/invalidate', { method: 'POST' });
         toast.success(`수입 ${result.incomeCount}건 반영 완료`);
+
+        // ★ 크로스체크: 은행원장 matched/suppressed 상태 확인
+        try {
+          const vRes = await fetch('/api/match/unmatched');
+          const vData = await vRes.json();
+          if (vData.success) {
+            const pendingBank = (vData.bank || []).filter((b: { deposit: number }) => b.deposit > 0);
+            if (pendingBank.length === 0) {
+              toast.success(`✅ 수입부 크로스체크: 반영 ${result.incomeCount}건 (${totalAmount.toLocaleString()}원) + 말소 ${result.suppressedCount}건 (${suppAmount.toLocaleString()}원) 확인`, { duration: 5000 });
+            } else {
+              toast.warning(`⚠ 수입 pending ${pendingBank.length}건 잔류 — 미처리 확인 탭에서 확인하세요`, { duration: 6000 });
+            }
+          }
+        } catch { /* 크로스체크 실패 무시 */ }
       } else {
         toast.error(result.error || '수입 반영 중 오류');
       }
@@ -499,6 +537,20 @@ export function BankUpload() {
         setUnifiedExpense([]);
         fetch('/api/cache/invalidate', { method: 'POST' });
         toast.success(`지출 ${result.expenseCount}건 반영 완료`);
+
+        // ★ 크로스체크: pending 출금 0건 확인
+        try {
+          const vRes = await fetch('/api/match/unmatched');
+          const vData = await vRes.json();
+          if (vData.success) {
+            const pendingBank = (vData.bank || []).filter((b: { withdrawal: number }) => b.withdrawal > 0);
+            if (pendingBank.length === 0) {
+              toast.success(`✅ 지출부 크로스체크: 반영 ${result.expenseCount}건 (${totalAmount.toLocaleString()}원), pending 0건 확인`, { duration: 5000 });
+            } else {
+              toast.warning(`⚠ 지출 pending ${pendingBank.length}건 잔류 — 은행원장 status 업데이트 확인 필요`, { duration: 6000 });
+            }
+          }
+        } catch { /* 크로스체크 실패 무시 */ }
       } else {
         toast.error(result.error || '지출 반영 중 오류');
       }

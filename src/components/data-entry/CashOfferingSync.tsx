@@ -208,6 +208,25 @@ export function CashOfferingSync() {
         setExistingKeys(new Set());
         setHasChanges(false);
         toast.success(`${result.processed}건의 현금헌금을 수입부에 반영했습니다`);
+
+        // ★ 크로스체크: 반영 후 수입부 헌금함 합계 검증
+        try {
+          const verifyRes = await fetch(`/api/income/records?startDate=${startDate}&endDate=${endDate}`);
+          const verifyData = await verifyRes.json();
+          if (verifyData.success) {
+            const cashRecords = (verifyData.data || []).filter((r: { source: string }) => r.source === '헌금함');
+            const dbTotal = cashRecords.reduce((s: number, r: { amount: number }) => s + (r.amount || 0), 0);
+            const syncTotal = result.totalAmount || 0;
+            if (dbTotal >= syncTotal) {
+              toast.success(`✅ 크로스체크 통과: 수입부 헌금함 ${dbTotal.toLocaleString()}원 반영 확인`, { duration: 4000 });
+            } else {
+              toast.error(`❌ 크로스체크 실패: 반영 ${syncTotal.toLocaleString()}원 → 수입부 ${dbTotal.toLocaleString()}원 (차이 ${(syncTotal - dbTotal).toLocaleString()}원)`, { duration: 8000 });
+            }
+          }
+        } catch {
+          // 크로스체크 실패해도 반영 자체는 완료
+          toast.warning('크로스체크 조회 실패 — 수입부에서 직접 확인해주세요');
+        }
       } else {
         toast.error(result.error || '동기화 중 오류가 발생했습니다');
       }

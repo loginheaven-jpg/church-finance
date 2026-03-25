@@ -18,7 +18,7 @@ export default function DataEntryPage() {
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="sync" className="text-xs sm:text-sm">현금헌금 동기화</TabsTrigger>
           <TabsTrigger value="bank" className="text-xs sm:text-sm">은행원장 입력</TabsTrigger>
-          <TabsTrigger value="finance" className="text-xs sm:text-sm">미반영 처리</TabsTrigger>
+          <TabsTrigger value="finance" className="text-xs sm:text-sm">미처리 확인</TabsTrigger>
           <TabsTrigger value="correction" className="text-xs sm:text-sm">수입부 데이터보정</TabsTrigger>
         </TabsList>
 

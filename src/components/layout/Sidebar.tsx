@@ -88,7 +88,7 @@ const menuSections: MenuSection[] = [
     items: [
       { href: '/expense-claim', label: '지출청구', icon: FilePlus, minRole: 'member' },
       { href: '/data-entry', label: '데이터 입력', icon: Upload },
-      { href: '/match', label: '거래 매칭', icon: GitCompare },
+      { href: '/match', label: '거래 매칭', icon: GitCompare, minRole: 'super_admin' as const },
       { href: '/card-expense-integration', label: '카드내역 입력', icon: CreditCard, minRole: 'member' },
       { href: '/donors', label: '헌금자 관리', icon: Users },
       { href: '/donors/receipts', label: '기부금 영수증', icon: FileText },

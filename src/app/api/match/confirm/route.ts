@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   let incomeError = '';
   let expenseError = '';
 
-  // 수입 레코드 저장 (독립적 처리)
+  // 수입 레코드 저장 (수입부 먼저 쓰고 → 성공 시 은행원장 status 변경)
   if (income && income.length > 0) {
     try {
       // 중복 반영 방지: 서버의 실제 은행원장 상태 기준으로 필터링
@@ -81,38 +81,28 @@ export async function POST(request: NextRequest) {
         incomeSuccess = true;
         incomeCount = 0;
       } else {
-        // 배치 업데이트로 은행거래 상태 일괄 업데이트 (API 호출 1회)
+        // ★ 순서 변경: 수입부에 먼저 쓰고, 성공 시에만 은행원장 status 변경
+        const incomeRecords = newIncomeItems.map(item => item.record);
+        await addIncomeRecords(incomeRecords);
+        incomeCount = incomeRecords.length;
+
+        // 수입부 쓰기 성공 → 은행원장 status 변경
         const batchUpdates = newIncomeItems.map(item => ({
           id: item.transaction.id,
           matched_status: 'matched' as const,
           matched_type: 'income_detail',
           matched_ids: item.record.id,
         }));
-
         const batchResult = await updateBankTransactionsBatch(batchUpdates);
 
-        // 성공한 항목만 수입부에 추가
-        const successIdSet = new Set(batchResult.success);
-        const successfulItems = newIncomeItems.filter(item => successIdSet.has(item.transaction.id));
-
-        if (successfulItems.length > 0) {
-          const incomeRecords = successfulItems.map(item => item.record);
-          await addIncomeRecords(incomeRecords);
-          incomeCount = incomeRecords.length;
-
-          // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
-          const ruleIds = successfulItems.filter(item => item.match?.id).map(item => item.match!.id);
-          if (ruleIds.length > 0) {
-            await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
-          }
+        if (batchResult.failed.length > 0) {
+          console.warn('[match/confirm] 수입 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건 (수입부에는 이미 반영됨)');
         }
 
-        if (batchResult.failed.length > 0) {
-          console.warn('[match/confirm] 수입 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건');
-          if (successfulItems.length === 0) {
-            incomeSuccess = false;
-            incomeError = `은행원장 상태 업데이트 실패 ${batchResult.failed.length}건`;
-          }
+        // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
+        const ruleIds = newIncomeItems.filter(item => item.match?.id).map(item => item.match!.id);
+        if (ruleIds.length > 0) {
+          await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
         }
       }
     } catch (error) {
@@ -145,38 +135,28 @@ export async function POST(request: NextRequest) {
       });
 
       if (validExpenseItems.length > 0) {
-        // 배치 업데이트로 은행거래 상태 일괄 업데이트 (API 호출 1회)
+        // ★ 순서 변경: 지출부에 먼저 쓰고, 성공 시에만 은행원장 status 변경
+        const expenseRecords = validExpenseItems.map(item => item.record);
+        await addExpenseRecords(expenseRecords);
+        expenseCount = expenseRecords.length;
+
+        // 지출부 쓰기 성공 → 은행원장 status 변경
         const batchUpdates = validExpenseItems.map(item => ({
           id: item.transaction.id,
           matched_status: 'matched' as const,
           matched_type: 'expense_detail',
           matched_ids: item.record.id,
         }));
-
         const batchResult = await updateBankTransactionsBatch(batchUpdates);
 
-        // 성공한 항목만 지출부에 추가
-        const successIdSet = new Set(batchResult.success);
-        const successfulItems = validExpenseItems.filter(item => successIdSet.has(item.transaction.id));
-
-        if (successfulItems.length > 0) {
-          const expenseRecords = successfulItems.map(item => item.record);
-          await addExpenseRecords(expenseRecords);
-          expenseCount = expenseRecords.length;
-
-          // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
-          const ruleIds = successfulItems.filter(item => item.match?.id).map(item => item.match!.id);
-          if (ruleIds.length > 0) {
-            await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
-          }
+        if (batchResult.failed.length > 0) {
+          console.warn('[match/confirm] 지출 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건 (지출부에는 이미 반영됨)');
         }
 
-        if (batchResult.failed.length > 0) {
-          console.warn('[match/confirm] 지출 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건');
-          if (successfulItems.length === 0) {
-            expenseSuccess = false;
-            expenseError = `은행원장 상태 업데이트 실패 ${batchResult.failed.length}건`;
-          }
+        // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
+        const ruleIds = validExpenseItems.filter(item => item.match?.id).map(item => item.match!.id);
+        if (ruleIds.length > 0) {
+          await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
         }
       }
     } catch (error) {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { canAccessPath } from '@/lib/auth/finance-permissions';
-import { unsealFinanceSession, FINANCE_SESSION_COOKIE } from '@/lib/auth/finance-session';
+import { unsealFinanceSession, FINANCE_SESSION_COOKIE, financeSessionOptions } from '@/lib/auth/finance-session';
 
 // 인증이 필요 없는 경로
 const publicPaths = ['/login', '/register', '/api/auth'];
@@ -17,8 +17,21 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
     pathname.includes('.') ||
-    publicPaths.some(path => pathname.startsWith(path))
+    pathname.startsWith('/api/auth')
   ) {
+    return NextResponse.next();
+  }
+
+  // /login 접속 시 기존 세션 쿠키 자동 정리 (깨끗한 로그인 보장)
+  if (pathname === '/login' || pathname === '/register') {
+    const hasOldCookies = request.cookies.get(FINANCE_SESSION_COOKIE) || request.cookies.get('auth-token');
+    if (hasOldCookies) {
+      const response = NextResponse.next();
+      const cookieOpts = financeSessionOptions.cookieOptions!;
+      response.cookies.set(FINANCE_SESSION_COOKIE, '', { ...cookieOpts, maxAge: 0 });
+      response.cookies.set('auth-token', '', { ...cookieOpts, maxAge: 0 });
+      return response;
+    }
     return NextResponse.next();
   }
 

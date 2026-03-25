@@ -140,6 +140,19 @@ export function MainLayout({ children }: MainLayoutProps) {
     router.push('/admin/annual-closing');
   };
 
+  // 로그인/회원가입 페이지에서는 레이아웃(사이드바/헤더) 숨김
+  const isAuthPage = pathname === '/login' || pathname === '/register';
+
+  if (isAuthPage) {
+    return (
+      <div className="min-h-screen bg-[#F8F6F3]">
+        <VersionChecker />
+        {children}
+        <Toaster position="top-right" richColors />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8F6F3]">
       <VersionChecker />

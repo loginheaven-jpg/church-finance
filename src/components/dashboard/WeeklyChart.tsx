@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   BarChart,
@@ -50,6 +51,8 @@ function getShade(baseColor: string, index: number, total: number): string {
 }
 
 export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartProps) {
+  const [cumulativeMode, setCumulativeMode] = useState<'8week' | 'yearly'>('8week');
+
   const formatAmount = (value: number) => {
     if (value >= 100000000) {
       return `${(value / 100000000).toFixed(1)}억`;
@@ -99,7 +102,7 @@ export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartPr
               <BarChart3 className="w-full h-full" />
             </div>
             <h3 className="font-display text-[16px] md:text-[20px] font-semibold text-[#2C3E50]">
-              최근 8주 재정 현황
+              재정 추이
             </h3>
           </div>
 
@@ -195,84 +198,154 @@ export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartPr
           </ResponsiveContainer>
         </div>
 
-        {/* 2. 가로 누적 바차트 - 8주 누적 합계 */}
+        {/* 2. 누적 합계 (8주 / 올해 토글) */}
         <div>
-          <p className="text-[12px] md:text-[13px] text-[#6B7B8C] mb-2 font-medium">8주 누적 합계</p>
-          <div className="h-[100px] md:h-[120px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={cumulativeData}
-                layout="vertical"
-                margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[12px] md:text-[13px] text-[#6B7B8C] font-medium">
+              {cumulativeMode === '8week' ? '8주 누적 합계' : '올해 누적 합계'}
+            </p>
+            <div className="flex bg-slate-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setCumulativeMode('8week')}
+                className={`px-2.5 py-1 text-[11px] md:text-[12px] rounded-md transition-colors ${
+                  cumulativeMode === '8week'
+                    ? 'bg-white text-[#2C3E50] font-semibold shadow-sm'
+                    : 'text-[#6B7B8C] hover:text-[#2C3E50]'
+                }`}
               >
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="category"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 13, fill: '#2C3E50', fontWeight: 600 }}
-                  width={35}
-                />
-                <Tooltip
-                  cursor={{ fill: 'rgba(201, 169, 98, 0.08)' }}
-                  content={({ active, payload }) => {
-                    if (!active || !payload || payload.length === 0) return null;
-                    const category = payload[0]?.payload?.category;
-                    const total = payload.reduce((sum, p) => sum + (Number(p.value) || 0), 0);
-                    return (
-                      <div style={tooltipStyle}>
-                        <p style={{ fontWeight: 600, marginBottom: '8px', color: '#2C3E50' }}>
-                          {category} 8주 누적: {total.toLocaleString()}원
-                        </p>
-                        {payload.map((entry, index) => {
-                          const weekIdx = parseInt(String(entry.dataKey).replace('w', ''));
-                          const weekLabel = data[weekIdx]?.date || `${weekIdx + 1}주`;
-                          const val = Number(entry.value);
-                          if (val === 0) return null;
-                          return (
-                            <p key={index} style={{ color: entry.color as string, fontSize: '13px', margin: '2px 0' }}>
-                              {weekLabel}: {val.toLocaleString()}원
-                            </p>
-                          );
-                        })}
-                      </div>
-                    );
-                  }}
-                />
-                {weekKeys.map((key, i) => (
-                  <Bar
-                    key={key}
-                    dataKey={key}
-                    stackId="stack"
-                    radius={i === weekKeys.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
-                  >
-                    {cumulativeData.map((_, rowIdx) => (
-                      <Cell
-                        key={rowIdx}
-                        fill={getShade(
-                          rowIdx === 0 ? COLORS.income : COLORS.expense,
-                          i,
-                          weekKeys.length
-                        )}
-                      />
-                    ))}
-                  </Bar>
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          {/* 8주 누적 합계 */}
-          <div className="flex justify-end gap-4 mt-1 text-[12px] md:text-[13px] font-semibold">
-            <span style={{ color: COLORS.income }}>8주 누적 수입: {formatAmount(totalIncome)}</span>
-            <span style={{ color: COLORS.expense }}>8주 누적 지출: {formatAmount(totalExpense)}</span>
-          </div>
-          {/* 연간 누적 합계 */}
-          {(yearlyIncome !== undefined || yearlyExpense !== undefined) && (
-            <div className="flex justify-end gap-4 mt-1 text-[12px] md:text-[13px] font-semibold">
-              <span style={{ color: COLORS.income }}>연간 수입: {formatAmount(yearlyIncome || 0)}</span>
-              <span style={{ color: COLORS.expense }}>연간 지출: {formatAmount(yearlyExpense || 0)}</span>
+                최근 8주
+              </button>
+              <button
+                onClick={() => setCumulativeMode('yearly')}
+                className={`px-2.5 py-1 text-[11px] md:text-[12px] rounded-md transition-colors ${
+                  cumulativeMode === 'yearly'
+                    ? 'bg-white text-[#2C3E50] font-semibold shadow-sm'
+                    : 'text-[#6B7B8C] hover:text-[#2C3E50]'
+                }`}
+              >
+                올해
+              </button>
             </div>
+          </div>
+
+          {cumulativeMode === '8week' ? (
+            <>
+              <div className="h-[100px] md:h-[120px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={cumulativeData}
+                    layout="vertical"
+                    margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
+                  >
+                    <XAxis type="number" hide />
+                    <YAxis
+                      type="category"
+                      dataKey="category"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 13, fill: '#2C3E50', fontWeight: 600 }}
+                      width={35}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(201, 169, 98, 0.08)' }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload || payload.length === 0) return null;
+                        const category = payload[0]?.payload?.category;
+                        const total = payload.reduce((sum, p) => sum + (Number(p.value) || 0), 0);
+                        return (
+                          <div style={tooltipStyle}>
+                            <p style={{ fontWeight: 600, marginBottom: '8px', color: '#2C3E50' }}>
+                              {category} 8주 누적: {total.toLocaleString()}원
+                            </p>
+                            {payload.map((entry, index) => {
+                              const weekIdx = parseInt(String(entry.dataKey).replace('w', ''));
+                              const weekLabel = data[weekIdx]?.date || `${weekIdx + 1}주`;
+                              const val = Number(entry.value);
+                              if (val === 0) return null;
+                              return (
+                                <p key={index} style={{ color: entry.color as string, fontSize: '13px', margin: '2px 0' }}>
+                                  {weekLabel}: {val.toLocaleString()}원
+                                </p>
+                              );
+                            })}
+                          </div>
+                        );
+                      }}
+                    />
+                    {weekKeys.map((key, i) => (
+                      <Bar
+                        key={key}
+                        dataKey={key}
+                        stackId="stack"
+                        radius={i === weekKeys.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
+                      >
+                        {cumulativeData.map((_, rowIdx) => (
+                          <Cell
+                            key={rowIdx}
+                            fill={getShade(
+                              rowIdx === 0 ? COLORS.income : COLORS.expense,
+                              i,
+                              weekKeys.length
+                            )}
+                          />
+                        ))}
+                      </Bar>
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex justify-end gap-4 mt-1 text-[12px] md:text-[13px] font-semibold">
+                <span style={{ color: COLORS.income }}>수입: {formatAmount(totalIncome)}</span>
+                <span style={{ color: COLORS.expense }}>지출: {formatAmount(totalExpense)}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* 올해 누적: 단순 가로 바 2개 */}
+              <div className="h-[100px] md:h-[120px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={[
+                      { category: '수입', amount: yearlyIncome || 0 },
+                      { category: '지출', amount: yearlyExpense || 0 },
+                    ]}
+                    layout="vertical"
+                    margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
+                  >
+                    <XAxis type="number" hide />
+                    <YAxis
+                      type="category"
+                      dataKey="category"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 13, fill: '#2C3E50', fontWeight: 600 }}
+                      width={35}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(201, 169, 98, 0.08)' }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload || payload.length === 0) return null;
+                        return (
+                          <div style={tooltipStyle}>
+                            <p style={{ fontWeight: 600, color: '#2C3E50' }}>
+                              {payload[0]?.payload?.category}: {Number(payload[0]?.value || 0).toLocaleString()}원
+                            </p>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Bar dataKey="amount" radius={[0, 4, 4, 0]} barSize={28}>
+                      <Cell fill={COLORS.income} />
+                      <Cell fill={COLORS.expense} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex justify-end gap-4 mt-1 text-[12px] md:text-[13px] font-semibold">
+                <span style={{ color: COLORS.income }}>수입: {formatAmount(yearlyIncome || 0)}</span>
+                <span style={{ color: COLORS.expense }}>지출: {formatAmount(yearlyExpense || 0)}</span>
+              </div>
+            </>
           )}
         </div>
       </CardContent>

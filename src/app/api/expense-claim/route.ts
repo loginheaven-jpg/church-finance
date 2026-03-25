@@ -4,10 +4,15 @@ import {
   markExpenseClaimsAsProcessed,
   getKSTDate,
 } from '@/lib/google-sheets';
+import { getFinanceSession } from '@/lib/auth/finance-session';
 
 // GET: 미처리 지출청구 목록 조회
 export async function GET() {
   try {
+    const session = await getFinanceSession();
+    if (!session?.user_id) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
     const claims = await getUnprocessedExpenseClaims();
 
     return NextResponse.json({
@@ -27,6 +32,10 @@ export async function GET() {
 // POST: 지출청구 처리 완료 (K컬럼에 날짜 기입)
 export async function POST(request: NextRequest) {
   try {
+    const session = await getFinanceSession();
+    if (!session?.user_id) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
     const body = await request.json();
     const { rowIndices } = body;
 

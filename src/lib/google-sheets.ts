@@ -58,7 +58,7 @@ const CASH_OFFERING_CONFIG = {
   sheetName: '헌금함',
 };
 
-const FINANCE_CONFIG = {
+export const FINANCE_CONFIG = {
   spreadsheetId: process.env.FINANCE_SHEET_ID!,
   sheets: {
     income: '수입부',
@@ -944,12 +944,13 @@ export async function updateBankTransactionsBatch(
     matched_ids?: string;
     suppressed?: boolean;
     suppressed_reason?: string;
-  }>
+  }>,
+  cachedRows?: string[][]  // 외부에서 이미 읽은 은행원장 데이터 (API 호출 절감)
 ): Promise<{ success: string[]; failed: string[] }> {
   const sheets = getGoogleSheetsClient();
 
-  // 1. 은행원장 전체 읽기 (한 번만)
-  const rows = await readSheet(FINANCE_CONFIG.sheets.bank);
+  // 1. 은행원장 전체 읽기 (캐시 있으면 재사용)
+  const rows = cachedRows || await readSheet(FINANCE_CONFIG.sheets.bank);
   if (rows.length === 0) {
     console.error('[updateBankTransactionsBatch] 은행원장이 비어있음');
     return { success: [], failed: updates.map(u => u.id) };

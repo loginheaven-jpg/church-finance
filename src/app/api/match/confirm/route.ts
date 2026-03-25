@@ -3,9 +3,9 @@ import {
   addIncomeRecords,
   addExpenseRecords,
   updateBankTransactionsBatch,
-  getBankTransactions,
+  readSheet,
+  FINANCE_CONFIG,
 } from '@/lib/google-sheets';
-import { incrementRuleUsage } from '@/lib/matching-engine';
 import { getServerSession, hasRole } from '@/lib/auth/finance-permissions';
 import { invalidateYearCache } from '@/lib/redis';
 import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
@@ -44,15 +44,24 @@ export async function POST(request: NextRequest) {
     suppressed: BankTransaction[];
   };
 
-  // 중복 반영 방지: 서버에서 실제 은행원장 상태만 조회 (수입/지출 전체 조회 제거로 성능 개선)
+  // 은행원장 원시 데이터 1회만 읽기 (이후 updateBatch에도 재사용)
+  let bankRawRows: string[][] = [];
   let bankStatusMap = new Map<string, string>();
 
   try {
-    const bankTransactions = await getBankTransactions();
-    bankStatusMap = new Map(bankTransactions.map(tx => [tx.id, tx.matched_status || 'pending']));
+    bankRawRows = await readSheet(FINANCE_CONFIG.sheets.bank);
+    if (bankRawRows.length > 1) {
+      const headers = bankRawRows[0];
+      const idIdx = 0;
+      const statusIdx = headers.indexOf('matched_status');
+      bankRawRows.slice(1).forEach(row => {
+        if (row[idIdx]) {
+          bankStatusMap.set(row[idIdx], (statusIdx >= 0 ? row[statusIdx] : '') || 'pending');
+        }
+      });
+    }
   } catch (error) {
-    console.error('[match/confirm] 은행원장 상태 조회 실패:', error);
-    // 조회 실패 시 계속 진행 (클라이언트 상태 기준으로 처리)
+    console.error('[match/confirm] 은행원장 읽기 실패:', error);
   }
 
   let incomeCount = 0;
@@ -93,17 +102,13 @@ export async function POST(request: NextRequest) {
           matched_type: 'income_detail',
           matched_ids: item.record.id,
         }));
-        const batchResult = await updateBankTransactionsBatch(batchUpdates);
+        const batchResult = await updateBankTransactionsBatch(batchUpdates, bankRawRows);
 
         if (batchResult.failed.length > 0) {
           console.warn('[match/confirm] 수입 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건 (수입부에는 이미 반영됨)');
         }
 
-        // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
-        const ruleIds = newIncomeItems.filter(item => item.match?.id).map(item => item.match!.id);
-        if (ruleIds.length > 0) {
-          await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
-        }
+        // 규칙 사용 횟수 증가는 API 호출 과다를 방지하기 위해 생략
       }
     } catch (error) {
       incomeSuccess = false;
@@ -147,17 +152,13 @@ export async function POST(request: NextRequest) {
           matched_type: 'expense_detail',
           matched_ids: item.record.id,
         }));
-        const batchResult = await updateBankTransactionsBatch(batchUpdates);
+        const batchResult = await updateBankTransactionsBatch(batchUpdates, bankRawRows);
 
         if (batchResult.failed.length > 0) {
           console.warn('[match/confirm] 지출 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건 (지출부에는 이미 반영됨)');
         }
 
-        // 규칙 사용 횟수 증가 (병렬 처리 - 실패해도 무방)
-        const ruleIds = validExpenseItems.filter(item => item.match?.id).map(item => item.match!.id);
-        if (ruleIds.length > 0) {
-          await Promise.allSettled(ruleIds.map(id => incrementRuleUsage(id).catch(() => {})));
-        }
+        // 규칙 사용 횟수 증가는 API 호출 과다를 방지하기 위해 생략
       }
     } catch (error) {
       expenseSuccess = false;
@@ -188,7 +189,7 @@ export async function POST(request: NextRequest) {
           suppressed_reason: tx.suppressed_reason || '자동 말소',
         }));
 
-        const batchResult = await updateBankTransactionsBatch(batchUpdates);
+        const batchResult = await updateBankTransactionsBatch(batchUpdates, bankRawRows);
 
         suppressedCount = batchResult.success.length;
 

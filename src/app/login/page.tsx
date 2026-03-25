@@ -135,7 +135,7 @@ function LoginContent() {
 
                 {/* 예봄성도 로그인 (교적부 SSO) */}
                 <a
-                  href={`https://saint.yebom.org/login?redirect=https://finance.yebom.org${redirectTo !== '/dashboard' ? redirectTo : ''}`}
+                  href={`https://saint.yebom.org/login?redirect=https://finance.yebom.org${redirectTo}`}
                   className="w-full p-3 rounded-xl border-2 border-[#C9A962]/30 bg-[#faf8f3] hover:bg-[#f5f0e5] hover:border-[#C9A962]/50 transition-all text-left group block"
                 >
                   <div className="flex items-center gap-3">

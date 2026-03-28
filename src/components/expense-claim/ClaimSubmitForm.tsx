@@ -24,8 +24,8 @@ interface LineItem {
   accountCode: string;
   amount: string;
   description: string;
-  receiptFile: File | null;
-  receiptPath: string;      // Supabase 업로드 완료 후 경로
+  receiptFiles: File[];
+  receiptPaths: string[];   // Supabase 업로드 완료 후 경로들
   uploading: boolean;       // 업로드 중 여부
 }
 
@@ -66,7 +66,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
 
   // 라인 아이템 배열
   const [items, setItems] = useState<LineItem[]>([
-    { id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFile: null, receiptPath: '', uploading: false },
+    { id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFiles: [], receiptPaths: [], uploading: false },
   ]);
 
   // 계정과목 코드 조회
@@ -120,8 +120,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       accountCode: '',
       amount: '',
       description: '',
-      receiptFile: null,
-      receiptPath: '',
+      receiptFiles: [],
+      receiptPaths: [],
       uploading: false,
     }]);
   };
@@ -142,7 +142,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       if (existing) {
         existing.totalAmount += amt;
         if (item.description) existing.descriptions.push(item.description);
-        if (item.receiptPath) existing.receiptPaths.push(item.receiptPath);
+        existing.receiptPaths.push(...item.receiptPaths);
         existing.itemCount++;
       } else {
         map.set(item.accountCode, {
@@ -150,7 +150,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
           accountCodeName: getCodeName(item.accountCode),
           totalAmount: amt,
           descriptions: item.description ? [item.description] : [],
-          receiptPaths: item.receiptPath ? [item.receiptPath] : [],
+          receiptPaths: [...item.receiptPaths],
           itemCount: 1,
         });
       }
@@ -160,55 +160,69 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
 
   const totalAmount = grouped.reduce((s, g) => s + g.totalAmount, 0);
 
-  // 파일 선택 → 압축 → Supabase 직접 업로드
+  // 파일 선택 → 압축 → Supabase 직접 업로드 (복수 파일 지원)
   const handleFileChange = async (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawFile = e.target.files?.[0] || null;
-    if (!rawFile) return;
-    if (rawFile.size > 20 * 1024 * 1024) {
-      toast.error('파일 크기는 20MB 이하여야 합니다');
-      return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const newFiles: File[] = [];
+    for (let i = 0; i < fileList.length; i++) {
+      if (fileList[i].size > 20 * 1024 * 1024) {
+        toast.error(`${fileList[i].name}: 파일 크기는 20MB 이하여야 합니다`);
+        return;
+      }
+      newFiles.push(fileList[i]);
     }
 
-    // 압축 시작 표시
-    updateItem(itemId, 'uploading', true as unknown as string);
-    updateItem(itemId, 'receiptFile', rawFile);
+    // 기존 파일에 추가
+    setItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, uploading: true, receiptFiles: [...item.receiptFiles, ...newFiles] } : item
+    ));
 
     try {
-      // 이미지 압축 (800px, JPEG 80%)
-      const compressed = await compressImage(rawFile);
+      const uploadedPaths: string[] = [];
+      for (const rawFile of newFiles) {
+        // 이미지 압축 (800px, JPEG 80%)
+        const compressed = await compressImage(rawFile);
 
-      // signed upload URL 요청
-      const urlRes = await fetch('/api/expense-claim/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: compressed.name, contentType: compressed.type }),
-      });
-      const urlData = await urlRes.json();
-      if (!urlData.success) throw new Error(urlData.error || 'URL 발급 실패');
+        // signed upload URL 요청
+        const urlRes = await fetch('/api/expense-claim/upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: compressed.name, contentType: compressed.type }),
+        });
+        const urlData = await urlRes.json();
+        if (!urlData.success) throw new Error(urlData.error || 'URL 발급 실패');
 
-      // Supabase에 직접 업로드
-      const uploadRes = await fetch(urlData.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': compressed.type },
-        body: compressed,
-      });
-      if (!uploadRes.ok) throw new Error('업로드 실패');
+        // Supabase에 직접 업로드
+        const uploadRes = await fetch(urlData.uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': compressed.type },
+          body: compressed,
+        });
+        if (!uploadRes.ok) throw new Error(`${rawFile.name} 업로드 실패`);
 
-      // 경로 저장
-      updateItem(itemId, 'receiptPath', urlData.filePath);
-      const sizeMB = (rawFile.size / 1024 / 1024).toFixed(1);
-      const compMB = (compressed.size / 1024 / 1024).toFixed(1);
-      if (rawFile.size !== compressed.size) {
-        toast.success(`영수증 업로드 완료 (${sizeMB}MB → ${compMB}MB)`);
-      } else {
-        toast.success('영수증 업로드 완료');
+        uploadedPaths.push(urlData.filePath);
       }
+
+      // 경로 추가 저장
+      setItems(prev => prev.map(item =>
+        item.id === itemId ? { ...item, receiptPaths: [...item.receiptPaths, ...uploadedPaths] } : item
+      ));
+      toast.success(`영수증 ${newFiles.length}장 업로드 완료`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '영수증 업로드 실패');
-      updateItem(itemId, 'receiptFile', null as unknown as string);
-      updateItem(itemId, 'receiptPath', '');
+      // 실패 시 추가했던 파일 제거
+      setItems(prev => prev.map(item =>
+        item.id === itemId ? {
+          ...item,
+          receiptFiles: item.receiptFiles.filter(f => !newFiles.includes(f)),
+        } : item
+      ));
     } finally {
-      updateItem(itemId, 'uploading', false as unknown as string);
+      setItems(prev => prev.map(item =>
+        item.id === itemId ? { ...item, uploading: false } : item
+      ));
     }
   };
 
@@ -288,7 +302,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
 
       // 초기화
       setShared(prev => ({ ...prev, claimDate: todayKST() }));
-      setItems([{ id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFile: null, receiptPath: '', uploading: false }]);
+      setItems([{ id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFiles: [], receiptPaths: [], uploading: false }]);
       onSuccess?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '등록 중 오류가 발생했습니다');
@@ -457,38 +471,43 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                     />
                   </div>
 
-                  {/* 영수증 */}
-                  {item.receiptFile ? (
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      {item.uploading
-                        ? <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                        : item.receiptPath
-                          ? <Check className="h-3 w-3 text-green-500" />
-                          : <Paperclip className="h-3 w-3" />}
-                      <span className="truncate flex-1">
-                        {item.uploading ? '업로드 중...' : item.receiptFile.name}
-                      </span>
-                      {!item.uploading && (
-                        <button type="button" onClick={() => {
-                          updateItem(item.id, 'receiptFile', null as unknown as string);
-                          updateItem(item.id, 'receiptPath', '');
-                        }}>
-                          <X className="h-3 w-3 text-slate-400 hover:text-red-500" />
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer hover:text-blue-500">
-                      <Paperclip className="h-3 w-3" />
-                      <span>영수증 첨부</span>
-                      <input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        className="hidden"
-                        onChange={e => handleFileChange(item.id, e)}
-                      />
-                    </label>
-                  )}
+                  {/* 영수증 (복수) */}
+                  <div className="space-y-1">
+                    {item.receiptFiles.map((file, fileIdx) => (
+                      <div key={fileIdx} className="flex items-center gap-2 text-xs text-slate-500">
+                        {item.uploading && fileIdx >= item.receiptPaths.length
+                          ? <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                          : <Check className="h-3 w-3 text-green-500" />}
+                        <span className="truncate flex-1">{file.name}</span>
+                        {!item.uploading && (
+                          <button type="button" onClick={() => {
+                            setItems(prev => prev.map(it =>
+                              it.id === item.id ? {
+                                ...it,
+                                receiptFiles: it.receiptFiles.filter((_, i) => i !== fileIdx),
+                                receiptPaths: it.receiptPaths.filter((_, i) => i !== fileIdx),
+                              } : it
+                            ));
+                          }}>
+                            <X className="h-3 w-3 text-slate-400 hover:text-red-500" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {!item.uploading && (
+                      <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer hover:text-blue-500">
+                        <Paperclip className="h-3 w-3" />
+                        <span>{item.receiptFiles.length > 0 ? '영수증 추가' : '영수증 첨부'}</span>
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          multiple
+                          className="hidden"
+                          onChange={e => handleFileChange(item.id, e)}
+                        />
+                      </label>
+                    )}
+                  </div>
                 </div>
               );
             })}

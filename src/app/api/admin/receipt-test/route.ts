@@ -4,7 +4,7 @@ import { getFinanceSession } from '@/lib/auth/finance-session';
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://ai-gateway20251125.up.railway.app';
 
 const RECEIPT_ANALYSIS_PROMPT = `이 이미지에 포함된 모든 영수증을 각각 분석하여 JSON 배열로 추출해주세요.
-이미지에 영수증이 1장이면 배열에 1개, 2장이면 2개, N장이면 N개의 객체를 포함하세요.
+이미지에 영수증이 1장이면 배열에 1개, 2장이면 2개, 최대 5장까지 각각 객체를 포함하세요.
 반드시 아래 형식의 JSON 배열만 출력하세요. 다른 텍스트는 포함하지 마세요.
 
 [
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
             },
           ],
         }],
-        max_tokens: 500,
+        max_tokens: 1500,
         temperature: 0,
         caller: 'church-finance:receipt-test',
       }),

@@ -519,6 +519,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                     <TableHead className="max-w-[5em]">코드</TableHead>
                     <TableHead className="max-w-[10em]">내역</TableHead>
                     <TableHead className="text-right">금액</TableHead>
+                    <TableHead className="w-6 text-center" title="영수증 AI 검증">증</TableHead>
                     <TableHead>상태</TableHead>
                     <TableHead>처리일</TableHead>
                     {isAdmin && <TableHead className="w-8 text-center" title="지출부 대조 결과">지출부</TableHead>}
@@ -577,6 +578,15 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                             <TableCell className="text-sm max-w-[5em] truncate" title={claim.accountCode}>{claim.accountCode}</TableCell>
                             <TableCell className="text-sm max-w-[10em] truncate" title={claim.description}>{claim.description}</TableCell>
                             <TableCell className="text-right text-sm whitespace-nowrap">{claim.amount.toLocaleString()}원</TableCell>
+                            <TableCell className="text-center">
+                              {claim.receiptUrl ? (
+                                claim.description?.includes('※AI불일치') ? (
+                                  <span title="영수증 금액 불일치 (사유 포함)"><AlertTriangle className="h-3.5 w-3.5 text-amber-500 inline" /></span>
+                                ) : (
+                                  <span title="영수증 AI 확인됨"><ShieldCheck className="h-3.5 w-3.5 text-green-500 inline" /></span>
+                                )
+                              ) : null}
+                            </TableCell>
                             <TableCell>{statusBadge(claim)}</TableCell>
                             <TableCell className="text-sm text-slate-500 whitespace-nowrap">{claim.processedDate || '-'}</TableCell>
                             {isAdmin && (

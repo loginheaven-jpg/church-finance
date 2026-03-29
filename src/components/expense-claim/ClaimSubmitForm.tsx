@@ -18,6 +18,11 @@ interface ExpenseCode {
   active: boolean;
 }
 
+interface AIReceiptDetail {
+  amount: number;
+  store: string | null;
+}
+
 interface AIVerification {
   status: 'analyzing' | 'match' | 'mismatch' | 'failed';
   aiAmount?: number | null;
@@ -26,6 +31,7 @@ interface AIVerification {
   aiItems?: string[];
   confidence?: string;
   mismatchReason?: string;  // 사용자가 입력한 불일치 사유
+  details?: AIReceiptDetail[];  // 개별 영수증 상세 (복수일 때)
 }
 
 interface LineItem {
@@ -298,6 +304,9 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
             aiDate: receipts[0]?.date || null,
             aiItems: allItems,
             confidence: worstConfidence,
+            details: receipts.length > 1
+              ? receipts.map(r => ({ amount: r.amount || 0, store: r.store }))
+              : undefined,
           },
         };
       }));
@@ -664,11 +673,14 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                       )}
                       {item.aiVerification.status === 'match' && (
                         <div className="flex items-center gap-1.5 text-xs text-green-600">
-                          <Check className="h-3 w-3" />
+                          <Check className="h-3 w-3 flex-shrink-0" />
                           <span>
-                            {item.aiVerification.aiAmount?.toLocaleString()}원
-                            {item.aiVerification.aiStore && ` ${item.aiVerification.aiStore}`}
-                            {' — 확인됨'}
+                            {item.aiVerification.details
+                              ? item.aiVerification.details.map((d, i) =>
+                                  `${d.amount.toLocaleString()}${d.store ? `(${d.store})` : ''}`
+                                ).join(' + ') + ` = 총 ${item.aiVerification.aiAmount?.toLocaleString()}원 — 확인됨`
+                              : `${item.aiVerification.aiAmount?.toLocaleString()}원${item.aiVerification.aiStore ? ` ${item.aiVerification.aiStore}` : ''} — 확인됨`
+                            }
                           </span>
                         </div>
                       )}
@@ -685,8 +697,19 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                             <div>
                               <div className="font-medium">영수증 금액이 다릅니다</div>
                               <div className="mt-1 text-slate-600">
-                                AI 인식: <span className="font-semibold">{item.aiVerification.aiAmount?.toLocaleString()}원</span>
-                                {item.aiVerification.aiStore && ` (${item.aiVerification.aiStore})`}
+                                AI 인식:{' '}
+                                {item.aiVerification.details ? (
+                                  <span className="font-semibold">
+                                    {item.aiVerification.details.map((d, i) =>
+                                      `${d.amount.toLocaleString()}${d.store ? `(${d.store})` : ''}`
+                                    ).join(' + ')} = 총 {item.aiVerification.aiAmount?.toLocaleString()}원
+                                  </span>
+                                ) : (
+                                  <span className="font-semibold">
+                                    {item.aiVerification.aiAmount?.toLocaleString()}원
+                                    {item.aiVerification.aiStore && ` (${item.aiVerification.aiStore})`}
+                                  </span>
+                                )}
                               </div>
                               <div className="text-slate-600">
                                 입력값: <span className="font-semibold">{item.amount}원</span>
@@ -700,8 +723,9 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                           {!item.aiVerification.mismatchReason ? (
                             <div className="space-y-1.5">
                               <Input
+                                autoFocus
                                 placeholder="사유 입력 (예: 개인부담분 제외)"
-                                className="h-7 text-xs"
+                                className="h-7 text-xs bg-white border-amber-300 focus:border-amber-500"
                                 onKeyDown={e => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault();

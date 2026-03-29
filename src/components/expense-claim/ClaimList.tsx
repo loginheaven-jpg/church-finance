@@ -499,7 +499,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-auto max-h-[70vh]">
+            <div className="overflow-auto max-h-[70vh] [&_[data-slot=table-container]]:overflow-visible">
               <Table>
                 <TableHeader>
                   <TableRow className="sticky top-0 bg-white z-10">

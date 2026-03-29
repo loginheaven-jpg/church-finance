@@ -499,10 +499,10 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[70vh]">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="sticky top-0 bg-white z-10">
                     {isAdmin && (
                       <TableHead className="w-8 pl-4">
                         <input

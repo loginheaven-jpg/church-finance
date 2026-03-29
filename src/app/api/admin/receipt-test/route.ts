@@ -3,18 +3,22 @@ import { getFinanceSession } from '@/lib/auth/finance-session';
 
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://ai-gateway20251125.up.railway.app';
 
-const RECEIPT_ANALYSIS_PROMPT = `이 영수증 이미지를 분석하여 아래 정보를 JSON으로 추출해주세요.
-반드시 아래 형식의 JSON만 출력하세요. 다른 텍스트는 포함하지 마세요.
+const RECEIPT_ANALYSIS_PROMPT = `이 이미지에 포함된 모든 영수증을 각각 분석하여 JSON 배열로 추출해주세요.
+이미지에 영수증이 1장이면 배열에 1개, 2장이면 2개, N장이면 N개의 객체를 포함하세요.
+반드시 아래 형식의 JSON 배열만 출력하세요. 다른 텍스트는 포함하지 마세요.
 
-{
-  "amount": 숫자(총액, 원 단위),
-  "store": "가맹점/상호명",
-  "date": "YYYY-MM-DD 또는 null",
-  "items": ["품목1", "품목2"],
-  "confidence": "high/medium/low"
-}
+[
+  {
+    "amount": 숫자(총액, 원 단위),
+    "store": "가맹점/상호명",
+    "date": "YYYY-MM-DD 또는 null",
+    "items": ["품목1", "품목2"],
+    "confidence": "high/medium/low"
+  }
+]
 
 규칙:
+- 이미지에 여러 장의 영수증이 함께 촬영되어 있으면 각각 별도 객체로 분리
 - amount: 총액/합계/결제금액 우선. 없으면 개별 항목 합산. 숫자만 (콤마/원 제거)
 - store: 상호명, 사업자명 등. 없으면 null
 - date: 거래일/발행일. 없으면 null
@@ -76,15 +80,23 @@ export async function POST(request: NextRequest) {
 
     const aiResult = await res.json();
 
-    // AI 응답에서 JSON 추출
-    let parsed = null;
+    // AI 응답에서 JSON 배열 추출 (복수 영수증 지원)
+    let parsed: Array<{amount: number | null; store: string | null; date: string | null; items: string[]; confidence: string}> | null = null;
     let parseError = null;
     try {
-      const jsonMatch = aiResult.content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
+      // 배열 형태 먼저 시도
+      const arrayMatch = aiResult.content.match(/\[[\s\S]*\]/);
+      if (arrayMatch) {
+        const arr = JSON.parse(arrayMatch[0]);
+        parsed = Array.isArray(arr) ? arr : [arr];
       } else {
-        parseError = 'JSON을 찾을 수 없습니다';
+        // 단일 객체 fallback (하위 호환)
+        const objMatch = aiResult.content.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+          parsed = [JSON.parse(objMatch[0])];
+        } else {
+          parseError = 'JSON을 찾을 수 없습니다';
+        }
       }
     } catch (e) {
       parseError = `JSON 파싱 실패: ${e instanceof Error ? e.message : String(e)}`;

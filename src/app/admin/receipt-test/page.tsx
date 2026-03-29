@@ -9,23 +9,25 @@ import { Loader2, Upload, Trash2, Check, AlertTriangle, Clock } from 'lucide-rea
 import { toast } from 'sonner';
 import { compressImage } from '@/lib/image-compress';
 
+interface ParsedReceipt {
+  amount: number | null;
+  store: string | null;
+  date: string | null;
+  items: string[];
+  confidence: string;
+}
+
 interface AnalysisResult {
   id: string;
   fileName: string;
   imagePreview: string;
-  // 사용자 입력 (비교용)
-  userAmount: string;
-  userStore: string;
+  // 사용자 입력 (비교용, 영수증별)
+  userAmounts: string[];
+  userStores: string[];
   // AI 결과
   loading: boolean;
   raw?: string;
-  parsed?: {
-    amount: number | null;
-    store: string | null;
-    date: string | null;
-    items: string[];
-    confidence: string;
-  };
+  parsed?: ParsedReceipt[];
   parseError?: string;
   error?: string;
   elapsed?: number;
@@ -52,8 +54,8 @@ export default function ReceiptTestPage() {
         id,
         fileName: file.name,
         imagePreview: preview,
-        userAmount: '',
-        userStore: '',
+        userAmounts: [],
+        userStores: [],
         loading: true,
       });
     }
@@ -93,6 +95,7 @@ export default function ReceiptTestPage() {
 
         const data = await res.json();
 
+        const receiptCount = Array.isArray(data.parsed) ? data.parsed.length : 0;
         setResults(prev => prev.map(r =>
           r.id === id ? {
             ...r,
@@ -105,6 +108,8 @@ export default function ReceiptTestPage() {
             model: data.model,
             provider: data.provider,
             usage: data.usage,
+            userAmounts: new Array(receiptCount).fill(''),
+            userStores: new Array(receiptCount).fill(''),
           } : r
         ));
       } catch (err) {
@@ -126,13 +131,16 @@ export default function ReceiptTestPage() {
     setResults(prev => prev.filter(r => r.id !== id));
   };
 
-  const updateUserInput = (id: string, field: 'userAmount' | 'userStore', value: string) => {
-    setResults(prev => prev.map(r =>
-      r.id === id ? { ...r, [field]: value } : r
-    ));
+  const updateUserInput = (id: string, index: number, field: 'userAmounts' | 'userStores', value: string) => {
+    setResults(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const arr = [...r[field]];
+      arr[index] = value;
+      return { ...r, [field]: arr };
+    }));
   };
 
-  const amountMatch = (parsed: AnalysisResult['parsed'], userAmount: string) => {
+  const amountMatch = (parsed: ParsedReceipt | undefined, userAmount: string) => {
     if (!parsed?.amount || !userAmount) return null;
     const user = parseInt(userAmount.replace(/[^0-9]/g, ''));
     if (!user) return null;
@@ -224,83 +232,96 @@ export default function ReceiptTestPage() {
                       </div>
                     )}
 
-                    {result.parsed && (
-                      <div className="space-y-2">
-                        {/* AI 추출 결과 */}
-                        <div className="p-3 bg-slate-50 rounded-lg space-y-1.5">
-                          <div className="text-xs font-semibold text-slate-500 mb-2">AI 추출 결과</div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-slate-500 w-16">금액:</span>
-                            <span className="font-bold text-lg">
-                              {result.parsed.amount?.toLocaleString() ?? '인식불가'}원
-                            </span>
-                            {result.parsed.confidence && (
-                              <Badge variant="outline" className={
-                                result.parsed.confidence === 'high' ? 'text-green-600 border-green-300' :
-                                result.parsed.confidence === 'medium' ? 'text-yellow-600 border-yellow-300' :
-                                'text-red-600 border-red-300'
-                              }>
-                                {result.parsed.confidence}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-slate-500 w-16">가맹점:</span>
-                            <span>{result.parsed.store ?? '인식불가'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-slate-500 w-16">날짜:</span>
-                            <span>{result.parsed.date ?? '인식불가'}</span>
-                          </div>
-                          {result.parsed.items && result.parsed.items.length > 0 && (
-                            <div className="flex items-start gap-2 text-sm">
-                              <span className="text-slate-500 w-16">품목:</span>
-                              <span>{result.parsed.items.join(', ')}</span>
+                    {result.parsed && result.parsed.length > 0 && (
+                      <div className="space-y-3">
+                        {result.parsed.length > 1 && (
+                          <Badge className="bg-blue-100 text-blue-700 border-blue-300">
+                            {result.parsed.length}장의 영수증 감지
+                          </Badge>
+                        )}
+                        {result.parsed.map((receipt, idx) => (
+                          <div key={idx} className="space-y-2">
+                            {/* AI 추출 결과 */}
+                            <div className="p-3 bg-slate-50 rounded-lg space-y-1.5">
+                              <div className="text-xs font-semibold text-slate-500 mb-2">
+                                {result.parsed!.length > 1 ? `영수증 ${idx + 1}` : 'AI 추출 결과'}
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-slate-500 w-16">금액:</span>
+                                <span className="font-bold text-lg">
+                                  {receipt.amount?.toLocaleString() ?? '인식불가'}원
+                                </span>
+                                {receipt.confidence && (
+                                  <Badge variant="outline" className={
+                                    receipt.confidence === 'high' ? 'text-green-600 border-green-300' :
+                                    receipt.confidence === 'medium' ? 'text-yellow-600 border-yellow-300' :
+                                    'text-red-600 border-red-300'
+                                  }>
+                                    {receipt.confidence}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-slate-500 w-16">가맹점:</span>
+                                <span>{receipt.store ?? '인식불가'}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-slate-500 w-16">날짜:</span>
+                                <span>{receipt.date ?? '인식불가'}</span>
+                              </div>
+                              {receipt.items && receipt.items.length > 0 && (
+                                <div className="flex items-start gap-2 text-sm">
+                                  <span className="text-slate-500 w-16">품목:</span>
+                                  <span>{receipt.items.join(', ')}</span>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
 
-                        {/* 대조 입력 */}
-                        <div className="p-3 bg-blue-50 rounded-lg space-y-2">
-                          <div className="text-xs font-semibold text-blue-600">대조 테스트 (수동 입력)</div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-xs text-slate-500">청구 금액</label>
-                              <Input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder="금액 입력"
-                                className="h-8 text-sm"
-                                value={result.userAmount}
-                                onChange={e => {
-                                  const v = e.target.value.replace(/[^0-9]/g, '');
-                                  updateUserInput(result.id, 'userAmount', v ? Number(v).toLocaleString() : '');
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs text-slate-500">가맹점</label>
-                              <Input
-                                placeholder="가맹점 입력"
-                                className="h-8 text-sm"
-                                value={result.userStore}
-                                onChange={e => updateUserInput(result.id, 'userStore', e.target.value)}
-                              />
+                            {/* 대조 입력 */}
+                            <div className="p-3 bg-blue-50 rounded-lg space-y-2">
+                              <div className="text-xs font-semibold text-blue-600">
+                                {result.parsed!.length > 1 ? `영수증 ${idx + 1} 대조` : '대조 테스트 (수동 입력)'}
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-xs text-slate-500">청구 금액</label>
+                                  <Input
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="금액 입력"
+                                    className="h-8 text-sm"
+                                    value={result.userAmounts[idx] || ''}
+                                    onChange={e => {
+                                      const v = e.target.value.replace(/[^0-9]/g, '');
+                                      updateUserInput(result.id, idx, 'userAmounts', v ? Number(v).toLocaleString() : '');
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-slate-500">가맹점</label>
+                                  <Input
+                                    placeholder="가맹점 입력"
+                                    className="h-8 text-sm"
+                                    value={result.userStores[idx] || ''}
+                                    onChange={e => updateUserInput(result.id, idx, 'userStores', e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                              {result.userAmounts[idx] && (
+                                <div className="flex items-center gap-2 text-sm">
+                                  {amountMatch(receipt, result.userAmounts[idx]) === true ? (
+                                    <><Check className="h-4 w-4 text-green-600" /><span className="text-green-700 font-medium">금액 일치</span></>
+                                  ) : amountMatch(receipt, result.userAmounts[idx]) === false ? (
+                                    <><AlertTriangle className="h-4 w-4 text-red-500" /><span className="text-red-600 font-medium">
+                                      금액 불일치: AI {receipt.amount?.toLocaleString()}원 vs 입력 {result.userAmounts[idx]}원
+                                      (차이 {Math.abs((receipt.amount || 0) - parseInt(result.userAmounts[idx].replace(/[^0-9]/g, ''))).toLocaleString()}원)
+                                    </span></>
+                                  ) : null}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          {result.userAmount && (
-                            <div className="flex items-center gap-2 text-sm">
-                              {amountMatch(result.parsed, result.userAmount) === true ? (
-                                <><Check className="h-4 w-4 text-green-600" /><span className="text-green-700 font-medium">금액 일치</span></>
-                              ) : amountMatch(result.parsed, result.userAmount) === false ? (
-                                <><AlertTriangle className="h-4 w-4 text-red-500" /><span className="text-red-600 font-medium">
-                                  금액 불일치: AI {result.parsed.amount?.toLocaleString()}원 vs 입력 {result.userAmount}원
-                                  (차이 {Math.abs((result.parsed.amount || 0) - parseInt(result.userAmount.replace(/[^0-9]/g, ''))).toLocaleString()}원)
-                                </span></>
-                              ) : null}
-                            </div>
-                          )}
-                        </div>
+                        ))}
                       </div>
                     )}
 

@@ -277,22 +277,27 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
         return;
       }
 
-      // 첫 번째 영수증 결과로 비교
-      const receipt = data.parsed[0];
+      // 복수 영수증이면 합산, 단일이면 그대로
+      const receipts = data.parsed as { amount: number | null; store: string | null; date: string | null; items: string[]; confidence: string }[];
+      const aiTotal = receipts.reduce((s, r) => s + (r.amount || 0), 0);
+      const stores = receipts.map(r => r.store).filter(Boolean).join(', ');
+      const allItems = receipts.flatMap(r => r.items || []);
+      const worstConfidence = receipts.some(r => r.confidence === 'low') ? 'low'
+        : receipts.some(r => r.confidence === 'medium') ? 'medium' : 'high';
+
       setItems(prev => prev.map(item => {
         if (item.id !== itemId) return item;
         const userAmt = parseAmount(item.amount);
-        const aiAmt = receipt.amount || 0;
-        const isMatch = userAmt > 0 && aiAmt > 0 && userAmt === aiAmt;
+        const isMatch = userAmt > 0 && aiTotal > 0 && userAmt === aiTotal;
         return {
           ...item,
           aiVerification: {
             status: isMatch ? 'match' : (userAmt > 0 ? 'mismatch' : 'match'),
-            aiAmount: receipt.amount,
-            aiStore: receipt.store,
-            aiDate: receipt.date,
-            aiItems: receipt.items,
-            confidence: receipt.confidence,
+            aiAmount: aiTotal,
+            aiStore: stores || null,
+            aiDate: receipts[0]?.date || null,
+            aiItems: allItems,
+            confidence: worstConfidence,
           },
         };
       }));

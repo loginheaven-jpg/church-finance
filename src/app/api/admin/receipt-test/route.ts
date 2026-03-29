@@ -47,14 +47,23 @@ export async function POST(request: NextRequest) {
         messages: [{
           role: 'user',
           content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: image_media_type || 'image/jpeg',
-                data: image_base64,
-              },
-            },
+            image_media_type === 'application/pdf'
+              ? {
+                  type: 'document',
+                  source: {
+                    type: 'base64',
+                    media_type: 'application/pdf',
+                    data: image_base64,
+                  },
+                }
+              : {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: image_media_type || 'image/jpeg',
+                    data: image_base64,
+                  },
+                },
             {
               type: 'text',
               text: RECEIPT_ANALYSIS_PROMPT,

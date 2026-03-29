@@ -248,12 +248,16 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
     ));
 
     try {
-      const compressed = await compressImage(file);
+      // PDF는 압축 없이 직접, 이미지는 압축 후 base64 변환
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      const targetFile = isPdf ? file : await compressImage(file);
+      const mediaType = isPdf ? 'application/pdf' : (targetFile.type || 'image/jpeg');
+
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve((reader.result as string).split(',')[1]);
         reader.onerror = reject;
-        reader.readAsDataURL(compressed);
+        reader.readAsDataURL(targetFile);
       });
 
       const res = await fetch('/api/admin/receipt-test', {
@@ -261,7 +265,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           image_base64: base64,
-          image_media_type: compressed.type || 'image/jpeg',
+          image_media_type: mediaType,
         }),
       });
 

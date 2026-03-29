@@ -26,6 +26,7 @@ import {
   User,
   CalendarCheck,
   Wheat,
+  ScanSearch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
@@ -102,6 +103,7 @@ const menuSections: MenuSection[] = [
     items: [
       { href: '/admin/annual-closing', label: '연마감', icon: CalendarCheck },
       { href: '/admin/users', label: '사용자 관리', icon: UserCog },
+      { href: '/admin/receipt-test', label: '영수증 AI 테스트', icon: ScanSearch },
     ],
   },
 ];

@@ -500,7 +500,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-auto max-h-[70vh] [&_[data-slot=table-container]]:overflow-visible">
-              <Table>
+              <Table className="min-w-[900px]">
                 <TableHeader>
                   <TableRow className="sticky top-0 bg-white z-10">
                     {isAdmin && (

@@ -228,8 +228,10 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       ));
       toast.success(`영수증 ${newFiles.length}장 업로드 완료`);
 
-      // AI 분석 자동 트리거 (모든 파일 분석 → 합산)
-      analyzeAllReceipts(itemId);
+      // AI 분석 자동 트리거 — 기존 파일 + 새 파일을 직접 전달 (setState 비동기 대응)
+      const currentItem = items.find(i => i.id === itemId);
+      const allFiles = [...(currentItem?.receiptFiles || []), ...newFiles];
+      analyzeAllReceipts(itemId, allFiles);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '영수증 업로드 실패');
       // 실패 시 추가했던 파일 제거
@@ -272,10 +274,10 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
   };
 
   // 전체 첨부 파일 AI 분석 → 합산 비교
-  const analyzeAllReceipts = async (itemId: string) => {
-    // 현재 아이템의 전체 파일 가져오기
-    const currentItem = items.find(i => i.id === itemId);
-    if (!currentItem || currentItem.receiptFiles.length === 0) return;
+  const analyzeAllReceipts = async (itemId: string, files?: File[]) => {
+    // files가 전달되면 사용, 아니면 items에서 가져오기
+    const targetFiles = files || items.find(i => i.id === itemId)?.receiptFiles;
+    if (!targetFiles || targetFiles.length === 0) return;
 
     setItems(prev => prev.map(item =>
       item.id === itemId ? { ...item, aiVerification: { status: 'analyzing' } } : item
@@ -284,7 +286,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
     try {
       // 모든 파일을 각각 분석
       const allDetails: AIReceiptDetail[] = [];
-      for (const file of currentItem.receiptFiles) {
+      for (const file of targetFiles) {
         const details = await analyzeOneFile(file);
         allDetails.push(...details);
       }

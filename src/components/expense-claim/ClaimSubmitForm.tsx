@@ -553,7 +553,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
           )}
 
           <p className="text-xs text-slate-400 -mt-1">
-            계정코드별로 항목을 나눠 입력해주세요. 같은 코드라면 하나의 항목에 영수증을 여러 장 첨부할 수 있습니다. 한 이미지에 영수증 3장 이상을 함께 촬영하면 인식 정확도가 떨어질 수 있습니다.
+            계정코드별로 항목을 나눠 입력해주세요. 같은 코드라면 하나의 항목에 영수증을 여러 장 첨부할 수 있습니다. 다만 영수증 3장 이상을 한번에 촬영하면 인식 정확도가 떨어질 수 있습니다.
           </p>
 
           {/* 라인 아이템 목록 */}

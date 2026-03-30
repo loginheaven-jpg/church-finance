@@ -257,13 +257,13 @@ function LoginContent() {
 
             {/* Footer Links */}
             <div className="mt-6 text-center">
-              <Link
-                href="/register"
+              <a
+                href="https://saint.yebom.org/join?from=finance"
                 className="text-sm text-gray-500 hover:text-[#2C3E50] flex items-center justify-center gap-1"
               >
                 <UserPlus className="w-3 h-3" />
-                가입 신청하기
-              </Link>
+                예봄서비스 가입하기
+              </a>
             </div>
 
             <p className="text-xs text-gray-400 text-center mt-4">

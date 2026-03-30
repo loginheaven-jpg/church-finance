@@ -228,8 +228,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       ));
       toast.success(`영수증 ${newFiles.length}장 업로드 완료`);
 
-      // AI 분석 자동 트리거 (첫 번째 파일만)
-      analyzeReceipt(itemId, newFiles[0]);
+      // AI 분석 자동 트리거 (모든 파일 분석 → 합산)
+      analyzeAllReceipts(itemId);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '영수증 업로드 실패');
       // 실패 시 추가했던 파일 제거
@@ -246,67 +246,74 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
     }
   };
 
-  // 영수증 AI 분석 (업로드 완료 후 자동 호출)
-  const analyzeReceipt = async (itemId: string, file: File) => {
-    // 분석 시작
+  // 단일 파일 AI 분석 (내부용)
+  const analyzeOneFile = async (file: File): Promise<AIReceiptDetail[]> => {
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const targetFile = isPdf ? file : await compressImage(file);
+    const mediaType = isPdf ? 'application/pdf' : (targetFile.type || 'image/jpeg');
+
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(targetFile);
+    });
+
+    const res = await fetch('/api/admin/receipt-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_base64: base64, image_media_type: mediaType }),
+    });
+
+    const data = await res.json();
+    if (!data.success || !data.parsed || data.parsed.length === 0) return [];
+    return (data.parsed as { amount: number | null; store: string | null }[])
+      .map(r => ({ amount: r.amount || 0, store: r.store }));
+  };
+
+  // 전체 첨부 파일 AI 분석 → 합산 비교
+  const analyzeAllReceipts = async (itemId: string) => {
+    // 현재 아이템의 전체 파일 가져오기
+    const currentItem = items.find(i => i.id === itemId);
+    if (!currentItem || currentItem.receiptFiles.length === 0) return;
+
     setItems(prev => prev.map(item =>
       item.id === itemId ? { ...item, aiVerification: { status: 'analyzing' } } : item
     ));
 
     try {
-      // PDF는 압축 없이 직접, 이미지는 압축 후 base64 변환
-      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-      const targetFile = isPdf ? file : await compressImage(file);
-      const mediaType = isPdf ? 'application/pdf' : (targetFile.type || 'image/jpeg');
+      // 모든 파일을 각각 분석
+      const allDetails: AIReceiptDetail[] = [];
+      for (const file of currentItem.receiptFiles) {
+        const details = await analyzeOneFile(file);
+        allDetails.push(...details);
+      }
 
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(targetFile);
-      });
-
-      const res = await fetch('/api/admin/receipt-test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image_base64: base64,
-          image_media_type: mediaType,
-        }),
-      });
-
-      const data = await res.json();
-      if (!data.success || !data.parsed || data.parsed.length === 0) {
+      if (allDetails.length === 0) {
         setItems(prev => prev.map(item =>
           item.id === itemId ? { ...item, aiVerification: { status: 'failed' } } : item
         ));
         return;
       }
 
-      // 복수 영수증이면 합산, 단일이면 그대로
-      const receipts = data.parsed as { amount: number | null; store: string | null; date: string | null; items: string[]; confidence: string }[];
-      const aiTotal = receipts.reduce((s, r) => s + (r.amount || 0), 0);
-      const stores = receipts.map(r => r.store).filter(Boolean).join(', ');
-      const allItems = receipts.flatMap(r => r.items || []);
-      const worstConfidence = receipts.some(r => r.confidence === 'low') ? 'low'
-        : receipts.some(r => r.confidence === 'medium') ? 'medium' : 'high';
+      const aiTotal = allDetails.reduce((s, d) => s + d.amount, 0);
+      const stores = allDetails.map(d => d.store).filter(Boolean).join(', ');
 
       setItems(prev => prev.map(item => {
         if (item.id !== itemId) return item;
         const userAmt = parseAmount(item.amount);
-        const isMatch = userAmt > 0 && aiTotal > 0 && userAmt === aiTotal;
+        const status = userAmt <= 0 ? 'match' as const  // 금액 미입력 → recheckAI에서 재판정
+          : (userAmt === aiTotal ? 'match' as const : 'mismatch' as const);
         return {
           ...item,
           aiVerification: {
-            status: isMatch ? 'match' : (userAmt > 0 ? 'mismatch' : 'match'),
+            status,
             aiAmount: aiTotal,
             aiStore: stores || null,
-            aiDate: receipts[0]?.date || null,
-            aiItems: allItems,
-            confidence: worstConfidence,
-            details: receipts.length > 1
-              ? receipts.map(r => ({ amount: r.amount || 0, store: r.store }))
-              : undefined,
+            aiDate: null,
+            aiItems: [],
+            confidence: 'medium',
+            details: allDetails.length > 1 ? allDetails : undefined,
           },
         };
       }));

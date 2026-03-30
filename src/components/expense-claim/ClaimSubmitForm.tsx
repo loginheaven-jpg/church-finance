@@ -489,20 +489,11 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
           {/* 공통: 입금 계좌 정보 */}
           <div className="space-y-1">
             <Label>입금 계좌 정보 <span className="text-red-500">*</span></Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Input
                 placeholder="은행명"
                 value={shared.bankName}
                 onChange={e => setShared(p => ({ ...p, bankName: e.target.value }))}
-                required
-              />
-              <Input
-                placeholder="계좌번호"
-                value={shared.accountNumber}
-                onChange={e => {
-                  const v = e.target.value.replace(/[^0-9]/g, '');
-                  setShared(p => ({ ...p, accountNumber: v }));
-                }}
                 required
               />
               <Input
@@ -512,6 +503,15 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                 required
               />
             </div>
+            <Input
+              placeholder="계좌번호"
+              value={shared.accountNumber}
+              onChange={e => {
+                const v = e.target.value.replace(/[^0-9]/g, '');
+                setShared(p => ({ ...p, accountNumber: v }));
+              }}
+              required
+            />
           </div>
 
           {/* 계정과목 가이드 */}
@@ -522,7 +522,9 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
             </button>
           </div>
           {showGuide && (
-            <div className="inline-block text-xs border border-blue-200 rounded-md overflow-hidden max-w-[280px]">
+            <>
+            <div className="fixed inset-0 z-10" onClick={() => setShowGuide(false)} />
+            <div className="relative z-20 inline-block text-xs border border-blue-200 rounded-md overflow-hidden max-w-[280px]">
               <div className="bg-blue-100 px-3 py-1.5 font-semibold text-blue-700">어떤 코드를 선택해야 하나요?</div>
               {[
                 ['교역자 식대', '14'],
@@ -547,7 +549,12 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
               ))}
               <div className="px-3 py-1.5 text-slate-400 bg-slate-50 border-t">카테고리 코드 앞 2자리로 선택</div>
             </div>
+            </>
           )}
+
+          <p className="text-xs text-slate-400 -mt-1">
+            계정코드별로 항목을 나눠 입력해주세요. 같은 코드라면 하나의 항목에 영수증을 여러 장 첨부할 수 있습니다. 한 이미지에 영수증 3장 이상을 함께 촬영하면 인식 정확도가 떨어질 수 있습니다.
+          </p>
 
           {/* 라인 아이템 목록 */}
           <div className="space-y-3">

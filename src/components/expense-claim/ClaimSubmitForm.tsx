@@ -650,13 +650,17 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                         <span className="truncate flex-1">{file.name}</span>
                         {!item.uploading && (
                           <button type="button" onClick={() => {
-                            setItems(prev => prev.map(it =>
-                              it.id === item.id ? {
+                            setItems(prev => prev.map(it => {
+                              if (it.id !== item.id) return it;
+                              const newFiles = it.receiptFiles.filter((_, i) => i !== fileIdx);
+                              const newPaths = it.receiptPaths.filter((_, i) => i !== fileIdx);
+                              return {
                                 ...it,
-                                receiptFiles: it.receiptFiles.filter((_, i) => i !== fileIdx),
-                                receiptPaths: it.receiptPaths.filter((_, i) => i !== fileIdx),
-                              } : it
-                            ));
+                                receiptFiles: newFiles,
+                                receiptPaths: newPaths,
+                                aiVerification: newFiles.length === 0 ? undefined : it.aiVerification,
+                              };
+                            }));
                           }}>
                             <X className="h-3 w-3 text-slate-400 hover:text-red-500" />
                           </button>
@@ -664,25 +668,25 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                       </div>
                     ))}
                     {!item.uploading && (
-                      <div className="flex items-center gap-3 text-xs">
-                        <label className="flex items-center gap-1 text-slate-400 cursor-pointer hover:text-blue-500">
-                          <Camera className="h-3.5 w-3.5" />
-                          <span>촬영</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="hidden"
-                            onChange={e => handleFileChange(item.id, e)}
-                          />
-                        </label>
-                        <label className="flex items-center gap-1 text-slate-400 cursor-pointer hover:text-blue-500">
-                          <Paperclip className="h-3 w-3" />
+                      <div className="flex items-center gap-3 text-sm">
+                        <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200 text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-600 transition-colors">
+                          <Paperclip className="h-4 w-4" />
                           <span>{item.receiptFiles.length > 0 ? '추가' : '파일 선택'}</span>
                           <input
                             type="file"
                             accept="image/*,application/pdf"
                             multiple
+                            className="hidden"
+                            onChange={e => handleFileChange(item.id, e)}
+                          />
+                        </label>
+                        <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200 text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-600 transition-colors">
+                          <Camera className="h-4 w-4" />
+                          <span>촬영</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
                             className="hidden"
                             onChange={e => handleFileChange(item.id, e)}
                           />
@@ -752,9 +756,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                           {!item.aiVerification.mismatchReason ? (
                             <div className="space-y-1.5">
                               <Input
-                                autoFocus
                                 placeholder="사유 입력 (예: 개인부담분 제외)"
-                                className="h-7 text-xs bg-white border-amber-300 focus:border-amber-500"
+                                className="h-9 text-sm bg-white border-amber-300 focus:border-amber-500"
                                 onKeyDown={e => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
@@ -770,14 +773,11 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                                   }
                                 }}
                               />
-                              <div className="flex gap-1.5">
+                              <div className="flex flex-wrap gap-1.5">
                                 <Button
                                   type="button" variant="outline" size="sm"
-                                  className="h-6 text-xs px-2"
+                                  className="h-7 text-xs px-2.5"
                                   onClick={() => {
-                                    const input = document.querySelector<HTMLInputElement>(
-                                      `[data-mismatch-input="${item.id}"]`
-                                    );
                                     const sib = (document.activeElement as HTMLElement)
                                       ?.closest('[class*="bg-amber"]')
                                       ?.querySelector('input');
@@ -798,9 +798,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                                 </Button>
                                 <Button
                                   type="button" variant="outline" size="sm"
-                                  className="h-6 text-xs px-2"
+                                  className="h-7 text-xs px-2.5"
                                   onClick={() => {
-                                    // 영수증 제거 + AI 초기화
                                     setItems(prev => prev.map(it =>
                                       it.id === item.id ? {
                                         ...it,
@@ -812,11 +811,11 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                                   }}
                                 >
                                   <RefreshCw className="h-3 w-3 mr-0.5" />
-                                  영수증 교체
+                                  영수증 재입력
                                 </Button>
                                 <Button
                                   type="button" variant="ghost" size="sm"
-                                  className="h-6 text-xs px-2 text-red-500 hover:text-red-700"
+                                  className="h-7 text-xs px-2.5 text-red-500 hover:text-red-700"
                                   onClick={() => {
                                     if (items.length > 1) {
                                       removeItem(item.id);

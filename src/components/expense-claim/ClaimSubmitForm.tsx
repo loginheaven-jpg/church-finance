@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Paperclip, X, HelpCircle, Plus, Check, AlertTriangle, RefreshCw, Trash2, ScanSearch } from 'lucide-react';
+import { Loader2, Paperclip, X, HelpCircle, Plus, Check, AlertTriangle, RefreshCw, Trash2, ScanSearch, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { compressImage } from '@/lib/image-compress';
 
@@ -664,17 +664,30 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                       </div>
                     ))}
                     {!item.uploading && (
-                      <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer hover:text-blue-500">
-                        <Paperclip className="h-3 w-3" />
-                        <span>{item.receiptFiles.length > 0 ? '영수증 추가' : '영수증 첨부'}</span>
-                        <input
-                          type="file"
-                          accept="image/*,application/pdf"
-                          multiple
-                          className="hidden"
-                          onChange={e => handleFileChange(item.id, e)}
-                        />
-                      </label>
+                      <div className="flex items-center gap-3 text-xs">
+                        <label className="flex items-center gap-1 text-slate-400 cursor-pointer hover:text-blue-500">
+                          <Camera className="h-3.5 w-3.5" />
+                          <span>촬영</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={e => handleFileChange(item.id, e)}
+                          />
+                        </label>
+                        <label className="flex items-center gap-1 text-slate-400 cursor-pointer hover:text-blue-500">
+                          <Paperclip className="h-3 w-3" />
+                          <span>{item.receiptFiles.length > 0 ? '추가' : '파일 선택'}</span>
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            multiple
+                            className="hidden"
+                            onChange={e => handleFileChange(item.id, e)}
+                          />
+                        </label>
+                      </div>
                     )}
                   </div>
 

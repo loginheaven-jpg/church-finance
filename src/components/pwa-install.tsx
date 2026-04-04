@@ -124,7 +124,8 @@ export default function PwaInstall() {
 
   return (
     <>
-      {/* 고정 설치 버튼 (화면 하단 우측) */}
+      {/* 고정 설치 버튼 — 팝업/가이드가 열려있지 않을 때만 표시 */}
+      {!showPromotion && !showIOSGuide && !showAndroidGuide && (
       <button
         onClick={handleInstall}
         className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full bg-[#1e40af] px-4 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:bg-[#1e3a8a] active:scale-95"
@@ -132,6 +133,7 @@ export default function PwaInstall() {
         <Download className="h-4 w-4" />
         앱 설치
       </button>
+      )}
 
       {/* 설치 권유 팝업 */}
       {showPromotion && (

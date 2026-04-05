@@ -378,7 +378,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
 
     // AI 불일치 건에 사유가 없는지 확인
     const mismatchNoReason = validItems.find(
-      item => item.aiVerification?.status === 'mismatch' && !item.aiVerification.mismatchReason
+      item => item.aiVerification?.status === 'mismatch' && !item.aiVerification.mismatchReason?.trim()
     );
     if (mismatchNoReason) {
       toast.error('영수증 금액 불일치 항목에 사유를 입력해주세요.');
@@ -756,46 +756,19 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                           {!item.aiVerification.mismatchReason ? (
                             <div className="space-y-1.5">
                               <Input
-                                placeholder="사유 입력 (예: 개인부담분 제외)"
+                                placeholder="사유 입력 후 하단 청구 등록을 눌러주세요"
                                 className="h-9 text-sm bg-white border-amber-300 focus:border-amber-500"
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    const val = (e.target as HTMLInputElement).value.trim();
-                                    if (val) {
-                                      setItems(prev => prev.map(it =>
-                                        it.id === item.id ? {
-                                          ...it,
-                                          aiVerification: { ...it.aiVerification!, mismatchReason: val },
-                                        } : it
-                                      ));
-                                    }
-                                  }
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setItems(prev => prev.map(it =>
+                                    it.id === item.id ? {
+                                      ...it,
+                                      aiVerification: { ...it.aiVerification!, mismatchReason: val || undefined },
+                                    } : it
+                                  ));
                                 }}
                               />
                               <div className="flex flex-wrap gap-1.5">
-                                <Button
-                                  type="button" variant="outline" size="sm"
-                                  className="h-7 text-xs px-2.5"
-                                  onClick={() => {
-                                    const sib = (document.activeElement as HTMLElement)
-                                      ?.closest('[class*="bg-amber"]')
-                                      ?.querySelector('input');
-                                    const val = sib?.value?.trim();
-                                    if (val) {
-                                      setItems(prev => prev.map(it =>
-                                        it.id === item.id ? {
-                                          ...it,
-                                          aiVerification: { ...it.aiVerification!, mismatchReason: val },
-                                        } : it
-                                      ));
-                                    } else {
-                                      toast.error('사유를 입력해주세요');
-                                    }
-                                  }}
-                                >
-                                  사유와 함께 제출
-                                </Button>
                                 <Button
                                   type="button" variant="outline" size="sm"
                                   className="h-7 text-xs px-2.5"

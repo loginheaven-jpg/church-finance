@@ -42,8 +42,8 @@ export default function RegisterPage() {
       setError('올바른 이메일 형식을 입력해주세요.');
       return;
     }
-    if (formData.password.length < 6) {
-      setError('비밀번호는 6자 이상이어야 합니다.');
+    if (formData.password.length < 8 || !/\d/.test(formData.password)) {
+      setError('비밀번호는 8자 이상, 숫자를 포함해야 합니다.');
       return;
     }
     if (formData.password !== formData.passwordConfirm) {
@@ -192,7 +192,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <Label className="text-[12px] text-gray-500">비밀번호 * (6자 이상)</Label>
+                <Label className="text-[12px] text-gray-500">비밀번호 * (8자 이상, 숫자 포함)</Label>
                 <Input
                   type="password"
                   value={formData.password}

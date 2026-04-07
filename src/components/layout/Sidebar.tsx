@@ -184,7 +184,13 @@ export function Sidebar({ isOpen = true, onClose, userRole = 'member', userName 
             {/* Menu Items */}
             <div className="space-y-1">
               {section.items.map((item) => {
-                const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+                // 더 구체적인(긴) 경로가 동일 prefix로 존재하면 그쪽이 우선 → 부모는 active 아님
+                const hasMoreSpecific = section.items.some(
+                  other => other.href !== item.href
+                    && other.href.startsWith(item.href + '/')
+                    && pathname?.startsWith(other.href)
+                );
+                const isActive = !hasMoreSpecific && (pathname === item.href || pathname?.startsWith(item.href + '/'));
                 const Icon = item.icon;
 
                 return (

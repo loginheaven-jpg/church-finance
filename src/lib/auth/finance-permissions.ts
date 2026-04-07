@@ -63,6 +63,8 @@ export const MENU_MIN_ROLE: Record<string, FinanceRole> = {
   '/card-details': 'member',             // 카드 상세 입력 (카드내역 입력 흐름)
   '/card': 'admin',
   '/donors': 'admin',
+  '/donors/receipts': 'member',           // member도 본인 가족 영수증 발급 가능 (내부에서 필터)
+  '/donors/receipts/print': 'member',     // 출력 페이지도 member 허용
   '/settings': 'admin',
 
   // ADMIN - super_admin만

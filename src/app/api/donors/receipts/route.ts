@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords, getDonorInfo, getIncomeCodes, getAllIssueNumbers, getManualReceiptHistory } from '@/lib/google-sheets';
 import { getMembersByNames } from '@/lib/supabase';
+import { getFinanceSession } from '@/lib/auth/finance-session';
+import { hasRole } from '@/lib/auth/finance-permissions';
+import { getFamilyGroup } from '@/lib/family-group';
 import type { DonationReceipt } from '@/types';
 
 // GET: 기부금영수증 데이터 조회
 export async function GET(request: NextRequest) {
   try {
+    const session = await getFinanceSession();
+    if (!session) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+
+    const isAdmin = hasRole(session.finance_role, 'admin');
+
     const searchParams = request.nextUrl.searchParams;
     const yearParam = searchParams.get('year');
     const representative = searchParams.get('representative');
@@ -18,6 +28,22 @@ export async function GET(request: NextRequest) {
     }
 
     const year = parseInt(yearParam);
+
+    // member: 본인 가족 그룹의 대표자가 아니면 거부
+    let memberFamilyMemberNames: string[] | null = null;
+    let memberFamilyRep: string | null = null;
+    if (!isAdmin) {
+      const family = await getFamilyGroup(session.name);
+      if (family.representative !== session.name) {
+        return NextResponse.json({
+          success: false,
+          error: '가족 헌금 대표자만 영수증을 발급할 수 있습니다',
+          familyRepresentative: family.representative,
+        }, { status: 403 });
+      }
+      memberFamilyMemberNames = family.members.map(m => m.name);
+      memberFamilyRep = family.representative;
+    }
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
 
@@ -40,6 +66,11 @@ export async function GET(request: NextRequest) {
       // 필터링 (부분 일치 검색)
       if (representative && !rep.includes(representative)) {
         continue;
+      }
+
+      // member 권한: 본인 가족 대표자만 통과
+      if (!isAdmin && memberFamilyRep) {
+        if (rep !== memberFamilyRep) continue;
       }
 
       if (!receiptMap.has(rep)) {

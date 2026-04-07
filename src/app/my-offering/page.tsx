@@ -342,8 +342,8 @@ export default function MyOfferingPage() {
         </div>
       </div>
 
-      {/* 연말정산 정보입력 버튼 */}
-      <div className="flex justify-center">
+      {/* 연말정산 정보입력 + 영수증 발급 버튼 */}
+      <div className="flex flex-wrap justify-center gap-2">
         <Button
           onClick={() => setShowTaxInfoModal(true)}
           variant="outline"
@@ -351,6 +351,14 @@ export default function MyOfferingPage() {
         >
           <FileText className="h-4 w-4 mr-2" />
           연말정산용 기부금 자동발행을 위한 정보입력
+        </Button>
+        <Button
+          onClick={() => window.location.href = '/donors/receipts'}
+          variant="outline"
+          className="border-amber-200 hover:bg-amber-50 hover:border-amber-300 text-sm"
+        >
+          <FileText className="h-4 w-4 mr-2" />
+          기부금영수증 발급 (전년도)
         </Button>
       </div>
 

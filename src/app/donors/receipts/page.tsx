@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useFinanceSession } from '@/lib/auth/use-finance-session';
+import { hasRole } from '@/lib/auth/finance-permissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,6 +68,10 @@ interface BusinessForm {
 }
 
 export default function DonationReceiptsPage() {
+  const session = useFinanceSession();
+  const isAdmin = useMemo(() => session ? hasRole(session.finance_role, 'admin') : false, [session]);
+  const isMemberMode = session && !isAdmin;
+
   const [loading, setLoading] = useState(false);
   const [receipts, setReceipts] = useState<DonationReceipt[]>([]);
   // 기부금 영수증은 항상 전년도 실적으로 발행하므로 작년을 기본값으로 설정
@@ -1009,16 +1015,22 @@ export default function DonationReceiptsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-900">기부금영수증 발급</h1>
+        <h1 className="text-3xl font-bold text-slate-900">
+          {isMemberMode ? '내 기부금영수증 발급' : '기부금영수증 발급'}
+        </h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={openBusinessDialog}>
-            <Building2 className="mr-2 h-4 w-4" />
-            사업자발행
-          </Button>
-          <Button variant="outline" onClick={openManualDialog}>
-            <Plus className="mr-2 h-4 w-4" />
-            수작업 발행
-          </Button>
+          {isAdmin && (
+            <Button variant="outline" onClick={openBusinessDialog}>
+              <Building2 className="mr-2 h-4 w-4" />
+              사업자발행
+            </Button>
+          )}
+          {isAdmin && (
+            <Button variant="outline" onClick={openManualDialog}>
+              <Plus className="mr-2 h-4 w-4" />
+              수작업 발행
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => {
@@ -1098,18 +1110,20 @@ export default function DonationReceiptsPage() {
             </div>
             {activeTab === 'list' && (
               <>
-                <form onSubmit={handleSearch} className="flex gap-2">
-                  <Input
-                    placeholder="대표자명으로 검색"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="max-w-xs"
-                  />
-                  <Button type="submit" variant="outline">
-                    <Search className="mr-2 h-4 w-4" />
-                    검색
-                  </Button>
-                </form>
+                {!isMemberMode && (
+                  <form onSubmit={handleSearch} className="flex gap-2">
+                    <Input
+                      placeholder="대표자명으로 검색"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="max-w-xs"
+                    />
+                    <Button type="submit" variant="outline">
+                      <Search className="mr-2 h-4 w-4" />
+                      검색
+                    </Button>
+                  </form>
+                )}
                 <Button
                   variant="outline"
                   onClick={handleMarkIssued}

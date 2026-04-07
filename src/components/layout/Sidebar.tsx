@@ -92,7 +92,7 @@ const menuSections: MenuSection[] = [
       { href: '/match', label: '거래 매칭', icon: GitCompare, minRole: 'super_admin' as const },
       { href: '/card-expense-integration', label: '카드내역 입력', icon: CreditCard, minRole: 'member' },
       { href: '/donors', label: '헌금자 관리', icon: Users },
-      { href: '/donors/receipts', label: '기부금 영수증', icon: FileText },
+      { href: '/donors/receipts', label: '기부금 영수증', icon: FileText, minRole: 'admin' as const },
       { href: '/settings/carryover', label: '이월 잔액', icon: RefreshCw },
       { href: '/settings/pledge', label: '작정 헌금', icon: Target },
     ],

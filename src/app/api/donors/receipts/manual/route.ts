@@ -6,11 +6,21 @@ import {
   getManualReceiptHistory,
   deleteManualReceiptHistory,
 } from '@/lib/google-sheets';
+import { getFinanceSession } from '@/lib/auth/finance-session';
+import { hasRole } from '@/lib/auth/finance-permissions';
+import { getFamilyGroup } from '@/lib/family-group';
+import { updateMemberTaxInfo } from '@/lib/supabase';
 import type { ManualReceiptHistory } from '@/types';
 
 // POST: 수작업 발급 이력 저장
 export async function POST(request: NextRequest) {
   try {
+    const session = await getFinanceSession();
+    if (!session) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+    const isAdmin = hasRole(session.finance_role, 'admin');
+
     const body = await request.json();
     const { year, representative, address, resident_id, amount, issue_number, original_issue_number, note } = body;
 
@@ -20,6 +30,36 @@ export async function POST(request: NextRequest) {
         { success: false, error: '필수 항목이 누락되었습니다 (연도, 대표자명, 금액, 발급번호)' },
         { status: 400 }
       );
+    }
+
+    // member 권한: 본인 가족 그룹의 구성원만 발급 가능 (자신 또는 분할 수령자)
+    if (!isAdmin) {
+      const family = await getFamilyGroup(session.name);
+      if (family.representative !== session.name) {
+        return NextResponse.json(
+          { success: false, error: '가족 헌금 대표자만 발급할 수 있습니다' },
+          { status: 403 }
+        );
+      }
+      const familyMemberNames = family.members.map(m => m.name);
+      if (!familyMemberNames.includes(representative)) {
+        return NextResponse.json(
+          { success: false, error: '가족 구성원에게만 발급할 수 있습니다' },
+          { status: 403 }
+        );
+      }
+      // 전년도만 허용
+      const lastYear = new Date().getFullYear() - 1;
+      if (parseInt(year) !== lastYear) {
+        return NextResponse.json(
+          { success: false, error: `전년도(${lastYear}년)만 발급할 수 있습니다` },
+          { status: 400 }
+        );
+      }
+      // 이름 수정은 불가하지만 주민번호/주소는 Supabase에 자동 저장
+      if (resident_id && address) {
+        await updateMemberTaxInfo(representative, resident_id, address);
+      }
     }
 
     // 발급번호 중복 체크
@@ -62,6 +102,11 @@ export async function POST(request: NextRequest) {
 // GET: 발급번호 정보 조회 (다음 발급번호 제안)
 export async function GET(request: NextRequest) {
   try {
+    const session = await getFinanceSession();
+    if (!session) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const yearParam = searchParams.get('year');
     const baseNumber = searchParams.get('base_number'); // 분할 발급용
@@ -99,7 +144,14 @@ export async function GET(request: NextRequest) {
     // mode=history인 경우 발행이력 반환
     const mode = searchParams.get('mode');
     if (mode === 'history') {
-      const history = await getManualReceiptHistory(year);
+      let history = await getManualReceiptHistory(year);
+      // member: 본인 가족만 필터
+      const isAdmin = hasRole(session.finance_role, 'admin');
+      if (!isAdmin) {
+        const family = await getFamilyGroup(session.name);
+        const familyNames = new Set(family.members.map(m => m.name));
+        history = history.filter(h => familyNames.has(h.representative));
+      }
       return NextResponse.json({
         success: true,
         data: history,
@@ -123,9 +175,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// DELETE: 발행이력 삭제
+// DELETE: 발행이력 삭제 (admin만)
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getFinanceSession();
+    if (!session || !hasRole(session.finance_role, 'admin')) {
+      return NextResponse.json({ success: false, error: '관리자 권한이 필요합니다' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const yearParam = searchParams.get('year');
     const issueNumber = searchParams.get('issue_number');

@@ -159,7 +159,12 @@ export default function DonationReceiptsPage() {
       if (data.success) {
         setReceipts(data.data);
         setSummary(data.summary);
-        setSelectedReceipts(new Set());
+        // member 모드 + 결과 1건 → 자동 선택 (분할 발행 즉시 사용 가능)
+        if (isMemberMode && data.data.length === 1) {
+          setSelectedReceipts(new Set([data.data[0].representative]));
+        } else {
+          setSelectedReceipts(new Set());
+        }
         if (data.issueNumberInfo) {
           setIssueNumberInfo(data.issueNumberInfo);
         }
@@ -180,6 +185,13 @@ export default function DonationReceiptsPage() {
   useEffect(() => {
     fetchReceipts();
   }, [year]);
+
+  // 세션이 늦게 로드되어 첫 fetchReceipts 시점에 isMemberMode가 false였을 경우 보완
+  useEffect(() => {
+    if (isMemberMode && receipts.length === 1 && selectedReceipts.size === 0) {
+      setSelectedReceipts(new Set([receipts[0].representative]));
+    }
+  }, [isMemberMode, receipts, selectedReceipts.size]);
 
   // 발행이력 조회
   const fetchHistory = async () => {
@@ -1717,7 +1729,7 @@ export default function DonationReceiptsPage() {
 
       {/* 분할 발행 다이얼로그 */}
       <Dialog open={showSplitDialog} onOpenChange={setShowSplitDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>기부금영수증 분할 발행</DialogTitle>
             <DialogDescription>

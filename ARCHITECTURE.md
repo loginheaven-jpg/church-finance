@@ -329,6 +329,33 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 
 ## 최근 변경사항
 
+### 2026-03-29 업데이트 (성도 본인 기부금영수증 자가발급 Phase 1)
+
+1. **자가발급 Phase 1 — 가족 대표자만**
+   - admin의 `/donors/receipts` 페이지를 member도 접근 가능하게 권한 확장 (컴포넌트 100% 재사용)
+   - member 권한 시 본인 가족 대표자만 통과 (비대표자는 403)
+   - 비대표자 발급/잔여 금액 추적은 Phase 2로 분리 (위 "Phase 2" 섹션 참조)
+
+2. **신규 유틸**: `src/lib/family-group.ts`
+   - `getFamilyGroup(userName)` — 헌금자정보 + 수입부 기반 가족 그룹 결정
+   - `/api/my-offering/route.ts`에서 추출하여 receipt API들과 공유
+
+3. **API 권한 확장**:
+   - `GET /api/donors/receipts`: 세션 체크 + member이면 본인 가족 대표자만 필터
+   - `POST /api/donors/receipts/manual`: member 발급 시 본인 가족 구성원만, 전년도만, Supabase 자동 업데이트
+   - `DELETE /api/donors/receipts/manual`: admin 전용 유지
+
+4. **/donors/receipts 페이지 분기**:
+   - `useFinanceSession()` + `hasRole()`로 isAdmin/isMemberMode 판정
+   - member이면 사업자발행/수작업발행/검색창 숨김
+   - 분할 발행은 가족 구성원에게 가능 (admin과 동일 splitForm)
+
+5. **권한 시트 + 사이드바**:
+   - `MENU_MIN_ROLE`: `/donors/receipts(/print)` member 허용
+   - `Sidebar.tsx`: `/donors/receipts` 메뉴에 `minRole='admin'` 명시 (사이드바에는 admin만 노출)
+
+6. **/my-offering 진입 버튼**: "기부금영수증 발급(전년도)" 추가 → `/donors/receipts`로 이동
+
 ### 2026-03-28 업데이트 (복수 영수증 + 데이터 정합성 검증 완료)
 
 1. **지출청구 복수 영수증 첨부**
@@ -396,6 +423,91 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 | 반영 후 크로스체크 고도화 | 현재 toast 알림 → 상세 검증 리포트 UI (건별 대조 결과) | 낮음 |
 | 데이터 정합성 자동 감사 | 주간 마감 시 은행원장/수입부/지출부 자동 대조 + 불일치 알림 | 중간 |
 | 카드내역 반영 크로스체크 | 카드내역 apply 후 지출부 법인카드 합계 = 카드 원본 합계 교차검증 | 중간 |
+| **자가발급 Phase 2: 비대표자 발급 + 잔여 금액 추적** | 아래 상세 설계 참조 | 중간 |
+
+### Phase 2: 기부금영수증 자가발급 — 비대표자 발급 확장
+
+**Phase 1 (현재 구현)**: 가족 헌금 대표자만 본인 가족 합산 영수증 발급 가능. admin의 `/donors/receipts` 페이지를 그대로 재사용.
+
+**Phase 2 (향후)**: 가족 구성원 누구나 발급 가능, 단 가족 총헌금 한도 내. 잔여 금액 추적.
+
+#### 핵심 모델
+
+```
+가족 총헌금 (familyTotal)
+  = 가족 구성원 전원의 모든 헌금 합산 (수입부 기준)
+
+이미 발행된 금액 (issuedTotal)
+  = ManualReceiptHistory에서 representative ∈ 가족 구성원 인 항목들의 amount 합산
+
+발행 가능 잔여 (remaining)
+  = familyTotal - issuedTotal
+```
+
+#### 사용 시나리오
+
+```
+예) 아들 1,000만원, 부모 1,000만원, 가족 총합 2,000만원
+  ① 아들이 본인 명의로 1,000만원 발급 → 잔여 1,000만원
+  ② 부가 본인 명의로 1,000만원 발급 → 잔여 0원
+  또는
+  ② 부가 분할 발행: 부 600만 + 모 400만 → 잔여 0원
+```
+
+#### UI 변경
+
+1. **member 모드 상단에 "가족 발행 현황" 카드** 추가:
+   - 가족 총헌금 / 이미 발행 / 발행 가능 잔여
+   - 잔여 0원이면 발급 버튼 비활성화
+
+2. **본인 명의 빠른 발급 버튼**: 잔여 전액을 본인 명의로 즉시 발급
+
+3. **수작업 발행 다이얼로그를 member에게도 노출** (현재는 admin만)
+   - representative 필드: 가족 구성원 드롭다운으로 선택
+   - amount: 잔여 이하만 입력 가능
+   - 주민번호/주소: Supabase 자동 채움 + 누락 시 입력 가능 (저장 시 자동 업데이트)
+
+4. **분할 발행** (admin의 splitForm 재사용):
+   - 분할 합계 ≤ 잔여 검증
+   - 수령자: 가족 구성원만
+
+5. **발행 이력 카드**: 누가 언제 얼마를 발급했는지 표시 + 재다운로드
+
+#### API 변경
+
+`POST /api/donors/receipts/manual` (member 권한 시):
+1. **대표자 제한 제거** — `representative ∈ 가족 구성원` 으로 변경
+2. **잔여 금액 재계산** — 발행 직전에 다시 조회 (concurrent 충돌 방지)
+3. **발행 금액 ≤ 잔여** 검증 (분할 시 합계 검증)
+4. 초과 시 409 Conflict + 현재 잔여 안내
+5. 주민번호/주소 자동 Supabase 업데이트 유지
+
+`GET /api/donors/receipts` (member 권한 시):
+- 응답에 `familyInfo` 필드 추가:
+  ```typescript
+  familyInfo: {
+    members: string[],
+    familyTotal: number,
+    issuedTotal: number,
+    remaining: number,
+    issuedHistory: Array<{ representative, amount, issue_number, issued_at }>
+  }
+  ```
+
+#### 미결정 사항 (Phase 2 시작 시 결정)
+
+- **본인 명의 빠른 발급 버튼**: 채택 여부
+- **수령자 자유 입력 vs 가족 구성원 드롭다운**: 가족만 한정 권장
+- **잔여 0원 시점에 admin 알림**: 필요 여부
+- **재발급 정책**: 한 번 발급된 영수증 재다운로드는 자유, 새 발급은 잔여 범위 내
+
+#### 변경 파일 (Phase 2)
+
+| 파일 | 변경 |
+|------|------|
+| `src/app/api/donors/receipts/manual/route.ts` | member 권한 검증 변경 + 잔여 검증 |
+| `src/app/api/donors/receipts/route.ts` | familyInfo 응답 추가 |
+| `src/app/donors/receipts/page.tsx` | "가족 발행 현황" 카드, 빠른 발급 버튼, 수작업 발행 다이얼로그 member 노출 |
 
 ### 2026-03-20 업데이트 (지출청구 일원화 + 다이렉트 링크)
 

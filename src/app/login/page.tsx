@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { LogIn, UserPlus, AlertCircle, Heart, ArrowLeft, Building2, Globe, FileText, ExternalLink } from 'lucide-react';
+import { LogIn, UserPlus, AlertCircle, Heart, ArrowLeft, Building2, Globe, FileText, ExternalLink, Receipt } from 'lucide-react';
 import { PledgeEntryModal, TaxInfoEntryModal } from '@/components/pledge';
 
 type PageMode = 'choice' | 'login';
@@ -93,6 +93,26 @@ function LoginContent() {
 
               {/* Choice Buttons */}
               <div className="p-3 space-y-2">
+                {/* 지출청구 버튼 */}
+                <a
+                  href="https://saint.yebom.org/login?redirect=https://finance.yebom.org/expense-claim"
+                  className="w-full p-3 rounded-xl border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 hover:border-purple-300 transition-all text-left group block"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-purple-500 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                      <Receipt className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-base text-purple-800">
+                        지출청구
+                      </h3>
+                      <p className="text-xs text-purple-500">
+                        로그인 후 지출청구로 이동합니다
+                      </p>
+                    </div>
+                  </div>
+                </a>
+
                 {/* 작정헌금 입력 버튼 */}
                 <button
                   onClick={() => setShowPledgeModal(true)}

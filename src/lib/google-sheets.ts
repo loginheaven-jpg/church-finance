@@ -25,6 +25,44 @@ import type {
 } from '@/types';
 
 // ============================================
+// Google Sheets ORM Mapper
+// ============================================
+
+export class SheetModelMapper<T extends Record<string, any>> {
+  public headers: string[];
+  public headerMap: Record<string, number>;
+
+  constructor(headers: string[]) {
+    this.headers = headers;
+    this.headerMap = Object.fromEntries(headers.map((h, i) => [String(h).trim(), i]));
+  }
+
+  updateRow(originalRow: any[], updates: Partial<T>): any[] {
+    const updated = [...originalRow];
+    while (updated.length < this.headers.length) {
+      updated.push('');
+    }
+    
+    for (const key of Object.keys(updates) as Array<keyof T>) {
+      const val = updates[key];
+      const colIndex = this.headerMap[key as string];
+      
+      if (colIndex !== undefined) {
+        // null인 경우 시트에서는 빈 문자열로 처리하여 셀을 비움
+        updated[colIndex] = val === null ? '' : val;
+      }
+    }
+    return updated;
+  }
+
+  getRange(rowIndex: number): string {
+    const lastColIndex = Math.min(this.headers.length - 1, 25);
+    const lastColLetter = String.fromCharCode(65 + lastColIndex);
+    return `A${rowIndex}:${lastColLetter}${rowIndex}`;
+  }
+}
+
+// ============================================
 // Google Sheets 클라이언트
 // ============================================
 
@@ -660,24 +698,18 @@ export async function updateIncomeRecord(id: string, updates: Partial<IncomeReco
     throw new Error(`수입 레코드를 찾을 수 없습니다: ${id}`);
   }
 
-  // 기존 행 데이터 (컬럼 순서: id, date, source, offering_code, donor_name, representative, amount, note, input_method, created_at, created_by, transaction_date)
-  const row = rows[rowIndex];
-  const updatedRow = [
-    row[0],  // id (변경 불가)
-    updates.date ?? row[1],
-    updates.source ?? row[2],
-    updates.offering_code ?? row[3],
-    updates.donor_name ?? row[4],
-    updates.representative ?? row[5],
-    updates.amount ?? row[6],
-    updates.note ?? row[7],
-    updates.input_method ?? row[8],
-    row[9],  // created_at (변경 불가)
-    row[10] || '', // created_by
-    updates.transaction_date ?? row[11] ?? '',
-  ];
+  const mapper = new SheetModelMapper<IncomeRecord>(rows[0]);
+  const originalRow = rows[rowIndex];
 
-  await updateSheet(sheetName, `A${rowIndex + 1}:L${rowIndex + 1}`, [updatedRow]);
+  // id와 created_at은 변경 불가 처리 추가 보호망
+  const safeUpdates = { ...updates };
+  delete safeUpdates.id;
+  delete safeUpdates.created_at;
+
+  const updatedRow = mapper.updateRow(originalRow, safeUpdates);
+  const range = mapper.getRange(rowIndex + 1);
+
+  await updateSheet(sheetName, range, [updatedRow]);
 }
 
 // 수입 레코드 분할 (원본 삭제 후 새 레코드들 추가)
@@ -881,57 +913,20 @@ export async function updateBankTransaction(
     throw new Error(`Bank transaction ${id} not found`);
   }
 
-  const headers = rows[0];
-  const currentRow = rows[rowIndex];
+  const mapper = new SheetModelMapper<BankTransaction>(rows[0]);
+  const originalRow = rows[rowIndex];
 
-  // 필수 컬럼 인덱스 확인
-  const matchedStatusIdx = headers.indexOf('matched_status');
-  const matchedTypeIdx = headers.indexOf('matched_type');
-  const matchedIdsIdx = headers.indexOf('matched_ids');
-  const suppressedIdx = headers.indexOf('suppressed');
-  const suppressedReasonIdx = headers.indexOf('suppressed_reason');
+  // id 유지 보호망
+  const safeUpdates = { ...updates };
+  delete safeUpdates.id;
 
-  if (matchedStatusIdx === -1) {
-    console.error('[updateBankTransaction] matched_status 헤더 없음! 헤더:', headers.join(', '));
-    throw new Error('matched_status column not found');
-  }
-
-  const currentStatus = currentRow[matchedStatusIdx] || 'unknown';
-
-  // 업데이트할 행 데이터 구성 (현재 데이터 복사 후 명시적 업데이트)
-  const updatedRow = [...currentRow];
-
-  // 행 길이가 헤더보다 짧으면 확장
-  while (updatedRow.length < headers.length) {
-    updatedRow.push('');
-  }
-
-  // 명시적으로 각 필드 업데이트 (헤더 이름 의존 제거)
-  if (updates.matched_status !== undefined && matchedStatusIdx !== -1) {
-    updatedRow[matchedStatusIdx] = updates.matched_status;
-  }
-  if (updates.matched_type !== undefined && matchedTypeIdx !== -1) {
-    updatedRow[matchedTypeIdx] = updates.matched_type;
-  }
-  if (updates.matched_ids !== undefined && matchedIdsIdx !== -1) {
-    updatedRow[matchedIdsIdx] = updates.matched_ids;
-  }
-  if (updates.suppressed !== undefined && suppressedIdx !== -1) {
-    updatedRow[suppressedIdx] = String(updates.suppressed);
-  }
-  if (updates.suppressed_reason !== undefined && suppressedReasonIdx !== -1) {
-    updatedRow[suppressedReasonIdx] = updates.suppressed_reason;
-  }
-
-  // 동적 범위 계산 (헤더 길이 기반)
-  const lastColIndex = Math.min(headers.length - 1, 25); // 최대 Z열까지
-  const lastColLetter = String.fromCharCode(65 + lastColIndex);
-  const range = `A${rowIndex + 1}:${lastColLetter}${rowIndex + 1}`;
+  const updatedRow = mapper.updateRow(originalRow, safeUpdates);
+  const range = mapper.getRange(rowIndex + 1);
 
   await updateSheet(
     FINANCE_CONFIG.sheets.bank,
     range,
-    [updatedRow.slice(0, lastColIndex + 1) as (string | number | boolean)[]]
+    [updatedRow]
   );
 }
 
@@ -956,19 +951,7 @@ export async function updateBankTransactionsBatch(
     return { success: [], failed: updates.map(u => u.id) };
   }
 
-  const headers = rows[0];
-
-  // 컬럼 인덱스 찾기
-  const matchedStatusIdx = headers.indexOf('matched_status');
-  const matchedTypeIdx = headers.indexOf('matched_type');
-  const matchedIdsIdx = headers.indexOf('matched_ids');
-  const suppressedIdx = headers.indexOf('suppressed');
-  const suppressedReasonIdx = headers.indexOf('suppressed_reason');
-
-  if (matchedStatusIdx === -1) {
-    console.error('[updateBankTransactionsBatch] matched_status 헤더 없음');
-    return { success: [], failed: updates.map(u => u.id) };
-  }
+  const mapper = new SheetModelMapper<BankTransaction>(rows[0]);
 
   // 2. ID → 행 인덱스 맵 생성
   const idToRowIndex = new Map<string, number>();
@@ -995,33 +978,17 @@ export async function updateBankTransactionsBatch(
       continue;
     }
 
-    const currentRow = [...rows[rowIndex]];
+    const originalRow = rows[rowIndex];
+    const safeUpdates = { ...update };
+    // @ts-ignore - id는 업데이트 방지
+    delete safeUpdates.id;
 
-    // 행 길이 확장
-    while (currentRow.length < headers.length) {
-      currentRow.push('');
-    }
+    const updatedRow = mapper.updateRow(originalRow, safeUpdates);
+    const range = `${FINANCE_CONFIG.sheets.bank}!${mapper.getRange(rowIndex + 1)}`;
 
-    // 값 업데이트
-    currentRow[matchedStatusIdx] = update.matched_status;
-    if (update.matched_type !== undefined && matchedTypeIdx !== -1) {
-      currentRow[matchedTypeIdx] = update.matched_type;
-    }
-    if (update.matched_ids !== undefined && matchedIdsIdx !== -1) {
-      currentRow[matchedIdsIdx] = update.matched_ids;
-    }
-    if (update.suppressed !== undefined && suppressedIdx !== -1) {
-      currentRow[suppressedIdx] = String(update.suppressed);
-    }
-    if (update.suppressed_reason !== undefined && suppressedReasonIdx !== -1) {
-      currentRow[suppressedReasonIdx] = update.suppressed_reason;
-    }
-
-    // 범위는 A:Q (17열)로 제한
-    const range = `${FINANCE_CONFIG.sheets.bank}!A${rowIndex + 1}:Q${rowIndex + 1}`;
     batchRequests.push({
       range,
-      values: [currentRow.slice(0, 17) as (string | number | boolean)[]],
+      values: [updatedRow],
     });
 
     successIds.push(update.id);
@@ -1094,20 +1061,19 @@ export async function updateCardTransaction(
 
   if (rowIndex === -1) throw new Error(`Card transaction ${id} not found`);
 
-  const headers = rows[0];
-  const currentRow = rows[rowIndex];
+  const mapper = new SheetModelMapper<CardTransaction>(rows[0]);
+  const originalRow = rows[rowIndex];
 
-  const updatedRow = headers.map((header, idx) => {
-    if (header in updates) {
-      return (updates as Record<string, unknown>)[header];
-    }
-    return currentRow[idx];
-  });
+  const safeUpdates = { ...updates };
+  delete safeUpdates.id;
+
+  const updatedRow = mapper.updateRow(originalRow, safeUpdates);
+  const range = mapper.getRange(rowIndex + 1);
 
   await updateSheet(
     FINANCE_CONFIG.sheets.card,
-    `A${rowIndex + 1}:P${rowIndex + 1}`,
-    [updatedRow as (string | number | boolean)[]]
+    range,
+    [updatedRow]
   );
 }
 
@@ -1163,20 +1129,19 @@ export async function updateMatchingRule(
 
   if (rowIndex === -1) throw new Error(`Matching rule ${id} not found`);
 
-  const headers = rows[0];
-  const currentRow = rows[rowIndex];
+  const mapper = new SheetModelMapper<MatchingRule>(rows[0]);
+  const originalRow = rows[rowIndex];
 
-  const updatedRow = headers.map((header, idx) => {
-    if (header in updates) {
-      return (updates as Record<string, unknown>)[header];
-    }
-    return currentRow[idx];
-  });
+  const safeUpdates = { ...updates };
+  delete safeUpdates.id;
+
+  const updatedRow = mapper.updateRow(originalRow, safeUpdates);
+  const range = mapper.getRange(rowIndex + 1);
 
   await updateSheet(
     FINANCE_CONFIG.sheets.matchingRules,
-    `A${rowIndex + 1}:J${rowIndex + 1}`,
-    [updatedRow as (string | number | boolean)[]]
+    range,
+    [updatedRow]
   );
 }
 
@@ -1246,22 +1211,19 @@ export async function updateDonorInfo(
     throw new Error('헌금자 정보를 찾을 수 없습니다');
   }
 
-  const currentRow = dataRows[rowIndex];
-  const updatedRow = [
-    updates.representative ?? currentRow[0],
-    updates.donor_name ?? currentRow[1],
-    updates.relationship ?? currentRow[2] ?? '',
-    updates.registration_number ?? currentRow[3] ?? '',
-    updates.address ?? currentRow[4] ?? '',
-    updates.phone ?? currentRow[5] ?? '',
-    updates.email ?? currentRow[6] ?? '',
-    updates.note ?? currentRow[7] ?? '',
-    currentRow[8], // created_at는 유지
-  ];
+  const mapper = new SheetModelMapper<DonorInfo>(headerRow);
+  const originalRow = dataRows[rowIndex];
+
+  const safeUpdates = { ...updates };
+  // created_at 필드 보호
+  delete safeUpdates.created_at;
+
+  const updatedRow = mapper.updateRow(originalRow, safeUpdates);
+  const range = mapper.getRange(rowIndex + 2); // 헤더(1) + 1-based index(1) = +2
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: FINANCE_CONFIG.spreadsheetId,
-    range: `${sheetName}!A${rowIndex + 2}:I${rowIndex + 2}`,
+    range: `${sheetName}!${range}`,
     valueInputOption: 'RAW',
     requestBody: {
       values: [updatedRow],
@@ -1883,20 +1845,20 @@ export async function updatePledgeDonation(
 
   if (rowIndex === -1) throw new Error(`Pledge donation ${id} not found`);
 
-  const headers = rows[0];
-  const currentRow = rows[rowIndex];
+  const mapper = new SheetModelMapper<PledgeDonation>(rows[0]);
+  const originalRow = rows[rowIndex];
 
-  const updatedRow = headers.map((header, idx) => {
-    if (header in updates) {
-      return (updates as Record<string, unknown>)[header];
-    }
-    return currentRow[idx];
-  });
+  const safeUpdates = { ...updates };
+  // id 필드 보호
+  delete safeUpdates.id;
+
+  const updatedRow = mapper.updateRow(originalRow, safeUpdates);
+  const range = mapper.getRange(rowIndex + 1);
 
   await updateSheet(
     FINANCE_CONFIG.sheets.pledgeDonations,
-    `A${rowIndex + 1}:J${rowIndex + 1}`,
-    [updatedRow as (string | number | boolean)[]]
+    range,
+    [updatedRow]
   );
 }
 
@@ -1985,21 +1947,21 @@ export async function updateBudget(
 
   if (rowIndex === -1) throw new Error('예산 항목을 찾을 수 없습니다');
 
-  const currentRow = dataRows[rowIndex];
-  const updatedRow = [
-    updates.year ?? Number(currentRow[0]),
-    updates.category_code ?? Number(currentRow[1]),
-    updates.category_item ?? currentRow[2],
-    updates.account_code ?? Number(currentRow[3]),
-    updates.account_item ?? currentRow[4],
-    updates.budgeted_amount ?? Number(currentRow[5]),
-    updates.note ?? currentRow[6] ?? '',
-  ];
+  const mapper = new SheetModelMapper<Budget>(rows[0]);
+  const originalRow = dataRows[rowIndex];
+
+  const safeUpdates = { ...updates };
+  // PK인 year, account_code는 보호
+  delete safeUpdates.year;
+  delete safeUpdates.account_code;
+
+  const updatedRow = mapper.updateRow(originalRow, safeUpdates);
+  const range = mapper.getRange(rowIndex + 2); // 헤더(1) + 1-based index(1) = +2
 
   await updateSheet(
     FINANCE_CONFIG.sheets.budget,
-    `A${rowIndex + 2}:G${rowIndex + 2}`,
-    [updatedRow as (string | number | boolean)[]]
+    range,
+    [updatedRow]
   );
 }
 

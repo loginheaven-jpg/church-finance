@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const {
+  let {
     income,
     expense,
     suppressed,
@@ -62,6 +62,27 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('[match/confirm] 은행원장 읽기 실패:', error);
+  }
+
+  // ★ 서버 방어: income/expense에 포함된 헌금함 거래를 자동으로 suppressed로 이동
+  const isCashOffering = (detail: string) => (detail || '').substring(0, 3) === '헌금함';
+  const cashOfferingFromIncome = income?.filter(item => item.transaction.deposit > 0 && isCashOffering(item.transaction.detail)) || [];
+  const cashOfferingFromExpense = expense?.filter(item => isCashOffering(item.transaction.detail)) || [];
+  if (cashOfferingFromIncome.length > 0 || cashOfferingFromExpense.length > 0) {
+    console.warn('[match/confirm] 헌금함 거래가 income/expense에 포함됨 → suppressed로 이동:', {
+      fromIncome: cashOfferingFromIncome.length,
+      fromExpense: cashOfferingFromExpense.length,
+    });
+    // income/expense에서 제거
+    if (income) income = income.filter(item => !(item.transaction.deposit > 0 && isCashOffering(item.transaction.detail)));
+    if (expense) expense = expense.filter(item => !isCashOffering(item.transaction.detail));
+    // suppressed에 추가
+    const additionalSuppressed = [
+      ...cashOfferingFromIncome.map(item => ({ ...item.transaction, suppressed_reason: '자동 말소 (헌금함 — 서버 보정)' })),
+      ...cashOfferingFromExpense.map(item => ({ ...item.transaction, suppressed_reason: '자동 말소 (헌금함 — 서버 보정)' })),
+    ];
+    if (!suppressed) suppressed = [];
+    suppressed = [...suppressed, ...additionalSuppressed];
   }
 
   let incomeCount = 0;

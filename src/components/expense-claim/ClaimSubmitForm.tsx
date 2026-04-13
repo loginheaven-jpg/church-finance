@@ -476,6 +476,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
           desc += ` (※AI확인)`;
         } else if (item.aiVerification?.status === 'mismatch' && item.aiVerification.mismatchReason) {
           desc += ` (※AI불일치: 영수증 ${item.aiVerification.aiAmount?.toLocaleString()}원, ${item.aiVerification.mismatchReason})`;
+        } else if (item.aiVerification?.status === 'failed' && item.receiptFiles.length > 0) {
+          desc += ` (※AI실패)`;
         }
         return { ...item, description: desc };
       });

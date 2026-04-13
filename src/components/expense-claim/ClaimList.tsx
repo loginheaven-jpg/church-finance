@@ -583,6 +583,8 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                                 <span title="영수증 AI 확인됨"><ShieldCheck className="h-3.5 w-3.5 text-green-500 inline" /></span>
                               ) : claim.description?.includes('※AI불일치') ? (
                                 <span title="영수증 금액 불일치 (사유 포함)"><AlertTriangle className="h-3.5 w-3.5 text-amber-500 inline" /></span>
+                              ) : claim.description?.includes('※AI실패') ? (
+                                <span title="영수증 AI 인식 실패"><AlertTriangle className="h-3.5 w-3.5 text-slate-400 inline" /></span>
                               ) : !claim.receiptUrl ? (
                                 <span title="영수증 미첨부"><X className="h-3.5 w-3.5 text-slate-300 inline" /></span>
                               ) : null}

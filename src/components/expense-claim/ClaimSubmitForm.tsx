@@ -262,7 +262,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       reader.readAsDataURL(targetFile);
     });
 
-    const res = await fetch('/api/admin/receipt-test', {
+    const res = await fetch('/api/expense-claim/verify-receipt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_base64: base64, image_media_type: mediaType }),

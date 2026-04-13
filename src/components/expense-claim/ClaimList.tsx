@@ -579,12 +579,12 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                             <TableCell className="text-sm max-w-[10em] truncate" title={claim.description}>{claim.description}</TableCell>
                             <TableCell className="text-right text-sm whitespace-nowrap">{claim.amount.toLocaleString()}원</TableCell>
                             <TableCell className="text-center">
-                              {claim.receiptUrl ? (
-                                claim.description?.includes('※AI불일치') ? (
-                                  <span title="영수증 금액 불일치 (사유 포함)"><AlertTriangle className="h-3.5 w-3.5 text-amber-500 inline" /></span>
-                                ) : (
-                                  <span title="영수증 AI 확인됨"><ShieldCheck className="h-3.5 w-3.5 text-green-500 inline" /></span>
-                                )
+                              {claim.description?.includes('※AI확인') ? (
+                                <span title="영수증 AI 확인됨"><ShieldCheck className="h-3.5 w-3.5 text-green-500 inline" /></span>
+                              ) : claim.description?.includes('※AI불일치') ? (
+                                <span title="영수증 금액 불일치 (사유 포함)"><AlertTriangle className="h-3.5 w-3.5 text-amber-500 inline" /></span>
+                              ) : !claim.receiptUrl ? (
+                                <span title="영수증 미첨부"><X className="h-3.5 w-3.5 text-slate-300 inline" /></span>
                               ) : null}
                             </TableCell>
                             <TableCell>{statusBadge(claim)}</TableCell>

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Paperclip, X, HelpCircle, Plus, Check, AlertTriangle, RefreshCw, Trash2, ScanSearch, Camera } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Loader2, Paperclip, X, HelpCircle, Plus, Check, AlertTriangle, ScanSearch, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { compressImage } from '@/lib/image-compress';
 
@@ -344,6 +345,96 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
     }));
   };
 
+  // AI 검증 팝업 상태
+  const [aiPopup, setAiPopup] = useState<{
+    open: boolean;
+    itemId: string;
+    aiAmount: number;
+    aiStore: string;
+    userAmount: number;
+    details?: AIReceiptDetail[];
+    reason: string;
+    onConfirm: (reason: string) => void;
+    onCancel: () => void;
+  } | null>(null);
+
+  // 특정 항목의 AI 검증 수행 (제출/항목추가 시 호출)
+  const verifyItemAI = useCallback((item: LineItem): Promise<'pass' | 'cancel'> => {
+    return new Promise((resolve) => {
+      // 영수증 없음 또는 AI 실패 → 패스
+      if (item.receiptFiles.length === 0 || !item.aiVerification || item.aiVerification.status === 'failed') {
+        resolve('pass');
+        return;
+      }
+      // AI 분석 중 → 대기 안내
+      if (item.aiVerification.status === 'analyzing') {
+        toast.error('영수증 AI 확인이 진행 중입니다. 잠시 후 다시 시도해주세요.');
+        resolve('cancel');
+        return;
+      }
+      // 이미 사유 입력된 경우 → 패스
+      if (item.aiVerification.mismatchReason) {
+        resolve('pass');
+        return;
+      }
+
+      const userAmt = parseAmount(item.amount);
+      const aiAmt = item.aiVerification.aiAmount || 0;
+
+      // 금액 미입력 또는 AI 금액 없음 → 패스
+      if (userAmt <= 0 || aiAmt <= 0) {
+        resolve('pass');
+        return;
+      }
+
+      // 일치 → 자동 태그 추가 + 패스
+      if (userAmt === aiAmt) {
+        setItems(prev => prev.map(it =>
+          it.id === item.id ? {
+            ...it,
+            aiVerification: { ...it.aiVerification!, status: 'match' as const, mismatchReason: undefined },
+          } : it
+        ));
+        resolve('pass');
+        return;
+      }
+
+      // 불일치 → 팝업
+      setAiPopup({
+        open: true,
+        itemId: item.id,
+        aiAmount: aiAmt,
+        aiStore: item.aiVerification.aiStore || '',
+        userAmount: userAmt,
+        details: item.aiVerification.details,
+        reason: '',
+        onConfirm: (reason: string) => {
+          setItems(prev => prev.map(it =>
+            it.id === item.id ? {
+              ...it,
+              aiVerification: { ...it.aiVerification!, status: 'mismatch' as const, mismatchReason: reason },
+            } : it
+          ));
+          setAiPopup(null);
+          resolve('pass');
+        },
+        onCancel: () => {
+          setAiPopup(null);
+          resolve('cancel');
+        },
+      });
+    });
+  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 여러 항목 순차 검증
+  const verifyAllItems = useCallback(async (targetItems: LineItem[]): Promise<boolean> => {
+    for (const item of targetItems) {
+      const result = await verifyItemAI(item);
+      if (result === 'cancel') return false;
+    }
+    return true;
+  }, [verifyItemAI]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -370,27 +461,20 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       return;
     }
 
-    // AI 분석 중인 파일이 있는지 확인
-    if (validItems.some(item => item.aiVerification?.status === 'analyzing')) {
-      toast.error('영수증 AI 확인이 진행 중입니다. 잠시 후 다시 시도해주세요.');
-      return;
-    }
-
-    // AI 불일치 건에 사유가 없는지 확인
-    const mismatchNoReason = validItems.find(
-      item => item.aiVerification?.status === 'mismatch' && !item.aiVerification.mismatchReason?.trim()
-    );
-    if (mismatchNoReason) {
-      toast.error('영수증 금액 불일치 항목에 사유를 입력해주세요.');
-      return;
-    }
+    // AI 검증 팝업 (순차: 불일치 시 팝업 → 사유 입력 → 다음 항목)
+    const aiPassed = await verifyAllItems(validItems);
+    if (!aiPassed) return;
 
     setLoading(true);
     try {
-      // 불일치 사유를 내역에 포함하여 그룹 데이터 생성
-      const itemsWithReason = validItems.map(item => {
+      // AI 태그를 내역에 포함하여 그룹 데이터 생성
+      // items state가 verifyAllItems에서 업데이트되었으므로 최신 값 사용
+      const latestItems = items.filter(item => item.accountCode && parseAmount(item.amount) > 0);
+      const itemsWithReason = latestItems.map(item => {
         let desc = item.description;
-        if (item.aiVerification?.status === 'mismatch' && item.aiVerification.mismatchReason) {
+        if (item.aiVerification?.status === 'match' && item.receiptFiles.length > 0) {
+          desc += ` (※AI확인)`;
+        } else if (item.aiVerification?.status === 'mismatch' && item.aiVerification.mismatchReason) {
           desc += ` (※AI불일치: 영수증 ${item.aiVerification.aiAmount?.toLocaleString()}원, ${item.aiVerification.mismatchReason})`;
         }
         return { ...item, description: desc };
@@ -695,134 +779,17 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                     )}
                   </div>
 
-                  {/* AI 영수증 검증 결과 */}
+                  {/* AI 영수증 검증 — 최소 상태 표시만 (상세는 제출 시 팝업) */}
                   {item.aiVerification && (
-                    <div className="mt-1">
+                    <div className="flex items-center gap-1.5 text-xs mt-0.5">
                       {item.aiVerification.status === 'analyzing' && (
-                        <div className="flex items-center gap-1.5 text-xs text-blue-600">
-                          <ScanSearch className="h-3 w-3 animate-pulse" />
-                          <span>AI 영수증 확인 중...</span>
-                        </div>
+                        <><ScanSearch className="h-3 w-3 animate-pulse text-blue-500" /><span className="text-blue-600">AI 확인 중...</span></>
                       )}
-                      {item.aiVerification.status === 'match' && (
-                        <div className="flex items-center gap-1.5 text-xs text-green-600">
-                          <Check className="h-3 w-3 flex-shrink-0" />
-                          <span>
-                            {item.aiVerification.details
-                              ? item.aiVerification.details.map((d, i) =>
-                                  `${d.amount.toLocaleString()}${d.store ? `(${d.store})` : ''}`
-                                ).join(' + ') + ` = 총 ${item.aiVerification.aiAmount?.toLocaleString()}원 — 확인됨`
-                              : `${item.aiVerification.aiAmount?.toLocaleString()}원${item.aiVerification.aiStore ? ` ${item.aiVerification.aiStore}` : ''} — 확인됨`
-                            }
-                          </span>
-                        </div>
+                      {(item.aiVerification.status === 'match' || item.aiVerification.status === 'mismatch') && (
+                        <><ScanSearch className="h-3 w-3 text-green-500" /><span className="text-slate-500">AI 확인 완료</span></>
                       )}
                       {item.aiVerification.status === 'failed' && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                          <ScanSearch className="h-3 w-3" />
-                          <span>영수증 자동 확인 실패 — 수동 확인</span>
-                        </div>
-                      )}
-                      {item.aiVerification.status === 'mismatch' && (
-                        <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
-                          <div className="flex items-start gap-1.5 text-xs text-amber-700">
-                            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                            <div>
-                              <div className="font-medium">영수증 금액이 다릅니다</div>
-                              <div className="mt-1 text-slate-600">
-                                AI 인식:{' '}
-                                {item.aiVerification.details ? (
-                                  <span className="font-semibold">
-                                    {item.aiVerification.details.map((d, i) =>
-                                      `${d.amount.toLocaleString()}${d.store ? `(${d.store})` : ''}`
-                                    ).join(' + ')} = 총 {item.aiVerification.aiAmount?.toLocaleString()}원
-                                  </span>
-                                ) : (
-                                  <span className="font-semibold">
-                                    {item.aiVerification.aiAmount?.toLocaleString()}원
-                                    {item.aiVerification.aiStore && ` (${item.aiVerification.aiStore})`}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-slate-600">
-                                입력값: <span className="font-semibold">{item.amount}원</span>
-                                {' '}
-                                <span className="text-amber-600">
-                                  (차이 {Math.abs((item.aiVerification.aiAmount || 0) - parseAmount(item.amount)).toLocaleString()}원)
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          {!item.aiVerification.mismatchReason ? (
-                            <div className="space-y-1.5">
-                              <Input
-                                placeholder="사유 입력 후 하단 청구 등록을 눌러주세요"
-                                className="h-9 text-sm bg-white border-amber-300 focus:border-amber-500"
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  setItems(prev => prev.map(it =>
-                                    it.id === item.id ? {
-                                      ...it,
-                                      aiVerification: { ...it.aiVerification!, mismatchReason: val || undefined },
-                                    } : it
-                                  ));
-                                }}
-                              />
-                              <div className="flex flex-wrap gap-1.5">
-                                <Button
-                                  type="button" variant="outline" size="sm"
-                                  className="h-7 text-xs px-2.5"
-                                  onClick={() => {
-                                    setItems(prev => prev.map(it =>
-                                      it.id === item.id ? {
-                                        ...it,
-                                        receiptFiles: [],
-                                        receiptPaths: [],
-                                        aiVerification: undefined,
-                                      } : it
-                                    ));
-                                  }}
-                                >
-                                  <RefreshCw className="h-3 w-3 mr-0.5" />
-                                  영수증 재입력
-                                </Button>
-                                <Button
-                                  type="button" variant="ghost" size="sm"
-                                  className="h-7 text-xs px-2.5 text-red-500 hover:text-red-700"
-                                  onClick={() => {
-                                    if (items.length > 1) {
-                                      removeItem(item.id);
-                                    } else {
-                                      toast.error('최소 1개 항목은 유지해야 합니다');
-                                    }
-                                  }}
-                                >
-                                  <Trash2 className="h-3 w-3 mr-0.5" />
-                                  이 항목 삭제
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1.5 text-xs text-amber-700">
-                              <Check className="h-3 w-3" />
-                              <span>사유: {item.aiVerification.mismatchReason}</span>
-                              <button
-                                type="button"
-                                className="text-slate-400 hover:text-red-500"
-                                onClick={() => {
-                                  setItems(prev => prev.map(it =>
-                                    it.id === item.id ? {
-                                      ...it,
-                                      aiVerification: { ...it.aiVerification!, mismatchReason: undefined },
-                                    } : it
-                                  ));
-                                }}
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        <><ScanSearch className="h-3 w-3 text-slate-400" /><span className="text-slate-400">AI 확인 실패</span></>
                       )}
                     </div>
                   )}
@@ -830,8 +797,15 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
               );
             })}
 
-            {/* 항목 추가 버튼 */}
-            <Button type="button" variant="outline" size="sm" onClick={addItem} className="w-full border-dashed">
+            {/* 항목 추가 버튼 — 마지막 항목 AI 검증 후 추가 */}
+            <Button type="button" variant="outline" size="sm" onClick={async () => {
+              const lastItem = items[items.length - 1];
+              if (lastItem && lastItem.receiptFiles.length > 0 && lastItem.accountCode && parseAmount(lastItem.amount) > 0) {
+                const result = await verifyItemAI(lastItem);
+                if (result === 'cancel') return;
+              }
+              addItem();
+            }} className="w-full border-dashed">
               <Plus className="h-4 w-4 mr-1" />
               항목 추가
             </Button>
@@ -876,6 +850,73 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
           </Button>
         </form>
       </CardContent>
+
+      {/* AI 금액 불일치 팝업 */}
+      <Dialog open={!!aiPopup?.open} onOpenChange={(open) => { if (!open) aiPopup?.onCancel(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-700">
+              <AlertTriangle className="h-5 w-5" />
+              영수증 금액 확인
+            </DialogTitle>
+          </DialogHeader>
+          {aiPopup && (
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-50 rounded-lg space-y-1.5 text-sm">
+                <div>
+                  <span className="text-slate-500">AI 인식: </span>
+                  <span className="font-semibold">
+                    {aiPopup.details
+                      ? aiPopup.details.map(d => `${d.amount.toLocaleString()}${d.store ? `(${d.store})` : ''}`).join(' + ')
+                        + ` = 총 ${aiPopup.aiAmount.toLocaleString()}원`
+                      : `${aiPopup.aiAmount.toLocaleString()}원${aiPopup.aiStore ? ` (${aiPopup.aiStore})` : ''}`
+                    }
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">입력 금액: </span>
+                  <span className="font-semibold">{aiPopup.userAmount.toLocaleString()}원</span>
+                </div>
+                <div className="text-amber-600 font-medium">
+                  차이: {Math.abs(aiPopup.aiAmount - aiPopup.userAmount).toLocaleString()}원
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>사유</Label>
+                <Input
+                  autoFocus
+                  placeholder="예) 개인부담분 제외, 인식 오류 등"
+                  className="bg-white"
+                  value={aiPopup.reason}
+                  onChange={e => setAiPopup(prev => prev ? { ...prev, reason: e.target.value } : null)}
+                />
+                <p className="text-xs text-slate-400">
+                  💡 영수증 인식 오류인 경우 &apos;인식 오류&apos;라고 입력해주세요.
+                  개인부담분이 있으면 그 내용을 적어주시면 됩니다.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  disabled={!aiPopup.reason.trim()}
+                  onClick={() => {
+                    if (aiPopup.reason.trim()) {
+                      aiPopup.onConfirm(aiPopup.reason.trim());
+                    }
+                  }}
+                >
+                  사유와 함께 등록
+                </Button>
+                <Button variant="outline" onClick={() => aiPopup.onCancel()}>
+                  취소
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

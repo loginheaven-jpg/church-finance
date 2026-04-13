@@ -174,7 +174,7 @@ export function IncomeCorrection() {
     setSplitRecord(record);
     setSplitRows([
       { offering_code: record.offering_code, donor_name: record.donor_name, amount: 0, note: '' },
-      { offering_code: record.offering_code, donor_name: record.donor_name, amount: 0, note: '' },
+      { offering_code: 11, donor_name: record.donor_name, amount: 0, note: '' },
     ]);
   };
 

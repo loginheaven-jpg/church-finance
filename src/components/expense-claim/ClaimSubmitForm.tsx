@@ -7,9 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Loader2, Paperclip, X, HelpCircle, Plus, Check, AlertTriangle, ScanSearch, Camera } from 'lucide-react';
+import { Loader2, Paperclip, X, HelpCircle, Plus, Check, AlertTriangle, ScanSearch, Camera, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { compressImage } from '@/lib/image-compress';
+import { useFinanceSession } from '@/lib/auth/use-finance-session';
+import { hasRole } from '@/lib/auth/finance-permissions';
 
 interface ExpenseCode {
   category_code: number;
@@ -69,10 +71,21 @@ const makeId = () => Math.random().toString(36).slice(2, 8);
 const parseAmount = (s: string) => Number(s.replace(/,/g, '')) || 0;
 
 export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
+  const session = useFinanceSession();
+  const isAdmin = useMemo(() => session ? hasRole(session.finance_role, 'admin') : false, [session]);
+
   const [loading, setLoading] = useState(false);
   const [codes, setCodes] = useState<ExpenseCode[]>([]);
   const [defaultAccount, setDefaultAccount] = useState({ bankName: '', accountNumber: '' });
   const [showGuide, setShowGuide] = useState(false);
+
+  // 청구자 (admin이면 변경 가능)
+  const [claimant, setClaimant] = useState(userName);
+  const [claimantSearch, setClaimantSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const isProxy = isAdmin && claimant !== userName;
 
   // 공통 정보
   const [shared, setShared] = useState({
@@ -95,20 +108,28 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       .catch(() => {});
   }, []);
 
-  // 계좌/은행 자동 조회
+  // 계좌/은행 자동 조회 (청구자 변경 시 재조회)
   useEffect(() => {
-    fetch('/api/expense-claim/account-info')
+    const url = isProxy
+      ? `/api/expense-claim/account-info?name=${encodeURIComponent(claimant)}`
+      : '/api/expense-claim/account-info';
+    fetch(url)
       .then(r => r.json())
       .then(d => {
         if (d.success && d.data) {
           const bk = d.data.bankName || '';
           const ac = d.data.accountNumber || '';
-          setShared(prev => ({ ...prev, bankName: bk, accountNumber: ac }));
+          setShared(prev => ({
+            ...prev,
+            bankName: bk,
+            accountNumber: ac,
+            accountHolder: claimant,  // 청구자 변경 시 예금주도 자동
+          }));
           setDefaultAccount({ bankName: bk, accountNumber: ac });
         }
       })
       .catch(() => {});
-  }, []);
+  }, [claimant, isProxy]);
 
   // 카테고리별 그룹핑
   const categories = Array.from(
@@ -517,6 +538,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
           accountNumber: shared.accountNumber,
           accountHolder: shared.accountHolder,
           groups: groupsData,
+          claimant: isProxy ? claimant : undefined,  // admin이 대리 입력 시 대상 지정
         }),
       });
       const data = await res.json();
@@ -566,9 +588,90 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* 공통: 청구자 + 청구일 */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>청구자</Label>
-              <Input value={userName} readOnly className="bg-slate-50 text-slate-500" />
+            <div className="space-y-1 relative">
+              <Label className="flex items-center gap-1">
+                청구자
+                {isProxy && (
+                  <span className="text-xs text-amber-600 font-medium">(대리 입력: {userName})</span>
+                )}
+              </Label>
+              {isAdmin ? (
+                <div className="relative">
+                  <Input
+                    value={showSearch ? claimantSearch : claimant}
+                    readOnly={!showSearch}
+                    onClick={() => {
+                      if (!showSearch) {
+                        setShowSearch(true);
+                        setClaimantSearch('');
+                        setSearchResults([]);
+                      }
+                    }}
+                    onChange={async e => {
+                      const q = e.target.value;
+                      setClaimantSearch(q);
+                      if (q.trim().length < 1) {
+                        setSearchResults([]);
+                        return;
+                      }
+                      setSearching(true);
+                      try {
+                        const res = await fetch(`/api/members/search?q=${encodeURIComponent(q)}`);
+                        const data = await res.json();
+                        setSearchResults(data.success ? data.members : []);
+                      } catch {
+                        setSearchResults([]);
+                      } finally {
+                        setSearching(false);
+                      }
+                    }}
+                    placeholder={showSearch ? '성도 이름 검색...' : claimant}
+                    className={isProxy ? 'border-amber-400 bg-amber-50' : ''}
+                  />
+                  {showSearch && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-lg z-20 max-h-60 overflow-y-auto">
+                      <div className="p-1.5 border-b flex items-center gap-2 text-xs text-slate-500">
+                        <Search className="h-3 w-3" />
+                        {searching ? '검색 중...' : searchResults.length > 0 ? `${searchResults.length}건` : '이름을 입력하세요'}
+                        <button
+                          type="button"
+                          className="ml-auto text-slate-400 hover:text-red-500"
+                          onClick={() => { setShowSearch(false); setClaimantSearch(''); }}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 border-b"
+                        onClick={() => {
+                          setClaimant(userName);
+                          setShowSearch(false);
+                          setClaimantSearch('');
+                        }}
+                      >
+                        <span className="text-slate-500">본인 ({userName})</span>
+                      </button>
+                      {searchResults.map(name => (
+                        <button
+                          key={name}
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                          onClick={() => {
+                            setClaimant(name);
+                            setShowSearch(false);
+                            setClaimantSearch('');
+                          }}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Input value={userName} readOnly className="bg-slate-50 text-slate-500" />
+              )}
             </div>
             <div className="space-y-1">
               <Label>청구일 <span className="text-red-500">*</span></Label>

@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFinanceSession } from '@/lib/auth/finance-session';
+import { hasRole } from '@/lib/auth/finance-permissions';
 import { getAccountInfoByNamePublic, updateAccountInfo } from '@/lib/google-sheets';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getFinanceSession();
     if (!session) {
       return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
     }
 
-    const accountInfo = await getAccountInfoByNamePublic(session.name);
+    // admin 이상이면 ?name 파라미터로 타인 계좌 조회 가능
+    const { searchParams } = new URL(request.url);
+    const nameParam = searchParams.get('name');
+    const targetName = (nameParam && hasRole(session.finance_role, 'admin'))
+      ? nameParam
+      : session.name;
+
+    const accountInfo = await getAccountInfoByNamePublic(targetName);
 
     return NextResponse.json({
       success: true,

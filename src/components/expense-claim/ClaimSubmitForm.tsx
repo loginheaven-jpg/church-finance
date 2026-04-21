@@ -323,10 +323,19 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       const aiTotal = allDetails.reduce((s, d) => s + d.amount, 0);
       const stores = allDetails.map(d => d.store).filter(Boolean).join(', ');
 
+      // AI가 금액을 못 읽었으면 failed 처리
+      if (aiTotal <= 0) {
+        setItems(prev => prev.map(item =>
+          item.id === itemId ? { ...item, aiVerification: { status: 'failed' } } : item
+        ));
+        return;
+      }
+
       setItems(prev => prev.map(item => {
         if (item.id !== itemId) return item;
         const userAmt = parseAmount(item.amount);
-        const status = userAmt <= 0 ? 'match' as const  // 금액 미입력 → recheckAI에서 재판정
+        // 금액 미입력 → 제출/항목추가 시 재판정. 일단은 match로 (제출 시 recheck)
+        const status = userAmt <= 0 ? 'match' as const
           : (userAmt === aiTotal ? 'match' as const : 'mismatch' as const);
         return {
           ...item,
@@ -402,8 +411,20 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       const userAmt = parseAmount(item.amount);
       const aiAmt = item.aiVerification.aiAmount || 0;
 
-      // 금액 미입력 또는 AI 금액 없음 → 패스
-      if (userAmt <= 0 || aiAmt <= 0) {
+      // AI 금액 인식 실패 → failed로 변경하고 패스 (리스트에 ※AI실패 표시됨)
+      if (aiAmt <= 0) {
+        setItems(prev => prev.map(it =>
+          it.id === item.id ? {
+            ...it,
+            aiVerification: { ...it.aiVerification!, status: 'failed' as const },
+          } : it
+        ));
+        resolve('pass');
+        return;
+      }
+
+      // 금액 미입력 → 패스
+      if (userAmt <= 0) {
         resolve('pass');
         return;
       }
@@ -776,7 +797,13 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                       value={item.categoryCode}
                       onValueChange={v => {
                         updateItem(item.id, 'categoryCode', v);
-                        updateItem(item.id, 'accountCode', '');
+                        // 하위 항목이 1개뿐이면 자동 선택
+                        const subItems = codes.filter(c => String(c.category_code) === v);
+                        if (subItems.length === 1) {
+                          updateItem(item.id, 'accountCode', String(subItems[0].code));
+                        } else {
+                          updateItem(item.id, 'accountCode', '');
+                        }
                       }}
                     >
                       <SelectTrigger className="h-9 text-sm">

@@ -660,6 +660,22 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                                 </button>
                               ))
                             ) : null}
+                            {/* AI 불일치 사유 표시 (영수증 링크 우측) */}
+                            {(() => {
+                              const desc = claim.description || '';
+                              const m = desc.match(/\(※AI불일치:\s*([^)]+)\)/);
+                              if (!m) return null;
+                              const fullText = m[1].trim();
+                              return (
+                                <span
+                                  className="ml-3 inline-block max-w-[280px] truncate align-bottom text-amber-700"
+                                  title={fullText}
+                                >
+                                  <AlertTriangle className="h-3 w-3 inline mr-0.5 -mt-0.5" />
+                                  {fullText}
+                                </span>
+                              );
+                            })()}
                           </TableCell>
                         </TableRow>
                         {isAdmin && verifMap.get(claim.rowIndex)?.failReason && (

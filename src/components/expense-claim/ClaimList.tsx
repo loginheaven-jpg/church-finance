@@ -15,11 +15,12 @@ import {
 } from '@/components/ui/table';
 import {
   Loader2, Eye, Trash2, Download, CheckCircle2, AlertTriangle,
-  Clock, RefreshCw, ShieldCheck, ShieldAlert, ShieldQuestion, Pencil, Save, X, ChevronDown, ChevronRight,
+  Clock, RefreshCw, ShieldCheck, ShieldAlert, ShieldQuestion, Pencil, Save, X, ChevronDown, ChevronRight, Paperclip,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
+import { compressImage } from '@/lib/image-compress';
 
 interface ClaimItem {
   rowIndex: number;
@@ -213,9 +214,19 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
 
     const excelData = selectedClaims.map(item => {
       const accountPrefix = item.accountCode ? item.accountCode.substring(0, 2) : '';
-      const cleanDescription = item.description
-        ? item.description.replace(/[^\w\sㄱ-ㅎㅏ-ㅣ가-힣]/g, '')
-        : '';
+      // 입금통장 표시 추출 (description에 (입금통장:○○) 있으면 사용, 없으면 '예봄교회')
+      const depositBankMatch = item.description?.match(/\(입금통장:([^)]+)\)/);
+      const depositBank = depositBankMatch ? depositBankMatch[1].trim() : '예봄교회';
+      // 메타 태그 제거한 순수 내역 (출금통장에 사용)
+      const cleanDescription = (item.description || '')
+        .replace(/\(입금통장:[^)]+\)/g, '')
+        .replace(/\(대리입력:[^)]+\)/g, '')
+        .replace(/\(※AI확인\)/g, '')
+        .replace(/\(※AI불일치:[^)]+\)/g, '')
+        .replace(/\(※AI실패\)/g, '')
+        .replace(/\(※사후첨부\)/g, '')
+        .replace(/[^\w\sㄱ-ㅎㅏ-ㅣ가-힣]/g, '')
+        .trim();
       const withdrawNote = accountPrefix && cleanDescription
         ? `${accountPrefix}${cleanDescription}`
         : cleanDescription || accountPrefix;
@@ -223,7 +234,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
         '은행명': item.bankName,
         '계좌번호': item.accountNumber,
         '금액': item.amount,
-        '입금통장': '예봄교회',
+        '입금통장': depositBank,
         '출금통장': withdrawNote,
         '이체메모': item.claimant,
       };
@@ -288,6 +299,64 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
       }
     } catch {
       toast.error('영수증 조회 중 오류가 발생했습니다');
+    }
+  };
+
+  // 영수증 사후첨부 (admin 전체 + 본인)
+  const handleAddReceipt = async (rowIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    try {
+      toast.info(`영수증 ${fileList.length}장 업로드 중...`);
+      const newPaths: string[] = [];
+
+      for (let i = 0; i < fileList.length; i++) {
+        const rawFile = fileList[i];
+        if (rawFile.size > 20 * 1024 * 1024) {
+          toast.error(`${rawFile.name}: 20MB 이하만 가능합니다`);
+          return;
+        }
+        const isPdf = rawFile.type === 'application/pdf';
+        const targetFile = isPdf ? rawFile : await compressImage(rawFile);
+
+        // signed upload URL 요청
+        const urlRes = await fetch('/api/expense-claim/upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: targetFile.name, contentType: targetFile.type }),
+        });
+        const urlData = await urlRes.json();
+        if (!urlData.success) throw new Error(urlData.error || 'URL 발급 실패');
+
+        // Supabase 직접 업로드
+        const uploadRes = await fetch(urlData.uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': targetFile.type },
+          body: targetFile,
+        });
+        if (!uploadRes.ok) throw new Error(`${rawFile.name} 업로드 실패`);
+
+        newPaths.push(urlData.filePath);
+      }
+
+      // 시트에 영수증 경로 추가 (기존과 병합)
+      const res = await fetch('/api/expense-claim/add-receipt', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rowIndex, newPaths }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`영수증 ${newPaths.length}장 추가 완료`);
+        await fetchClaims();
+      } else {
+        toast.error(data.error || '영수증 추가 실패');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '영수증 추가 중 오류');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -585,6 +654,8 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                                 <span title="영수증 금액 불일치 (사유 포함)"><AlertTriangle className="h-3.5 w-3.5 text-amber-500 inline" /></span>
                               ) : claim.description?.includes('※AI실패') ? (
                                 <span title="영수증 AI 인식 실패"><AlertTriangle className="h-3.5 w-3.5 text-slate-400 inline" /></span>
+                              ) : claim.description?.includes('※사후첨부') ? (
+                                <span title="영수증 사후 첨부됨"><Paperclip className="h-3.5 w-3.5 text-slate-500 inline" /></span>
                               ) : !claim.receiptUrl ? (
                                 <span title="영수증 미첨부"><X className="h-3.5 w-3.5 text-slate-300 inline" /></span>
                               ) : null}
@@ -602,6 +673,18 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
                                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-amber-600" onClick={() => startEdit(claim)} title="수정">
                                     <Pencil className="h-4 w-4" />
                                   </Button>
+                                )}
+                                {(isAdmin || claim.claimant === session?.name) && (
+                                  <label className="cursor-pointer h-7 w-7 inline-flex items-center justify-center rounded text-slate-500 hover:text-blue-600 hover:bg-slate-100" title="영수증 추가">
+                                    <Paperclip className="h-4 w-4" />
+                                    <input
+                                      type="file"
+                                      accept="image/*,application/pdf"
+                                      multiple
+                                      className="hidden"
+                                      onChange={e => handleAddReceipt(claim.rowIndex, e)}
+                                    />
+                                  </label>
                                 )}
                                 {claim.receiptUrl && (
                                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600" onClick={() => handleViewReceipt(claim.receiptUrl!)} title="영수증 보기">

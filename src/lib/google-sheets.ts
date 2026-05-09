@@ -2599,6 +2599,7 @@ export async function updateExpenseClaim(
     accountNumber?: string;
     accountHolder?: string;
     bankName?: string;
+    receiptUrl?: string;
   }
 ): Promise<void> {
   const sheets = getGoogleSheetsClient();
@@ -2610,6 +2611,7 @@ export async function updateExpenseClaim(
   if (updates.amount !== undefined) data.push({ range: `${sheet}!F${rowIndex}`, values: [[updates.amount]] });
   if (updates.description !== undefined) data.push({ range: `${sheet}!G${rowIndex}`, values: [[updates.description]] });
   if (updates.accountNumber !== undefined) data.push({ range: `${sheet}!H${rowIndex}`, values: [[updates.accountNumber]] });
+  if (updates.receiptUrl !== undefined) data.push({ range: `${sheet}!I${rowIndex}`, values: [[updates.receiptUrl]] });
   if (updates.accountHolder !== undefined) data.push({ range: `${sheet}!L${rowIndex}`, values: [[updates.accountHolder]] });
   if (updates.bankName !== undefined) data.push({ range: `${sheet}!J${rowIndex}`, values: [[updates.bankName]] });
 

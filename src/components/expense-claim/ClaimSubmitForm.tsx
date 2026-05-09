@@ -93,6 +93,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
     bankName: '',
     accountNumber: '',
     accountHolder: userName,
+    depositBank: '',  // 입금계좌표시사항 (엑셀 D컬럼). 비우면 '예봄교회'
   });
 
   // 라인 아이템 배열
@@ -560,6 +561,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
           accountHolder: shared.accountHolder,
           groups: groupsData,
           claimant: isProxy ? claimant : undefined,  // admin이 대리 입력 시 대상 지정
+          depositBank: shared.depositBank.trim() || undefined,  // 비우면 기본 '예봄교회'
         }),
       });
       const data = await res.json();
@@ -884,8 +886,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                       </div>
                     ))}
                     {!item.uploading && (
-                      <div className="flex items-center gap-3 text-sm">
-                        <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200 text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-600 transition-colors">
+                      <div className="flex items-center gap-2 text-sm">
+                        <label className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-md border border-slate-200 text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-600 transition-colors">
                           <Paperclip className="h-4 w-4" />
                           <span>{item.receiptFiles.length > 0 ? '추가' : '파일 선택'}</span>
                           <input
@@ -896,7 +898,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                             onChange={e => handleFileChange(item.id, e)}
                           />
                         </label>
-                        <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200 text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-600 transition-colors">
+                        <label className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-md border border-slate-200 text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-600 transition-colors">
                           <Camera className="h-4 w-4" />
                           <span>촬영</span>
                           <input
@@ -910,6 +912,16 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                       </div>
                     )}
                   </div>
+
+                  {/* 입금통장 표시 (항목 1에만) */}
+                  {idx === 0 && (
+                    <Input
+                      placeholder="입금계좌표시사항 (비워두면 '예봄교회'로 표시)"
+                      className="h-9 text-sm"
+                      value={shared.depositBank}
+                      onChange={e => setShared(p => ({ ...p, depositBank: e.target.value }))}
+                    />
+                  )}
 
                   {/* AI 영수증 검증 — 최소 상태 표시만 (상세는 제출 시 팝업) */}
                   {item.aiVerification && (

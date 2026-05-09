@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
       accountNumber: rawAccountNumber,
       accountHolder: rawAccountHolder,
       groups,
-      claimant: requestedClaimant,  // admin이 대리 입력 시 대상자 지정
+      claimant: requestedClaimant,
+      depositBank: rawDepositBank,
     } = body as {
       claimDate: string;
       bankName: string;
@@ -37,7 +38,9 @@ export async function POST(request: NextRequest) {
       accountHolder: string;
       groups: GroupData[];
       claimant?: string;
+      depositBank?: string;
     };
+    const depositBank = (rawDepositBank || '').trim();
 
     const accountNumber = (rawAccountNumber || '').replace(/[^0-9]/g, '');
     const accountHolder = (rawAccountHolder || session.name).trim();
@@ -69,10 +72,14 @@ export async function POST(request: NextRequest) {
         ? group.receiptPaths.join(',')
         : undefined;
 
-      // 대리 입력 시 내역 끝에 기록
-      const description = isProxy
-        ? `${group.description} (대리입력: ${session.name})`
-        : group.description;
+      // 대리 입력 + 입금통장 표시 사항 내역 끝에 기록
+      let description = group.description;
+      if (depositBank) {
+        description += ` (입금통장:${depositBank})`;
+      }
+      if (isProxy) {
+        description += ` (대리입력: ${session.name})`;
+      }
 
       await addExpenseClaim({
         claimId,

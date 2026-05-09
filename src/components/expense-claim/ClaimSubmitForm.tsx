@@ -610,14 +610,9 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* 공통: 청구자 + 청구일 */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1 relative">
-              <Label className="flex items-center gap-1">
-                청구자
-                {isProxy && (
-                  <span className="text-xs text-amber-600 font-medium">(대리 입력: {userName})</span>
-                )}
-              </Label>
+              <Label>청구자</Label>
               {isAdmin ? (
                 <div className="relative">
                   <Input
@@ -694,6 +689,9 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                 </div>
               ) : (
                 <Input value={userName} readOnly className="bg-slate-50 text-slate-500" />
+              )}
+              {isProxy && (
+                <p className="text-xs text-amber-600 font-medium">대리 입력자: {userName}</p>
               )}
             </div>
             <div className="space-y-1">
@@ -794,7 +792,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                   </div>
 
                   {/* 계정코드 (2단계) */}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2 [&>*]:min-w-0">
                     <Select
                       value={item.categoryCode}
                       onValueChange={v => {

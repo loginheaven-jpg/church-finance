@@ -129,20 +129,41 @@ export const FINANCE_CONFIG = {
 // ============================================
 
 export async function readSheet(sheetName: string, range: string = 'A:Z'): Promise<string[][]> {
-  try {
-    const sheets = getGoogleSheetsClient();
+  const sheets = getGoogleSheetsClient();
+  // 최대 3회 재시도 (rate limit / transient error 대응)
+  const MAX_RETRIES = 3;
+  let lastError: unknown = null;
 
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
-      range: `${sheetName}!${range}`,
-    });
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+        range: `${sheetName}!${range}`,
+      });
+      return response.data.values || [];
+    } catch (error: unknown) {
+      lastError = error;
+      const err = error as { code?: number; status?: number };
+      const status = err?.code || err?.status;
 
-    return response.data.values || [];
-  } catch (error) {
-    // 시트가 없는 경우 빈 배열 반환
-    console.warn(`Sheet "${sheetName}" not found or error reading`);
-    return [];
+      // 시트가 실제로 없는 경우 (404, 400 BadRequest with 'Unable to parse range') → 빈 배열
+      if (status === 404 || status === 400) {
+        console.warn(`Sheet "${sheetName}" not found or invalid range`);
+        return [];
+      }
+
+      // rate limit (429) 또는 일시적 서버 오류 (5xx) → 재시도
+      if (attempt < MAX_RETRIES - 1) {
+        const delay = 500 * Math.pow(2, attempt); // 500ms, 1s, 2s
+        console.warn(`Sheet "${sheetName}" read failed (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+
+  // 모든 재시도 실패 → 에러 throw (이전에는 빈 배열 반환했지만 데이터 손실 위험)
+  console.error(`Sheet "${sheetName}" read failed after ${MAX_RETRIES} attempts:`, lastError);
+  throw new Error(`시트 "${sheetName}" 읽기 실패: ${lastError instanceof Error ? lastError.message : 'Unknown'}`);
 }
 
 export async function appendToSheet(sheetName: string, data: (string | number | boolean)[][]): Promise<void> {

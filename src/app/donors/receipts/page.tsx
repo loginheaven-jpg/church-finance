@@ -726,6 +726,37 @@ export default function DonationReceiptsPage() {
         return;
       }
 
+      // 교적부 자동 반영 결과 처리
+      if (saveData.taxInfoUpdated) {
+        toast.success('교적부에 정보를 함께 저장했습니다');
+      } else if (saveData.taxInfoConflict) {
+        const c = saveData.taxInfoConflict;
+        const mask = (s: string) => s && s.length >= 13 ? `${s.slice(0, 6)}-${s.slice(6, 7)}******` : s;
+        const ok = confirm(
+          `교적부 정보가 다릅니다.\n\n` +
+          `기존:\n  주민번호: ${mask(c.existing.resident_id) || '(없음)'}\n  주소: ${c.existing.address || '(없음)'}\n\n` +
+          `신규:\n  주민번호: ${mask(c.new.resident_id)}\n  주소: ${c.new.address}\n\n` +
+          `교적부 정보를 갱신하시겠습니까?\n(아니오 = 발행만 완료, 교적부는 기존 정보 유지)`
+        );
+        if (ok) {
+          const taxRes = await fetch('/api/members/tax-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: manualForm.representative,
+              resident_id: c.new.resident_id,
+              address: c.new.address,
+            }),
+          });
+          const taxData = await taxRes.json();
+          if (taxData.success) {
+            toast.success('교적부 정보가 갱신되었습니다');
+          } else {
+            toast.error(taxData.error || '교적부 갱신 실패');
+          }
+        }
+      }
+
       // PDF 다운로드
       const receipt: DonationReceipt = {
         year: parseInt(year),

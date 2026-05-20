@@ -9,7 +9,7 @@ import {
 import { getFinanceSession } from '@/lib/auth/finance-session';
 import { hasRole } from '@/lib/auth/finance-permissions';
 import { getFamilyGroup } from '@/lib/family-group';
-import { updateMemberTaxInfo } from '@/lib/supabase';
+import { updateMemberTaxInfo, getMembersByNames } from '@/lib/supabase';
 import type { ManualReceiptHistory } from '@/types';
 
 // POST: 수작업 발급 이력 저장
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const isAdmin = hasRole(session.finance_role, 'admin');
 
     const body = await request.json();
-    const { year, representative, address, resident_id, amount, issue_number, original_issue_number, note } = body;
+    const { year, representative, address, resident_id, amount, issue_number, original_issue_number, note, forceUpdateTaxInfo } = body;
 
     // 필수 필드 검증
     if (!year || !representative || !amount || !issue_number) {
@@ -86,9 +86,44 @@ export async function POST(request: NextRequest) {
 
     await addManualReceiptHistory(record);
 
+    // admin 수작업 발행 시 교적부 자동 반영 처리
+    let taxInfoConflict = null;
+    let taxInfoUpdated = false;
+    if (isAdmin && resident_id && address && representative) {
+      try {
+        const existing = await getMembersByNames([representative]);
+        const member = existing.get(representative);
+        const existingRid = member?.resident_id || '';
+        const existingAddr = member?.address || '';
+
+        if (!existingRid && !existingAddr) {
+          // 정보 없음 → 자동 추가
+          await updateMemberTaxInfo(representative, resident_id, address);
+          taxInfoUpdated = true;
+        } else if (existingRid === resident_id && existingAddr === address) {
+          // 동일 → 스킵
+        } else if (forceUpdateTaxInfo === true) {
+          // 명시적 강제 갱신
+          await updateMemberTaxInfo(representative, resident_id, address);
+          taxInfoUpdated = true;
+        } else {
+          // 다르고 force 아님 → 응답에 conflict 정보만 포함, 클라이언트 확인 후 별도 호출
+          taxInfoConflict = {
+            existing: { resident_id: existingRid, address: existingAddr },
+            new: { resident_id, address },
+          };
+        }
+      } catch (taxError) {
+        console.error('[manual] 교적부 자동 반영 오류:', taxError);
+        // 교적부 처리 실패해도 발행은 성공 상태 유지
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: record,
+      taxInfoUpdated,
+      taxInfoConflict,
     });
   } catch (error) {
     console.error('Manual receipt save error:', error);

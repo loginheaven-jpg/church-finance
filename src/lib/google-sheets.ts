@@ -146,23 +146,55 @@ export async function readSheet(sheetName: string, range: string = 'A:Z'): Promi
       const err = error as { code?: number; status?: number };
       const status = err?.code || err?.status;
 
-      // 시트가 실제로 없는 경우 (404, 400 BadRequest with 'Unable to parse range') → 빈 배열
+      // 시트가 실제로 없는 경우 (404, 400) → 즉시 빈 배열 (재시도 불필요)
       if (status === 404 || status === 400) {
         console.warn(`Sheet "${sheetName}" not found or invalid range`);
         return [];
       }
 
-      // rate limit (429) 또는 일시적 서버 오류 (5xx) → 재시도
+      // rate limit / 일시 오류 → 재시도
       if (attempt < MAX_RETRIES - 1) {
-        const delay = 500 * Math.pow(2, attempt); // 500ms, 1s, 2s
-        console.warn(`Sheet "${sheetName}" read failed (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${delay}ms`);
+        const delay = 500 * Math.pow(2, attempt);
+        console.warn(`Sheet "${sheetName}" read failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${(error as Error).message}, retrying in ${delay}ms`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
 
-  // 모든 재시도 실패 → 에러 throw (이전에는 빈 배열 반환했지만 데이터 손실 위험)
-  console.error(`Sheet "${sheetName}" read failed after ${MAX_RETRIES} attempts:`, lastError);
+  // 모든 재시도 실패 → 명확히 로깅 후 빈 배열 fallback (500 에러 방지)
+  // 호출자에서 데이터 무결성이 중요한 경우 readSheetStrict 사용 권장
+  console.error(`[CRITICAL] Sheet "${sheetName}" read failed after ${MAX_RETRIES} attempts. Returning empty array. Last error:`, lastError);
+  return [];
+}
+
+/**
+ * readSheet의 strict 버전 — 실패 시 throw
+ * 데이터 무결성이 중요한 곳(apply, PATCH 등)에서 사용
+ */
+export async function readSheetStrict(sheetName: string, range: string = 'A:Z'): Promise<string[][]> {
+  const sheets = getGoogleSheetsClient();
+  const MAX_RETRIES = 3;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+        range: `${sheetName}!${range}`,
+      });
+      return response.data.values || [];
+    } catch (error: unknown) {
+      lastError = error;
+      const err = error as { code?: number; status?: number };
+      const status = err?.code || err?.status;
+      if (status === 404 || status === 400) {
+        throw new Error(`시트 "${sheetName}"을 찾을 수 없거나 잘못된 범위입니다`);
+      }
+      if (attempt < MAX_RETRIES - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, attempt)));
+      }
+    }
+  }
   throw new Error(`시트 "${sheetName}" 읽기 실패: ${lastError instanceof Error ? lastError.message : 'Unknown'}`);
 }
 

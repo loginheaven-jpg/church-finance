@@ -38,7 +38,6 @@ import type { CardExpenseParseResponse, CardExpenseTempRecord, ExpenseCode } fro
 
 export default function CardExpenseIntegrationPage() {
   const session = useFinanceSession();
-  const isSuperAdmin = session?.finance_role === 'super_admin';
   const isAdmin = session?.finance_role ? hasRole(session.finance_role, 'admin') : false;
 
   const [file, setFile] = useState<File | null>(null);
@@ -321,7 +320,7 @@ export default function CardExpenseIntegrationPage() {
 
   // 보유자별 필터링 (서버에서 권한 기반 필터링은 이미 수행됨, 여기서는 UI 필터만)
   const filteredTransactions = (() => {
-    if (isSuperAdmin && selectedOwner !== 'all') {
+    if (isAdmin && selectedOwner !== 'all') {
       return transactions.filter(tx => tx.vendor === selectedOwner);
     }
     return transactions;
@@ -463,7 +462,7 @@ export default function CardExpenseIntegrationPage() {
                 카드 거래 내역
               </CardTitle>
               {/* super_admin만 보유자 필터 표시 */}
-              {isSuperAdmin && uniqueOwners.length > 1 && (
+              {isAdmin && uniqueOwners.length > 1 && (
                 <div className="flex items-center gap-2">
                   <Filter className="h-4 w-4 text-slate-500" />
                   <Select value={selectedOwner} onValueChange={setSelectedOwner}>
@@ -502,7 +501,7 @@ export default function CardExpenseIntegrationPage() {
                   ({incompleteCount}건 입력 필요)
                 </span>
               )}
-              {!isSuperAdmin && session?.name && (
+              {!isAdmin && session?.name && (
                 <span className="text-slate-500">
                   ({session.name}님의 카드)
                 </span>

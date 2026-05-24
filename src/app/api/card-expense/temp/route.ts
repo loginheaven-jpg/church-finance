@@ -37,8 +37,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 권한별 데이터 필터링
-    if (hasRole(session.finance_role, 'super_admin')) {
-      // super_admin: 전체 데이터, 선택적 보유자 필터
+    if (hasRole(session.finance_role, 'admin')) {
+      // admin 이상: 전체 데이터, 선택적 보유자 필터
       if (vendorFilter) {
         records = records.filter((r) => r.vendor === vendorFilter);
       }
@@ -59,9 +59,9 @@ export async function GET(request: NextRequest) {
     // 총액 계산
     const totalAmount = records.reduce((sum, r) => sum + r.amount, 0);
 
-    // 보유자별 입력현황 (super_admin용)
+    // 보유자별 입력현황 (admin 이상용)
     const vendorStats: Record<string, { total: number; completed: number }> = {};
-    if (hasRole(session.finance_role, 'super_admin')) {
+    if (hasRole(session.finance_role, 'admin')) {
       const allPendingRecords = await getCardExpenseTemp();
       allPendingRecords
         .filter((r) => r.status === 'pending')
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       records,
       matchingRecord,
       totalAmount,
-      vendorStats: hasRole(session.finance_role, 'super_admin') ? vendorStats : undefined,
+      vendorStats: hasRole(session.finance_role, 'admin') ? vendorStats : undefined,
     });
   } catch (error) {
     console.error('Card expense temp GET error:', error);
@@ -124,8 +124,8 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // 권한 확인: super_admin은 전체, 그 외는 본인 카드만
-    if (!hasRole(session.finance_role, 'super_admin')) {
+    // 권한 확인: admin 이상은 전체, 그 외는 본인 카드만
+    if (!hasRole(session.finance_role, 'admin')) {
       if (targetRecord.vendor !== session.name) {
         return NextResponse.json(
           { success: false, error: '본인 카드 내역만 수정할 수 있습니다' },

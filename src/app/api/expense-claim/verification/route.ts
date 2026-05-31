@@ -4,6 +4,15 @@ import {
   getExpenseRecords,
 } from '@/lib/google-sheets';
 
+// 날짜 정규화: "2026. 5. 24" → "2026-05-24", 이미 정규형이면 그대로
+function normalizeDateStr(d: string | undefined | null): string {
+  if (!d) return '';
+  const s = String(d).trim();
+  const m = s.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})$/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  return s;
+}
+
 interface MatchedExpense {
   id: string;
   date: string;
@@ -128,15 +137,17 @@ export async function GET(request: NextRequest) {
       const holderName = claim.accountHolder || claim.claimant;
 
       // 검색 범위: claimDate - 7일 ~ processedDate + 14일
-      const rangeStart = new Date(claim.claimDate);
+      const rangeStart = new Date(normalizeDateStr(claim.claimDate));
       rangeStart.setDate(rangeStart.getDate() - 7);
-      const rangeEnd = new Date(claim.processedDate || claim.claimDate);
+      const rangeEnd = new Date(normalizeDateStr(claim.processedDate || claim.claimDate));
       rangeEnd.setDate(rangeEnd.getDate() + 14);
 
       // 1단계: 금액 완전일치 + 날짜 범위 필터
       const amountMatches = expenseRecords.filter(e => {
         if (e.amount !== claim.amount) return false;
-        const expDate = new Date(e.date);
+        // 지출부 date 형식이 "2026. 5. 24" 또는 "2026-05-24" → 정규화
+        const expDate = new Date(normalizeDateStr(e.date));
+        if (isNaN(expDate.getTime())) return false;
         return expDate >= rangeStart && expDate <= rangeEnd;
       });
 
@@ -186,8 +197,8 @@ export async function GET(request: NextRequest) {
         score += Math.max(claimantScore, holderScore) * 25;
 
         // 날짜 근접도 (25점) - 청구일 기준
-        const baseDate = new Date(claim.claimDate);
-        const expenseDate = new Date(e.date);
+        const baseDate = new Date(normalizeDateStr(claim.claimDate));
+        const expenseDate = new Date(normalizeDateStr(e.date));
         const diffDays = Math.abs(
           (baseDate.getTime() - expenseDate.getTime()) / (24 * 60 * 60 * 1000)
         );

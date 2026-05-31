@@ -168,15 +168,48 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
 
   // 2차 점검: 지출부 대조 (silent=true 이면 toast 생략)
   const handleVerify = useCallback(async (silent = false) => {
-    const processedClaims = claims.filter(c => c.status === 'processed' && c.processedDate);
-    if (processedClaims.length === 0) {
-      if (!silent) toast.info('대조할 입금완료 건이 없습니다');
-      return;
-    }
     setVerifying(true);
     try {
-      // 처리완료 건들의 processedDate 범위로 verification API 호출
-      const dates = processedClaims.map(c => c.processedDate).sort();
+      // 1단계: 미처리 청구건 자동 매칭 + K컬럼 채움
+      let autoMarked = 0;
+      const unprocessedExists = claims.some(c => !c.processedDate && c.status !== 'processed');
+      if (unprocessedExists) {
+        try {
+          const autoRes = await fetch('/api/expense-claim/auto-mark', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ startDate, endDate }),
+          });
+          const autoData = await autoRes.json();
+          if (autoData.success && autoData.processed > 0) {
+            autoMarked = autoData.processed;
+            // 새로 K컬럼 채워진 건들을 반영하기 위해 claims 재조회
+            await fetchClaims();
+          }
+        } catch (autoErr) {
+          console.warn('auto-mark 실패:', autoErr);
+        }
+      }
+
+      // 2단계: 처리완료 건들의 지출부 대조 (자동 마킹 후 다시 평가)
+      // claims state는 아직 stale일 수 있으므로 최신 데이터 다시 조회
+      const refreshRes = await fetch(`/api/expense-claim/list?${new URLSearchParams({ ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) })}`);
+      const refreshData = await refreshRes.json();
+      const latestClaims = refreshData.success ? refreshData.data : claims;
+
+      const processedClaims = latestClaims.filter((c: ClaimItem) => c.status === 'processed' && c.processedDate);
+      if (processedClaims.length === 0) {
+        if (!silent) {
+          if (autoMarked > 0) {
+            toast.success(`자동 입금완료 ${autoMarked}건 처리됨. 대조할 처리완료 건은 없습니다.`);
+          } else {
+            toast.info('대조할 입금완료 건이 없습니다');
+          }
+        }
+        return;
+      }
+
+      const dates = processedClaims.map((c: ClaimItem) => c.processedDate).sort();
       const vs = dates[0];
       const ve = dates[dates.length - 1];
       const res = await fetch(
@@ -193,8 +226,9 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
         if (!silent) {
           const matched = items.filter((i: { status: string }) => i.status === 'matched').length;
           const missing = items.filter((i: { status: string }) => i.status === 'missing').length;
+          const autoMsg = autoMarked > 0 ? `자동 입금완료 ${autoMarked}건, ` : '';
           toast.success(
-            `지출부 대조 완료 — 확인됨 ${matched}건${missing > 0 ? `, 미기재 ${missing}건` : ''}`
+            `${autoMsg}지출부 대조 완료 — 확인됨 ${matched}건${missing > 0 ? `, 미기재 ${missing}건` : ''}`
           );
         }
       } else {
@@ -205,7 +239,7 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
     } finally {
       setVerifying(false);
     }
-  }, [claims]);
+  }, [claims, startDate, endDate, fetchClaims]);
 
   // 선택 건만 엑셀 다운로드 (K컬럼 변경 없음)
   const handleExcelDownload = () => {

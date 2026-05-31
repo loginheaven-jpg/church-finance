@@ -121,6 +121,7 @@ export const FINANCE_CONFIG = {
     expenseClaim: '지출청구',
     accounts: '계정',
     cardExpenseTemp: '카드내역임시',
+    cashOfferingEntry: '헌금함입력',
   },
 };
 
@@ -3550,5 +3551,159 @@ export async function initCardExpenseTempSheet(): Promise<void> {
     range: `${sheetName}!A1:${lastCol}1`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [CARD_EXPENSE_TEMP_HEADERS] }
+  });
+}
+
+
+// ============================================
+// 헌금함 입력 (Cash Offering Entry)
+// ============================================
+
+export interface CashOfferingEntry {
+  id: string;
+  date: string;           // YYYY-MM-DD (주일)
+  donor_name: string;
+  amount: number;
+  code: number;
+  item: string;
+  category_code: number;
+  note: string;
+  created_at: string;     // KST ISO
+  created_by: string;
+  status: 'pending' | 'synced';
+  synced_to_inc_id?: string;  // 수입부 INC ID (synced일 때)
+  updated_at?: string;
+  rowIndex?: number;
+}
+
+const CASH_OFFERING_ENTRY_HEADERS = [
+  'id', 'date', 'donor_name', 'amount', 'code', 'item', 'category_code',
+  'note', 'created_at', 'created_by', 'status', 'synced_to_inc_id', 'updated_at',
+];
+
+export async function getCashOfferingEntries(filter?: {
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+}): Promise<CashOfferingEntry[]> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.cashOfferingEntry);
+  if (rows.length <= 1) return [];
+
+  const header = rows[0];
+  const idx = (name: string) => header.indexOf(name);
+
+  const entries: CashOfferingEntry[] = rows.slice(1).map((row, i) => ({
+    rowIndex: i + 2,
+    id: row[idx('id')] || '',
+    date: row[idx('date')] || '',
+    donor_name: row[idx('donor_name')] || '',
+    amount: Number(String(row[idx('amount')] || '0').replace(/,/g, '')) || 0,
+    code: Number(row[idx('code')]) || 0,
+    item: row[idx('item')] || '',
+    category_code: Number(row[idx('category_code')]) || 0,
+    note: row[idx('note')] || '',
+    created_at: row[idx('created_at')] || '',
+    created_by: row[idx('created_by')] || '',
+    status: (row[idx('status')] as 'pending' | 'synced') || 'pending',
+    synced_to_inc_id: row[idx('synced_to_inc_id')] || undefined,
+    updated_at: row[idx('updated_at')] || undefined,
+  })).filter(e => e.id);
+
+  if (filter?.date) return entries.filter(e => e.date === filter.date);
+  if (filter?.startDate && filter?.endDate) {
+    return entries.filter(e => e.date >= filter.startDate! && e.date <= filter.endDate!);
+  }
+  return entries;
+}
+
+export async function addCashOfferingEntry(
+  entry: Omit<CashOfferingEntry, 'rowIndex'>
+): Promise<void> {
+  const row = CASH_OFFERING_ENTRY_HEADERS.map(h => {
+    const v = (entry as unknown as Record<string, unknown>)[h];
+    return v === undefined || v === null ? '' : String(v);
+  });
+  await appendToSheet(FINANCE_CONFIG.sheets.cashOfferingEntry, [row]);
+}
+
+export async function updateCashOfferingEntry(
+  rowIndex: number,
+  updates: Partial<CashOfferingEntry>
+): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${FINANCE_CONFIG.sheets.cashOfferingEntry}!1:1`,
+  });
+  const header = headerRes.data.values?.[0] || [];
+  const data: { range: string; values: (string | number)[][] }[] = [];
+  for (const [key, val] of Object.entries(updates)) {
+    const colIdx = header.indexOf(key);
+    if (colIdx < 0) continue;
+    const colLetter = String.fromCharCode(65 + colIdx);
+    data.push({
+      range: `${FINANCE_CONFIG.sheets.cashOfferingEntry}!${colLetter}${rowIndex}`,
+      values: [[val === undefined || val === null ? '' : String(val)]],
+    });
+  }
+  if (data.length === 0) return;
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: { valueInputOption: 'USER_ENTERED', data },
+  });
+}
+
+export async function deleteCashOfferingEntry(rowIndex: number): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+  const sheetMeta = meta.data.sheets?.find(
+    s => s.properties?.title === FINANCE_CONFIG.sheets.cashOfferingEntry
+  );
+  if (!sheetMeta?.properties?.sheetId === undefined) {
+    throw new Error('헌금함입력 시트를 찾을 수 없습니다');
+  }
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId: sheetMeta?.properties?.sheetId,
+            dimension: 'ROWS',
+            startIndex: rowIndex - 1,
+            endIndex: rowIndex,
+          },
+        },
+      }],
+    },
+  });
+}
+
+export async function initCashOfferingEntrySheet(): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.cashOfferingEntry;
+
+  // 시트 존재 확인
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+  const exists = meta.data.sheets?.some(s => s.properties?.title === sheetName);
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: sheetName } } }],
+      },
+    });
+  }
+  // 헤더 설정
+  const lastCol = String.fromCharCode(65 + CASH_OFFERING_ENTRY_HEADERS.length - 1);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!A1:${lastCol}1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [CASH_OFFERING_ENTRY_HEADERS] },
   });
 }

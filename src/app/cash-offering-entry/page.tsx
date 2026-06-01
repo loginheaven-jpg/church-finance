@@ -215,12 +215,13 @@ export default function CashOfferingEntryPage() {
     const el = e.target as HTMLInputElement;
     const currentVal = el.value.replace(/[,\s]/g, '');
 
-    // Shift+숫자 → 누적된 숫자 전체 *10000 (한 자리만 누른 경우 그 숫자만)
-    if (e.shiftKey && /^[0-9]$/.test(e.key)) {
+    // Space → ×10,000 (한글 IME 영향 없음, Shift+숫자 대안)
+    if (e.key === ' ' || e.code === 'Space') {
       e.preventDefault();
-      const combined = currentVal ? parseInt(currentVal) * 10 + parseInt(e.key) : parseInt(e.key);
-      const newAmt = combined * 10000;
-      updateNewRow(idx, 'amount', formatAmount(newAmt));
+      if (!currentVal) return;
+      const num = parseInt(currentVal);
+      if (isNaN(num) || num <= 0) return;
+      updateNewRow(idx, 'amount', formatAmount(num * 10000));
       return;
     }
 
@@ -234,10 +235,10 @@ export default function CashOfferingEntryPage() {
       return;
     }
 
-    // Enter: IME 조합 중이 아닐 때만 다음 셀 이동
+    // Enter: 비고 건너뛰고 바로 다음 행 헌금자로 (비고가 필요하면 마우스/Tab으로)
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      inputRefs.current.get(`new-note-${idx}`)?.focus();
+      addNewRow(idx);
     }
   };
 
@@ -431,8 +432,8 @@ export default function CashOfferingEntryPage() {
         <h1 className="text-3xl font-bold text-slate-900">헌금함 입력</h1>
       </div>
 
-      {/* 헤더 */}
-      <Card>
+      {/* 헤더 (스크롤 시 상단 고정) */}
+      <Card className="sticky top-0 z-20 shadow-md">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -486,9 +487,9 @@ export default function CashOfferingEntryPage() {
             빠른 입력 단축키
           </div>
           <div>· 헌금자: 2글자 이상 입력 시 자동완성 (↑↓ 화살표 선택, Enter 확정)</div>
-          <div>· 금액: <kbd className="px-1 bg-white border rounded">k</kbd> 또는 <kbd className="px-1 bg-white border rounded">ㅏ</kbd> = ×1,000 (예: 50ㅏ → 50,000) / <kbd className="px-1 bg-white border rounded">Shift+숫자</kbd> = ×10,000</div>
+          <div>· 금액: <kbd className="px-1 bg-white border rounded">k</kbd> 또는 <kbd className="px-1 bg-white border rounded">ㅏ</kbd> = ×1,000 (예: 50ㅏ → 50,000) / <kbd className="px-1 bg-white border rounded">Space</kbd> = ×10,000 (예: 1 Space → 10,000)</div>
           <div>· 코드: 숫자 입력 즉시 항목 자동 표시 (11=주일헌금, 12=감사헌금, 13=십일조 등)</div>
-          <div>· Tab: 다음 셀 / Enter (비고): 새 행 추가 (로컬 임시저장만, 서버 반영 X)</div>
+          <div>· 금액에서 <kbd className="px-1 bg-white border rounded">Enter</kbd> = 비고 건너뛰고 다음 행 (비고가 필요하면 마우스/Tab으로) / 비고 Enter도 다음 행</div>
           <div className="text-amber-700">· 입력은 자동으로 브라우저에 임시 저장됩니다. 마무리 후 우상단 <span className="font-medium">[서버 저장]</span> 버튼을 누르세요.</div>
         </CardContent>
       </Card>

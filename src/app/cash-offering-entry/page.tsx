@@ -149,45 +149,51 @@ export default function CashOfferingEntryPage() {
     }, 0);
   };
 
-  // 금액 키 입력: 'k'/'ㅏ' = *1000, Shift+숫자 = *10000
+  // 금액 키 입력: Shift+숫자 = *10000 (한글 ㅏ는 keydown에서 안 잡혀 onChange로 처리)
   const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
     const el = e.target as HTMLInputElement;
     const currentVal = el.value.replace(/[,\s]/g, '');
 
-    // Shift+숫자 → *10000
+    // Shift+숫자 → 누적된 숫자 전체 *10000 (한 자리만 누른 경우 그 숫자만)
     if (e.shiftKey && /^[0-9]$/.test(e.key)) {
       e.preventDefault();
-      const num = parseInt(e.key) * 10000;
       const combined = currentVal ? parseInt(currentVal) * 10 + parseInt(e.key) : parseInt(e.key);
-      // 단순 정책: 현재 입력값에 자릿수 추가 후 *10000 (Shift+숫자는 무조건 만원 단위 추가)
       const newAmt = combined * 10000;
       updateNewRow(idx, 'amount', formatAmount(newAmt));
       return;
     }
 
-    // 'k' 또는 'ㅏ' → *1000
-    if (isThousandKey(e.key)) {
+    // 영문 'k'/'K' 단축키 (한글 IME OFF 시) — Process일 때는 onChange로 처리
+    if (e.key === 'k' || e.key === 'K') {
       e.preventDefault();
       if (!currentVal) return;
       const num = parseInt(currentVal);
       if (isNaN(num)) return;
-      const newAmt = num * 1000;
-      updateNewRow(idx, 'amount', formatAmount(newAmt));
+      updateNewRow(idx, 'amount', formatAmount(num * 1000));
       return;
     }
 
-    // Enter: 다음 셀(비고) 또는 행 저장
-    if (e.key === 'Enter') {
+    // Enter: IME 조합 중이 아닐 때만 다음 셀 이동
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
       inputRefs.current.get(`new-note-${idx}`)?.focus();
     }
-
-    // Tab은 기본 동작 (다음 input으로 이동)
   };
 
-  // 금액 입력값 변경 (콤마 자동)
+  // 금액 입력값 변경 (콤마 자동 + 한글 ㅏ 단축키 감지)
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>, idx: number) => {
-    const raw = e.target.value.replace(/[^\d]/g, '');
+    const val = e.target.value;
+    // 마지막 글자가 'ㅏ' 또는 'k'/'K'면 *1000 (한글 IME 모드에서 keydown 못 잡는 경우 대응)
+    const lastChar = val.slice(-1);
+    if (lastChar === 'ㅏ' || lastChar === 'k' || lastChar === 'K') {
+      const prefix = val.slice(0, -1).replace(/[^\d]/g, '');
+      const num = parseInt(prefix);
+      if (!isNaN(num) && num > 0) {
+        updateNewRow(idx, 'amount', formatAmount(num * 1000));
+        return;
+      }
+    }
+    const raw = val.replace(/[^\d]/g, '');
     if (!raw) {
       updateNewRow(idx, 'amount', '');
       return;
@@ -251,9 +257,9 @@ export default function CashOfferingEntryPage() {
     }
   };
 
-  // 비고에서 Enter → 저장 + 새 행 추가
+  // 비고에서 Enter → 저장 + 새 행 추가 (IME 조합 중에는 무시)
   const handleNoteKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
-    if (e.key === 'Enter' || e.key === 'Tab') {
+    if ((e.key === 'Enter' || e.key === 'Tab') && !e.nativeEvent.isComposing) {
       e.preventDefault();
       saveRow(idx);
     }

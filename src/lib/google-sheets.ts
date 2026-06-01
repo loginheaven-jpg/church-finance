@@ -3623,7 +3623,18 @@ export async function addCashOfferingEntry(
     const v = (entry as unknown as Record<string, unknown>)[h];
     return v === undefined || v === null ? '' : String(v);
   });
-  await appendToSheet(FINANCE_CONFIG.sheets.cashOfferingEntry, [row]);
+  try {
+    await appendToSheet(FINANCE_CONFIG.sheets.cashOfferingEntry, [row]);
+  } catch (e) {
+    // 시트가 없으면 자동 생성 후 재시도
+    const msg = String((e as Error)?.message || e);
+    if (/Unable to parse range|not found|grid/i.test(msg)) {
+      await initCashOfferingEntrySheet();
+      await appendToSheet(FINANCE_CONFIG.sheets.cashOfferingEntry, [row]);
+      return;
+    }
+    throw e;
+  }
 }
 
 export async function updateCashOfferingEntry(

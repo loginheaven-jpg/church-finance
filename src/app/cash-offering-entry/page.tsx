@@ -57,6 +57,32 @@ interface NewRow {
   note: string;
 }
 
+// localStorage draft (날짜별 미저장 행 보존)
+const draftKey = (date: string) => `cash-offering-draft:${date}`;
+const saveDraft = (date: string, rows: NewRow[]) => {
+  try {
+    // 의미있는 행(헌금자 또는 금액 입력됨)만 저장
+    const meaningful = rows.filter(r => r.donor_name.trim() || r.amount);
+    if (meaningful.length === 0) localStorage.removeItem(draftKey(date));
+    else localStorage.setItem(draftKey(date), JSON.stringify(meaningful));
+  } catch {
+    // 용량 초과/접근불가는 무시
+  }
+};
+const loadDraft = (date: string): NewRow[] | null => {
+  try {
+    const raw = localStorage.getItem(draftKey(date));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? (parsed as NewRow[]) : null;
+  } catch {
+    return null;
+  }
+};
+const clearDraft = (date: string) => {
+  try { localStorage.removeItem(draftKey(date)); } catch { /* noop */ }
+};
+
 export default function CashOfferingEntryPage() {
   const [date, setDate] = useState(lastSunday());
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -70,11 +96,13 @@ export default function CashOfferingEntryPage() {
   const [searchResults, setSearchResults] = useState<string[]>([]);
   const [activeSearchIdx, setActiveSearchIdx] = useState<number | null>(null);
   const [highlightIdx, setHighlightIdx] = useState(0);
-  // 저장 상태
-  const [savingRows, setSavingRows] = useState<Set<number>>(new Set());
+  // 일괄 저장 상태
+  const [batchSaving, setBatchSaving] = useState(false);
 
   // 입력 ref (포커스 이동)
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  // draft 복원 직후 auto-save 1회 건너뛰기 (race 방지)
+  const skipSaveRef = useRef(true);
 
   // 코드 매핑
   const codeMap = useMemo(() => {
@@ -112,6 +140,39 @@ export default function CashOfferingEntryPage() {
 
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
   useEffect(() => { fetchCodes(); }, [fetchCodes]);
+
+  // 날짜 변경 시 localStorage draft 복원 (없으면 빈 행 1개)
+  useEffect(() => {
+    const draft = loadDraft(date);
+    if (draft && draft.length > 0) {
+      setNewRows([...draft, newBlankRow()]);
+    } else {
+      setNewRows([newBlankRow()]);
+    }
+    skipSaveRef.current = true; // 복원 직후 auto-save 1회 건너뛰기
+  }, [date]);
+
+  // newRows 변경 시 localStorage 자동 저장
+  useEffect(() => {
+    if (skipSaveRef.current) {
+      skipSaveRef.current = false;
+      return;
+    }
+    saveDraft(date, newRows);
+  }, [newRows, date]);
+
+  // 미저장 draft 있을 때 페이지 이탈 경고
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      const hasDraft = newRows.some(r => r.donor_name.trim() && r.amount);
+      if (hasDraft) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [newRows]);
 
   // 자동완성 검색 (debounced)
   useEffect(() => {
@@ -208,60 +269,112 @@ export default function CashOfferingEntryPage() {
     // 코드 2자리 이상이면 항목 자동 (UI는 codeMap으로 표시)
   };
 
-  // 행 저장
-  const saveRow = async (idx: number) => {
-    const row = newRows[idx];
-    if (!row.donor_name.trim() || !row.amount || !row.code) return;
-    const amountNum = parseInt(row.amount.replace(/[,\s]/g, ''));
-    if (!amountNum || amountNum <= 0) return;
-    const codeNum = parseInt(row.code);
-    if (!codeNum) return;
+  // 비고에서 Enter → 새 행 추가 + 다음 행 헌금자로 포커스 (서버 저장 X, localStorage만)
+  const addNewRow = (idx: number) => {
+    setNewRows(prev => {
+      // 현재 행이 마지막이면 새 빈 행 추가, 아니면 그대로 (다음 행으로 이동만)
+      const isLast = idx === prev.length - 1;
+      return isLast ? [...prev, newBlankRow()] : prev;
+    });
+    setTimeout(() => {
+      inputRefs.current.get(`new-donor-${idx + 1}`)?.focus();
+    }, 30);
+  };
 
-    setSavingRows(prev => new Set(prev).add(idx));
+  // 신규 입력 행 1줄 삭제
+  const deleteNewRow = (idx: number) => {
+    setNewRows(prev => {
+      if (prev.length === 1) return [newBlankRow()];
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  // 비고에서 Enter → 새 행 추가 + 포커스 이동 (IME 조합 중 무시)
+  const handleNoteKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
+    if ((e.key === 'Enter' || e.key === 'Tab') && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      addNewRow(idx);
+    }
+  };
+
+  // 유효 행 필터 (서버 전송 대상): {원본idx, row}
+  const validRowsWithIdx = useMemo(() =>
+    newRows
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => {
+        if (!r.donor_name.trim()) return false;
+        const amt = parseInt(r.amount.replace(/[,\s]/g, ''));
+        if (!amt || amt <= 0) return false;
+        if (!r.code || !parseInt(r.code)) return false;
+        return true;
+      }),
+  [newRows]);
+
+  // 미저장(draft) 합계
+  const draftTotal = useMemo(() =>
+    validRowsWithIdx.reduce((s, { r }) => s + (parseInt(r.amount.replace(/[,\s]/g, '')) || 0), 0),
+  [validRowsWithIdx]);
+
+  // 일괄 서버 저장 (batch POST)
+  const saveAllToServer = async () => {
+    if (validRowsWithIdx.length === 0) {
+      toast.error('저장할 유효 행이 없습니다');
+      return;
+    }
+    setBatchSaving(true);
     try {
-      const res = await fetch('/api/cash-offering/entries', {
+      const res = await fetch('/api/cash-offering/entries/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date,
-          donor_name: row.donor_name.trim(),
-          amount: amountNum,
-          code: codeNum,
-          note: row.note,
+          rows: validRowsWithIdx.map(({ r }) => ({
+            donor_name: r.donor_name.trim(),
+            amount: parseInt(r.amount.replace(/[,\s]/g, '')),
+            code: parseInt(r.code),
+            note: r.note,
+          })),
         }),
       });
       const data = await res.json();
-      if (data.success) {
-        // 새 빈 행 추가 + 현재 행 제거
-        setNewRows(prev => {
-          const next = prev.filter((_, i) => i !== idx);
-          return [...next, newBlankRow()];
-        });
+      if (!data.success) {
+        toast.error(data.error || '저장 실패');
+        return;
+      }
+
+      const failedSet = new Set<number>((data.failed || []).map((f: { index: number }) => f.index));
+
+      if (failedSet.size === 0) {
+        // 전부 성공 → newRows 비우기, draft 비우기
+        toast.success(`${data.savedCount}건 저장 완료`);
+        setNewRows([newBlankRow()]);
+        clearDraft(date);
         await fetchEntries();
-        // 다음 행으로 포커스
         setTimeout(() => {
-          const lastIdx = newRows.length - 1;
-          inputRefs.current.get(`new-donor-${lastIdx}`)?.focus();
+          inputRefs.current.get('new-donor-0')?.focus();
         }, 50);
       } else {
-        toast.error(data.error || '저장 실패');
+        // 부분 실패 → 성공한 행만 newRows에서 제거
+        const failedOriginalIdx = new Set<number>();
+        validRowsWithIdx.forEach(({ i }, k) => {
+          if (failedSet.has(k)) failedOriginalIdx.add(i);
+        });
+        setNewRows(prev => {
+          const kept = prev.filter((_, i) => {
+            // 전송된 행 중 실패한 것만 유지, 전송 안 된 미완성 행도 유지
+            const wasSent = validRowsWithIdx.some(v => v.i === i);
+            if (!wasSent) return true;
+            return failedOriginalIdx.has(i);
+          });
+          return kept.length > 0 ? [...kept, newBlankRow()] : [newBlankRow()];
+        });
+        toast.error(`${data.savedCount}건 저장, ${failedSet.size}건 실패`);
+        await fetchEntries();
       }
     } catch {
       toast.error('저장 중 오류');
     } finally {
-      setSavingRows(prev => {
-        const next = new Set(prev);
-        next.delete(idx);
-        return next;
-      });
-    }
-  };
-
-  // 비고에서 Enter → 저장 + 새 행 추가 (IME 조합 중에는 무시)
-  const handleNoteKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
-    if ((e.key === 'Enter' || e.key === 'Tab') && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      saveRow(idx);
+      setBatchSaving(false);
     }
   };
 
@@ -335,11 +448,31 @@ export default function CashOfferingEntryPage() {
                 새로고침
               </Button>
             </div>
-            <div className="text-sm text-slate-600">
-              {entries.length}건 · 합계 <span className="font-bold text-slate-900">{formatAmount(totalAmount)}원</span>
-              <span className="ml-2 text-xs">
-                pending {pendingCount} / synced {syncedCount}
-              </span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="text-sm text-slate-600">
+                <span>저장됨 <span className="font-bold text-slate-900">{formatAmount(totalAmount)}원</span> ({entries.length}건)</span>
+                {validRowsWithIdx.length > 0 && (
+                  <>
+                    <span className="mx-2 text-slate-300">|</span>
+                    <span className="text-amber-700">
+                      미저장 <span className="font-bold">{formatAmount(draftTotal)}원</span> ({validRowsWithIdx.length}건)
+                    </span>
+                  </>
+                )}
+                <span className="mx-2 text-slate-300">|</span>
+                <span>총합 <span className="font-bold text-blue-700">{formatAmount(totalAmount + draftTotal)}원</span></span>
+                <span className="ml-2 text-xs text-slate-500">
+                  pending {pendingCount} / synced {syncedCount}
+                </span>
+              </div>
+              <Button
+                onClick={saveAllToServer}
+                disabled={validRowsWithIdx.length === 0 || batchSaving}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {batchSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                서버 저장 ({validRowsWithIdx.length}건)
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -355,7 +488,8 @@ export default function CashOfferingEntryPage() {
           <div>· 헌금자: 2글자 이상 입력 시 자동완성 (↑↓ 화살표 선택, Enter 확정)</div>
           <div>· 금액: <kbd className="px-1 bg-white border rounded">k</kbd> 또는 <kbd className="px-1 bg-white border rounded">ㅏ</kbd> = ×1,000 (예: 50ㅏ → 50,000) / <kbd className="px-1 bg-white border rounded">Shift+숫자</kbd> = ×10,000</div>
           <div>· 코드: 숫자 입력 즉시 항목 자동 표시 (11=주일헌금, 12=감사헌금, 13=십일조 등)</div>
-          <div>· Tab: 다음 셀 / Enter (비고): 행 저장 + 새 행 추가</div>
+          <div>· Tab: 다음 셀 / Enter (비고): 새 행 추가 (로컬 임시저장만, 서버 반영 X)</div>
+          <div className="text-amber-700">· 입력은 자동으로 브라우저에 임시 저장됩니다. 마무리 후 우상단 <span className="font-medium">[서버 저장]</span> 버튼을 누르세요.</div>
         </CardContent>
       </Card>
 
@@ -417,8 +551,6 @@ export default function CashOfferingEntryPage() {
               {newRows.map((row, idx) => {
                 const codeNum = parseInt(row.code);
                 const itemName = codeNum ? codeMap.get(codeNum)?.item || '?' : '';
-                const isLast = idx === newRows.length - 1;
-                const saving = savingRows.has(idx);
                 return (
                   <tr key={idx} className="border-b hover:bg-slate-50/40">
                     <td className="px-3 py-1.5 relative">
@@ -440,7 +572,7 @@ export default function CashOfferingEntryPage() {
                           } else if (e.key === 'ArrowUp') {
                             e.preventDefault();
                             setHighlightIdx(i => Math.max(i - 1, 0));
-                          } else if (e.key === 'Enter') {
+                          } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                             e.preventDefault();
                             if (searchResults.length > 0 && activeSearchIdx === idx) {
                               selectDonor(idx, searchResults[highlightIdx]);
@@ -509,20 +641,16 @@ export default function CashOfferingEntryPage() {
                       />
                     </td>
                     <td className="px-3 py-1.5 text-center">
-                      {saving ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-500 inline" />
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => saveRow(idx)}
-                          disabled={!row.donor_name || !row.amount || !row.code}
-                          title="저장"
-                        >
-                          <Save className="h-4 w-4 text-blue-600" />
-                        </Button>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-red-400 hover:text-red-600"
+                        onClick={() => deleteNewRow(idx)}
+                        disabled={newRows.length === 1 && !row.donor_name && !row.amount && !row.note}
+                        title="이 행 삭제"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </td>
                   </tr>
                 );

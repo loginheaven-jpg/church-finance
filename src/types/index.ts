@@ -395,8 +395,9 @@ export interface ManualReceiptHistory {
   note: string;              // 비고 (수작업/분할)
 }
 
-// 현금헌금 (외부 시트)
+// 현금헌금 (헌금함입력 시트, 과거: 외부 시트)
 export interface CashOffering {
+  rowIndex?: number; // 헌금함입력 시트 행 번호 (sync 후 status 업데이트용)
   date: string;
   source: string;
   donor_name: string;

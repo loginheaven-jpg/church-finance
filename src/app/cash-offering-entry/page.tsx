@@ -494,6 +494,14 @@ export default function CashOfferingEntryPage() {
           <div>· 코드: 숫자 입력 즉시 항목 자동 표시 (11=주일헌금, 12=감사헌금, 13=십일조 등)</div>
           <div>· 금액에서 <kbd className="px-1 bg-white border rounded">Enter</kbd> = 비고 건너뛰고 다음 행 (비고가 필요하면 마우스/Tab으로) / 비고 Enter도 다음 행</div>
           <div className="text-amber-700">· 입력은 자동으로 브라우저에 임시 저장됩니다. 마무리 후 우상단 <span className="font-medium">[서버 저장]</span> 버튼을 누르세요.</div>
+          <div className="pt-1 flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-slate-700">상태 흐름:</span>
+            <span className="text-xs px-2 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200">로컬저장</span>
+            <span className="text-slate-400">→ 서버 저장 →</span>
+            <span className="text-xs px-2 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200">서버저장</span>
+            <span className="text-slate-400">→ /data-entry 페이지 sync →</span>
+            <span className="text-xs px-2 py-0.5 rounded border bg-green-50 text-green-700 border-green-200">원장반영</span>
+          </div>
         </CardContent>
       </Card>
 
@@ -508,12 +516,12 @@ export default function CashOfferingEntryPage() {
               <thead className="bg-slate-50 border-b">
                 <tr>
                   <th className="text-left px-3 py-2 w-10">#</th>
-                  <th className="text-left px-3 py-2">헌금자</th>
+                  <th className="text-left px-3 py-2 w-28">헌금자</th>
                   <th className="text-left px-3 py-2 w-16">코드</th>
                   <th className="text-left px-3 py-2 w-24">항목</th>
                   <th className="text-right px-3 py-2 w-32">금액</th>
                   <th className="text-left px-3 py-2">비고</th>
-                  <th className="text-center px-3 py-2 w-16">상태</th>
+                  <th className="text-center px-3 py-2 w-32">상태</th>
                   <th className="text-center px-3 py-2 w-12"></th>
                 </tr>
               </thead>
@@ -543,11 +551,12 @@ export default function CashOfferingEntryPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">
               <tr>
-                <th className="text-left px-3 py-2">헌금자</th>
+                <th className="text-left px-3 py-2 w-28">헌금자</th>
                 <th className="text-left px-3 py-2 w-16">코드</th>
                 <th className="text-left px-3 py-2 w-24">항목</th>
                 <th className="text-right px-3 py-2 w-32">금액</th>
                 <th className="text-left px-3 py-2">비고</th>
+                <th className="text-center px-3 py-2 w-32">상태</th>
                 <th className="text-center px-3 py-2 w-12"></th>
               </tr>
             </thead>
@@ -645,6 +654,11 @@ export default function CashOfferingEntryPage() {
                       />
                     </td>
                     <td className="px-3 py-1.5 text-center">
+                      <span className="text-xs px-2 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200">
+                        로컬저장
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -735,8 +749,8 @@ function SavedRow({
           />
         </td>
         <td className="text-center px-3 py-1.5">
-          <span className={`text-xs px-2 py-0.5 rounded ${entry.status === 'synced' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-            {entry.status === 'synced' ? '반영' : '대기'}
+          <span className={`text-xs px-2 py-0.5 rounded border ${entry.status === 'synced' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+            {entry.status === 'synced' ? '원장반영' : '서버저장'}
           </span>
         </td>
         <td className="text-center px-3 py-1.5">

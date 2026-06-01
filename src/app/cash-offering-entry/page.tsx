@@ -271,11 +271,14 @@ export default function CashOfferingEntryPage() {
   };
 
   // 비고에서 Enter → 새 행 추가 + 다음 행 헌금자로 포커스 (서버 저장 X, localStorage만)
+  // 신규 행의 코드는 직전 행의 코드를 상속 (대부분 같은 코드 연속 입력)
   const addNewRow = (idx: number) => {
     setNewRows(prev => {
       // 현재 행이 마지막이면 새 빈 행 추가, 아니면 그대로 (다음 행으로 이동만)
       const isLast = idx === prev.length - 1;
-      return isLast ? [...prev, newBlankRow()] : prev;
+      if (!isLast) return prev;
+      const inheritedCode = prev[idx]?.code || '11';
+      return [...prev, { donor_name: '', amount: '', code: inheritedCode, note: '' }];
     });
     setTimeout(() => {
       inputRefs.current.get(`new-donor-${idx + 1}`)?.focus();

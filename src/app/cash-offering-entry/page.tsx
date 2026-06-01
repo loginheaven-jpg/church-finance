@@ -235,9 +235,10 @@ export default function CashOfferingEntryPage() {
       return;
     }
 
-    // Enter: 비고 건너뛰고 바로 다음 행 헌금자로 (비고가 필요하면 마우스/Tab으로)
+    // Enter: 금액이 입력된 경우만 다음 행으로 (공란 Enter는 무시 — 실수 방지)
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
+      if (!currentVal) return;
       addNewRow(idx);
     }
   };

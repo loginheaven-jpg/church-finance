@@ -3664,6 +3664,66 @@ export async function updateCashOfferingEntry(
   });
 }
 
+// 여러 행의 status/synced_to_inc_id/updated_at을 단일 batchUpdate로 일괄 변경.
+// sync 후 35건 같은 대량 처리에서 API 호출 70회(read 35 + write 35) → 2회(read 1 + write 1)로 감소.
+// Google Sheets API quota(분당 60 reads/writes) 초과 방지.
+export async function bulkUpdateCashOfferingEntriesStatus(
+  updates: Array<{
+    rowIndex: number;
+    status: 'pending' | 'synced';
+    synced_to_inc_id?: string;
+    updated_at?: string;
+  }>
+): Promise<void> {
+  if (updates.length === 0) return;
+
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.cashOfferingEntry;
+
+  // 헤더 1회만 조회 (모든 행의 컬럼 인덱스는 동일)
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!1:1`,
+  });
+  const header = headerRes.data.values?.[0] || [];
+  const statusCol = header.indexOf('status');
+  const incIdCol = header.indexOf('synced_to_inc_id');
+  const updatedAtCol = header.indexOf('updated_at');
+
+  if (statusCol < 0) {
+    throw new Error('헌금함입력 시트에 status 컬럼이 없습니다. initCashOfferingEntrySheet 실행 필요.');
+  }
+
+  const colLetter = (idx: number) => String.fromCharCode(65 + idx);
+
+  // 모든 행의 모든 컬럼 업데이트를 하나의 data 배열로 packing
+  const data: { range: string; values: (string | number)[][] }[] = [];
+  for (const u of updates) {
+    data.push({
+      range: `${sheetName}!${colLetter(statusCol)}${u.rowIndex}`,
+      values: [[u.status]],
+    });
+    if (incIdCol >= 0 && u.synced_to_inc_id !== undefined) {
+      data.push({
+        range: `${sheetName}!${colLetter(incIdCol)}${u.rowIndex}`,
+        values: [[u.synced_to_inc_id]],
+      });
+    }
+    if (updatedAtCol >= 0 && u.updated_at !== undefined) {
+      data.push({
+        range: `${sheetName}!${colLetter(updatedAtCol)}${u.rowIndex}`,
+        values: [[u.updated_at]],
+      });
+    }
+  }
+
+  // 단일 batchUpdate 호출
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: { valueInputOption: 'USER_ENTERED', data },
+  });
+}
+
 export async function deleteCashOfferingEntry(rowIndex: number): Promise<void> {
   const sheets = getGoogleSheetsClient();
   const meta = await sheets.spreadsheets.get({

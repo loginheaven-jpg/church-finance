@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchCashOfferings, addIncomeRecords, getBankTransactions, updateBankTransaction, generateId, getKSTDateTime, getWeekEndingSunday, updateCashOfferingEntry } from '@/lib/google-sheets';
+import { fetchCashOfferings, addIncomeRecords, getBankTransactions, updateBankTransaction, generateId, getKSTDateTime, getWeekEndingSunday, bulkUpdateCashOfferingEntriesStatus } from '@/lib/google-sheets';
 import { syncCashOfferingsWithDuplicatePrevention } from '@/lib/matching-engine';
 import { invalidateYearCache } from '@/lib/redis';
 import type { IncomeRecord } from '@/types';
@@ -88,24 +88,31 @@ export async function POST(request: NextRequest) {
 
       await addIncomeRecords(incomeRecords);
 
-      // 헌금함입력 시트의 status를 'synced'로 업데이트 + synced_to_inc_id 기록
+      // 헌금함입력 시트의 status를 'synced'로 일괄 업데이트 + synced_to_inc_id 기록
       // (rowIndex 있는 항목만, 즉 신규 헌금함입력 시트에서 온 entries만)
+      // 35건도 단일 batchUpdate로 처리 → API 호출 70회 → 2회로 quota 절약
       let statusUpdatedCount = 0;
       const updatedAt = getKSTDateTime();
-      for (let i = 0; i < previewData.length; i++) {
-        const item = previewData[i];
-        if (!item.rowIndex) continue;
-        try {
-          await updateCashOfferingEntry(item.rowIndex, {
-            status: 'synced',
+      const statusUpdates = previewData
+        .map((item, i) => {
+          if (!item.rowIndex) return null;
+          return {
+            rowIndex: item.rowIndex,
+            status: 'synced' as const,
             synced_to_inc_id: incomeRecords[i].id,
             updated_at: updatedAt,
-          });
-          statusUpdatedCount++;
+          };
+        })
+        .filter((u): u is NonNullable<typeof u> => u !== null);
+
+      if (statusUpdates.length > 0) {
+        try {
+          await bulkUpdateCashOfferingEntriesStatus(statusUpdates);
+          statusUpdatedCount = statusUpdates.length;
         } catch (err) {
-          console.error(`[sync/cash-offering] rowIndex=${item.rowIndex} status 업데이트 실패:`, err);
+          console.error('[sync/cash-offering] bulk status 업데이트 실패:', err);
           // 부분 실패 허용 — 수입부에는 이미 반영됨, 헌금함입력 status만 못 바꿈
-          warnings.push(`행 ${item.rowIndex} status 업데이트 실패 (수입부엔 반영됨)`);
+          warnings.push(`헌금함입력 시트 status 일괄 업데이트 실패 (수입부엔 반영됨): ${(err as Error).message}`);
         }
       }
 

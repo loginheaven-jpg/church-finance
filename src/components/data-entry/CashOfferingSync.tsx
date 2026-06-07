@@ -210,19 +210,35 @@ export function CashOfferingSync() {
         toast.success(`${result.processed}건의 현금헌금을 수입부에 반영했습니다`);
 
         // ★ 크로스체크: 반영 후 수입부 헌금함 합계 검증
+        // quota 한계로 readSheet가 일시 fail → 빈 배열 반환 → 0원 헛경보 방지용 재시도
         try {
-          const verifyRes = await fetch(`/api/income/records?startDate=${startDate}&endDate=${endDate}`);
-          const verifyData = await verifyRes.json();
-          if (verifyData.success) {
-            const allRecords = verifyData.data?.records || verifyData.data || [];
-            const cashRecords = allRecords.filter((r: { source: string }) => r.source === '헌금함');
-            const dbTotal = cashRecords.reduce((s: number, r: { amount: number }) => s + (r.amount || 0), 0);
-            const syncTotal = result.totalAmount || 0;
-            if (dbTotal >= syncTotal) {
-              toast.success(`✅ 크로스체크 통과: 수입부 헌금함 ${dbTotal.toLocaleString()}원 반영 확인`, { duration: 4000 });
+          const syncTotal = result.totalAmount || 0;
+          let dbTotal = 0;
+          let verifyOk = false;
+          const delays = [500, 1500, 3000]; // 점진적 백오프
+
+          for (let attempt = 0; attempt < delays.length; attempt++) {
+            await new Promise(r => setTimeout(r, delays[attempt]));
+            const verifyRes = await fetch(`/api/income/records?startDate=${startDate}&endDate=${endDate}`);
+            const verifyData = await verifyRes.json();
+            if (verifyData.success) {
+              const allRecords = verifyData.data?.records || verifyData.data || [];
+              const cashRecords = allRecords.filter((r: { source: string }) => r.source === '헌금함');
+              dbTotal = cashRecords.reduce((s: number, r: { amount: number }) => s + (r.amount || 0), 0);
+              if (dbTotal >= syncTotal) {
+                verifyOk = true;
+                break; // 통과 → 즉시 종료
+              }
+              // 0원이거나 모자라면 재시도 (quota fallback 또는 캐시 지연)
             } else {
-              toast.error(`❌ 크로스체크 실패: 반영 ${syncTotal.toLocaleString()}원 → 수입부 ${dbTotal.toLocaleString()}원 (차이 ${(syncTotal - dbTotal).toLocaleString()}원)`, { duration: 8000 });
+              // verify API 자체 실패 — 다음 시도
             }
+          }
+
+          if (verifyOk) {
+            toast.success(`✅ 크로스체크 통과: 수입부 헌금함 ${dbTotal.toLocaleString()}원 반영 확인`, { duration: 4000 });
+          } else {
+            toast.error(`❌ 크로스체크 실패: 반영 ${syncTotal.toLocaleString()}원 → 수입부 ${dbTotal.toLocaleString()}원 (차이 ${(syncTotal - dbTotal).toLocaleString()}원). API quota 일시 초과 가능성 — 잠시 후 수입부에서 직접 확인하세요.`, { duration: 8000 });
           }
         } catch {
           // 크로스체크 실패해도 반영 자체는 완료

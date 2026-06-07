@@ -212,31 +212,41 @@ export function WeeklyClosingPanel() {
     loadHistory();
   }, [loadHistory]);
 
-  // 마감 확정
-  const handleConfirm = async () => {
-    if (!preview) return;
+  // (handleConfirm 제거 — Phase 2의 마감 행만 추가하던 동작은 Phase 3-B에서 handleApply로 통합)
+
+  // Phase 3-B: 실제 적용 (마감 확정 + 시트 보정 + plan JSON 저장)
+  // 드라이런 결과가 있어야 호출 가능 (사용자가 plan을 검토했음을 보장)
+  const handleApply = async () => {
+    if (!preview || !dryRun) return;
     setConfirming(true);
     try {
-      const r = await fetch('/api/weekly-closing', {
+      const r = await fetch('/api/weekly-closing/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          closing_at: preview.currClosingAt,
           closing_week: preview.candidateRecordedSunday,
-          closed_at: preview.currClosingAt,
           note: '',
         }),
       });
       const data = await r.json();
       if (data.success) {
-        toast.success(`마감 확정: ${preview.candidateRecordedSunday}`);
+        const { bank, income, expense, total } = data.applied;
+        toast.success(
+          total > 0
+            ? `마감 확정: ${data.closing_week} | 보정 ${total}건 (bank ${bank}, inc ${income}, exp ${expense})`
+            : `마감 확정: ${data.closing_week} | 보정 대상 없음 (이력만 추가)`,
+        );
         setShowConfirmDialog(false);
+        // 적용 후 모든 영역 새로고침
+        setPreview(null);
+        setDryRun(null);
         await loadHistory();
-        await loadPreview();
       } else {
-        toast.error(data.error || '확정 실패');
+        toast.error(data.error || '실제 적용 실패');
       }
     } catch {
-      toast.error('확정 중 오류');
+      toast.error('실제 적용 중 오류');
     } finally {
       setConfirming(false);
     }
@@ -470,27 +480,29 @@ export function WeeklyClosingPanel() {
                     {dryRun.summary.totalToUpdate === 0 && (
                       <div className="text-sm text-slate-600 py-2">
                         보정 대상 0건 — 이번 사이클 거래가 이미 모두 올바른 회계 기준일로 들어가 있습니다.
+                        (적용 시 마감 이력만 추가됩니다.)
                       </div>
                     )}
-                  </div>
-                )}
-              </div>
 
-              {/* 확정 버튼 */}
-              <div className="flex items-center justify-end gap-2 pt-2">
-                {isSuperAdmin ? (
-                  <Button
-                    onClick={() => setShowConfirmDialog(true)}
-                    disabled={confirming || preview.summary.inThisCycle.count === 0}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <CheckCircle2 className="h-4 w-4 mr-1" />
-                    이번 사이클 마감 확정 ({preview.summary.inThisCycle.count}건)
-                  </Button>
-                ) : (
-                  <div className="text-xs text-slate-500 flex items-center gap-1">
-                    <Lock className="h-3 w-3" />
-                    확정은 super_admin 권한 필요
+                    {/* Phase 3-B: 실제 적용 버튼 — 드라이런 검토 후 활성화 */}
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-purple-200">
+                      {isSuperAdmin ? (
+                        <Button
+                          onClick={() => setShowConfirmDialog(true)}
+                          disabled={confirming}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-1" />
+                          실제 적용 (보정 + 마감 확정)
+                          {dryRun.summary.totalToUpdate > 0 && ` — ${dryRun.summary.totalToUpdate}건 보정`}
+                        </Button>
+                      ) : (
+                        <div className="text-xs text-slate-500 flex items-center gap-1">
+                          <Lock className="h-3 w-3" />
+                          실제 적용은 super_admin 권한 필요
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -561,7 +573,7 @@ export function WeeklyClosingPanel() {
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>마감 확정</AlertDialogTitle>
+            <AlertDialogTitle>실제 적용 (시트 보정 + 마감 확정)</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <div>
                 회계 인식 주일: <span className="font-mono font-medium">{preview?.candidateRecordedSunday}</span>
@@ -573,16 +585,32 @@ export function WeeklyClosingPanel() {
                 이번 사이클 거래: <span className="font-medium">{preview?.summary.inThisCycle.count}건</span>
                 {' '}(입금 {fmt(preview?.summary.inThisCycle.deposit || 0)}원 / 출금 {fmt(preview?.summary.inThisCycle.withdrawal || 0)}원)
               </div>
-              <div className="text-xs text-amber-700 pt-2">
-                Phase 2: 이력 행만 추가됩니다. 거래 시트 보정은 Phase 3에서 적용 예정.
+
+              {dryRun && (
+                <div className="bg-purple-50 border border-purple-200 rounded p-2 text-xs space-y-0.5">
+                  <div className="font-medium text-purple-900">시트 보정 예정</div>
+                  <div>은행원장: <span className="font-bold">{dryRun.summary.bankToUpdate}건</span> 변경 / {dryRun.summary.bankUnchanged}건 동일</div>
+                  <div>수입부: <span className="font-bold">{dryRun.summary.incomeToUpdate}건</span> 변경 / {dryRun.summary.incomeUnchanged}건 동일</div>
+                  <div>지출부: <span className="font-bold">{dryRun.summary.expenseToUpdate}건</span> 변경 / {dryRun.summary.expenseUnchanged}건 동일</div>
+                  <div className="pt-1 text-purple-700">
+                    총 보정: <span className="font-bold">{dryRun.summary.totalToUpdate}건</span>
+                    {dryRun.summary.totalToUpdate === 0 && ' (이력만 추가)'}
+                  </div>
+                </div>
+              )}
+
+              <div className="text-xs text-amber-700 pt-1">
+                ⚠️ 시트의 date 컬럼이 보정 주일로 변경됩니다.
+                <br />
+                취소 시 자동 원복 가능 (plan JSON 저장됨).
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirm} disabled={confirming}>
+            <AlertDialogAction onClick={handleApply} disabled={confirming}>
               {confirming && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-              확정
+              실제 적용
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -592,7 +620,7 @@ export function WeeklyClosingPanel() {
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>직전 마감 취소</AlertDialogTitle>
+            <AlertDialogTitle>직전 마감 취소 + 보정 원복</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <div>
                 대상: <span className="font-mono font-medium">{lastActive?.closing_week}</span>
@@ -600,8 +628,11 @@ export function WeeklyClosingPanel() {
               <div>
                 마감 시각: <span className="font-mono">{lastActive?.closed_at}</span>
               </div>
-              <div className="text-xs text-slate-600 pt-2">
-                soft cancel — 시트 행은 보존되며 cancelled_at/by가 기록됩니다.
+              <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs">
+                <div className="font-medium text-amber-900 mb-1">취소 시 자동 처리</div>
+                <div>① applied_plan에 저장된 보정 행들의 date를 원래 값으로 원복</div>
+                <div>② 주간마감 시트 행은 보존 (cancelled_at/by 표시 — soft cancel)</div>
+                <div>③ 캐시 무효화</div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

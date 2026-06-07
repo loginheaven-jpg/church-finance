@@ -3794,10 +3794,12 @@ export interface WeeklyClosing {
   note?: string;              // 비고 (예: '초기 시작점', '직전 마감 취소')
   cancelled_at?: string;      // 취소 시각 (있으면 무효 처리)
   cancelled_by?: string;
+  applied_plan?: string;      // Phase 3-B: ClosingPlan JSON (취소 원복용)
 }
 
 const WEEKLY_CLOSING_HEADERS = [
   'closing_week', 'closed_at', 'closed_by', 'note', 'cancelled_at', 'cancelled_by',
+  'applied_plan', // Phase 3-B 신규
 ];
 
 // 시트가 없으면 헤더와 함께 생성
@@ -3842,6 +3844,7 @@ export async function getWeeklyClosings(): Promise<WeeklyClosing[]> {
       ? normalizeDatetimeStr(row[idx('cancelled_at')])
       : undefined,
     cancelled_by: row[idx('cancelled_by')] || undefined,
+    applied_plan: row[idx('applied_plan')] || undefined,
   })).filter(c => c.closing_week);
 }
 
@@ -3873,8 +3876,34 @@ function normalizeDatetimeStr(s: string): string {
   return `${date} ${hh}:${mm}:${ss}`;
 }
 
+// 주간마감 시트 헤더 보강 — 기존 시트에 applied_plan 등 누락 컬럼 자동 추가
+async function ensureWeeklyClosingHeader(): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.weeklyClosing;
+  try {
+    const headerRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      range: `${sheetName}!1:1`,
+    });
+    const existing = headerRes.data.values?.[0] || [];
+    // 모든 표준 헤더가 있는지 확인. 없으면 전체 헤더 update (1행 덮어쓰기)
+    const missing = WEEKLY_CLOSING_HEADERS.filter(h => !existing.includes(h));
+    if (missing.length === 0) return;
+    const lastCol = String.fromCharCode(65 + WEEKLY_CLOSING_HEADERS.length - 1);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      range: `${sheetName}!A1:${lastCol}1`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [WEEKLY_CLOSING_HEADERS] },
+    });
+  } catch {
+    // 시트가 없으면 init이 처리
+  }
+}
+
 // 마감 추가 (확정)
 export async function addWeeklyClosing(entry: Omit<WeeklyClosing, 'rowIndex'>): Promise<void> {
+  await ensureWeeklyClosingHeader();
   const row = WEEKLY_CLOSING_HEADERS.map(h => {
     const v = (entry as unknown as Record<string, unknown>)[h];
     return v === undefined || v === null ? '' : String(v);
@@ -3890,6 +3919,35 @@ export async function addWeeklyClosing(entry: Omit<WeeklyClosing, 'rowIndex'>): 
     }
     throw e;
   }
+}
+
+// 여러 행의 date 컬럼을 단일 batchUpdate로 변경.
+// Phase 3-B: 마감 확정/취소 시 보정 적용.
+// rowIndex별로 새 date 값을 한 번에 push. 헤더 1회 조회 + 단일 batchUpdate = 2회 API 호출.
+export async function bulkUpdateRecordDates(
+  sheetName: string,
+  updates: Array<{ rowIndex: number; date: string }>,
+): Promise<void> {
+  if (updates.length === 0) return;
+  const sheets = getGoogleSheetsClient();
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!1:1`,
+  });
+  const header = headerRes.data.values?.[0] || [];
+  const dateCol = header.indexOf('date');
+  if (dateCol < 0) {
+    throw new Error(`${sheetName} 시트에 'date' 컬럼이 없습니다`);
+  }
+  const colLetter = String.fromCharCode(65 + dateCol);
+  const data = updates.map(u => ({
+    range: `${sheetName}!${colLetter}${u.rowIndex}`,
+    values: [[u.date]],
+  }));
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: { valueInputOption: 'USER_ENTERED', data },
+  });
 }
 
 // 직전 활성 마감 취소 (cancelled_at/cancelled_by 채움)
@@ -3911,6 +3969,83 @@ export async function cancelLastActiveClosing(cancelledBy: string): Promise<Week
   }
   const cancelledAt = getKSTDateTime();
   const colLetter = (i: number) => String.fromCharCode(65 + i);
+
+  // Phase 3-B: applied_plan이 있으면 보정 원복 먼저 수행
+  // (실패하면 cancelled_at 표시도 안 함 — 일관성 유지)
+  let revertedCounts = { bank: 0, income: 0, expense: 0 };
+  if (last.applied_plan) {
+    try {
+      const plan = JSON.parse(last.applied_plan) as {
+        bank?: { toUpdate?: Array<{ id: string; before_date: string }> };
+        income?: { toUpdate?: Array<{ id: string; before_date: string }> };
+        expense?: { toUpdate?: Array<{ id: string; before_date: string }> };
+      };
+
+      // 카테고리별 id → rowIndex 매핑을 위해 시트 다시 읽기 (적용 후 행이 이동했을 가능성)
+      const [allBank, allIncome, allExpense] = await Promise.all([
+        getBankTransactions(),
+        getIncomeRecords(),
+        getExpenseRecords(),
+      ]);
+
+      // 헬퍼: id 기반 rowIndex 매핑 (rowIndex는 시트의 위치)
+      const findRowIndex = async (sheetKey: string, id: string): Promise<number | null> => {
+        const rows = await readSheet(sheetKey);
+        for (let i = 1; i < rows.length; i++) {
+          if (rows[i][0] === id) return i + 1; // 시트 행 번호 (1-based)
+        }
+        return null;
+      };
+
+      // bank
+      if (plan.bank?.toUpdate?.length) {
+        const updates: Array<{ rowIndex: number; date: string }> = [];
+        for (const r of plan.bank.toUpdate) {
+          // BankTransaction은 id 매칭으로 rowIndex 찾기
+          // (getBankTransactions가 rowIndex를 제공하지 않으므로 readSheet 1회)
+          const rowIndex = await findRowIndex(FINANCE_CONFIG.sheets.bank, r.id);
+          if (rowIndex) updates.push({ rowIndex, date: r.before_date });
+        }
+        if (updates.length > 0) {
+          await bulkUpdateRecordDates(FINANCE_CONFIG.sheets.bank, updates);
+          revertedCounts.bank = updates.length;
+        }
+      }
+
+      // income
+      if (plan.income?.toUpdate?.length) {
+        const updates: Array<{ rowIndex: number; date: string }> = [];
+        for (const r of plan.income.toUpdate) {
+          const rowIndex = await findRowIndex(FINANCE_CONFIG.sheets.income, r.id);
+          if (rowIndex) updates.push({ rowIndex, date: r.before_date });
+        }
+        if (updates.length > 0) {
+          await bulkUpdateRecordDates(FINANCE_CONFIG.sheets.income, updates);
+          revertedCounts.income = updates.length;
+        }
+      }
+
+      // expense
+      if (plan.expense?.toUpdate?.length) {
+        const updates: Array<{ rowIndex: number; date: string }> = [];
+        for (const r of plan.expense.toUpdate) {
+          const rowIndex = await findRowIndex(FINANCE_CONFIG.sheets.expense, r.id);
+          if (rowIndex) updates.push({ rowIndex, date: r.before_date });
+        }
+        if (updates.length > 0) {
+          await bulkUpdateRecordDates(FINANCE_CONFIG.sheets.expense, updates);
+          revertedCounts.expense = updates.length;
+        }
+      }
+
+      // 사용하지 않는 변수 경고 회피
+      void allBank; void allIncome; void allExpense;
+    } catch (revertErr) {
+      console.error('[cancelLastActiveClosing] 원복 실패:', revertErr);
+      throw new Error(`보정 원복 실패: ${(revertErr as Error).message}. 마감 행은 취소되지 않았습니다.`);
+    }
+  }
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: FINANCE_CONFIG.spreadsheetId,
     requestBody: {
@@ -3927,5 +4062,12 @@ export async function cancelLastActiveClosing(cancelledBy: string): Promise<Week
       ],
     },
   });
-  return { ...last, cancelled_at: cancelledAt, cancelled_by: cancelledBy };
+  return {
+    ...last,
+    cancelled_at: cancelledAt,
+    cancelled_by: cancelledBy,
+    note: revertedCounts.bank + revertedCounts.income + revertedCounts.expense > 0
+      ? `${last.note || ''} [원복 bank:${revertedCounts.bank} inc:${revertedCounts.income} exp:${revertedCounts.expense}]`.trim()
+      : last.note,
+  };
 }

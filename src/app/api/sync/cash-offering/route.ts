@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchCashOfferings, addIncomeRecords, getBankTransactions, updateBankTransaction, generateId, getKSTDateTime, getWeekEndingSunday, bulkUpdateCashOfferingEntriesStatus } from '@/lib/google-sheets';
+import { fetchCashOfferings, addIncomeRecords, generateId, getKSTDateTime, getWeekEndingSunday, bulkUpdateCashOfferingEntriesStatus } from '@/lib/google-sheets';
 import { syncCashOfferingsWithDuplicatePrevention } from '@/lib/matching-engine';
 import { invalidateYearCache } from '@/lib/redis';
 import type { IncomeRecord } from '@/types';
@@ -33,42 +33,10 @@ export async function POST(request: NextRequest) {
     if (previewData && Array.isArray(previewData) && previewData.length > 0) {
       const totalAmount = previewData.reduce((sum: number, item: PreviewData) => sum + item.amount, 0);
       const warnings: string[] = [];
-      let suppressedCount = 0;
 
-      // 해당 기간의 은행 입금 내역 조회 (말소용)
-      const allBankTransactions = await getBankTransactions();
-      const bankDeposits = allBankTransactions.filter(tx =>
-        tx.transaction_date >= startDate &&
-        tx.transaction_date <= endDate &&
-        tx.deposit > 0 &&
-        !tx.suppressed &&
-        tx.matched_status === 'pending'
-      );
-
-      // "헌금함" 키워드가 있는 입금 찾기
-      const cashDepositCandidates = bankDeposits.filter(tx => {
-        const text = `${tx.description || ''} ${tx.detail || ''} ${tx.memo || ''}`.toLowerCase();
-        return text.includes('헌금함') || text.includes('헌금') || text.includes('현금');
-      });
-
-      // 금액이 일치하는 입금 찾기 (오차 1000원 허용)
-      const matchingDeposit = cashDepositCandidates.find(tx =>
-        Math.abs(tx.deposit - totalAmount) < 1000
-      );
-
-      if (matchingDeposit) {
-        await updateBankTransaction(matchingDeposit.id, {
-          matched_status: 'suppressed',
-          matched_type: 'cash_offering_batch',
-          suppressed: true,
-          suppressed_reason: `현금헌금 합산 (${totalAmount.toLocaleString()}원), ${previewData.length}건`,
-        });
-        suppressedCount = 1;
-      } else if (totalAmount > 10000) {
-        warnings.push(
-          `현금헌금 합계 ${totalAmount.toLocaleString()}원과 일치하는 은행 입금을 찾지 못했습니다.`
-        );
-      }
+      // 헌금함 입금 자동 말소는 BankUpload → /api/match/auto 단계에서
+      // 'cash_offering_batch'로 동일하게 처리됨. 이중 처리 방지를 위해 sync에선 생략.
+      // (운영 순서: 헌금함 sync 먼저 → 은행원장 업로드 → 매칭 시 헌금함 입금 자동 말소)
 
       // previewData를 수입부 레코드로 변환
       const incomeRecords: IncomeRecord[] = previewData.map((item: PreviewData) => ({
@@ -124,7 +92,7 @@ export async function POST(request: NextRequest) {
         success: true,
         processed: incomeRecords.length,
         totalAmount,
-        suppressedBankTransactions: suppressedCount,
+        suppressedBankTransactions: 0, // sync 단계에선 자동말소 안 함 (매칭 단계에 일임)
         statusUpdatedCount,
         warnings,
         message: `${incomeRecords.length}건의 현금헌금이 동기화되었습니다 (status 업데이트: ${statusUpdatedCount}건)`,

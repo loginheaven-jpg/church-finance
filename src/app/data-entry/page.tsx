@@ -6,6 +6,7 @@ import { CashOfferingSync } from '@/components/data-entry/CashOfferingSync';
 import { BankUpload } from '@/components/data-entry/BankUpload';
 import { FinanceReflection } from '@/components/data-entry/FinanceReflection';
 import { IncomeCorrection } from '@/components/data-entry/IncomeCorrection';
+import { WeeklyClosingPanel } from '@/components/data-entry/WeeklyClosingPanel';
 
 export default function DataEntryPage() {
   const [activeTab, setActiveTab] = useState('sync');
@@ -26,8 +27,9 @@ export default function DataEntryPage() {
           <CashOfferingSync />
         </TabsContent>
 
-        <TabsContent value="bank" className="mt-6">
+        <TabsContent value="bank" className="mt-6 space-y-6">
           <BankUpload />
+          <WeeklyClosingPanel />
         </TabsContent>
 
         <TabsContent value="finance" className="mt-6">

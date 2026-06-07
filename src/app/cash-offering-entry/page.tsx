@@ -772,8 +772,8 @@ function SavedRow({
       <td className="px-3 py-1.5 text-right font-medium">{formatAmount(entry.amount)}</td>
       <td className="px-3 py-1.5 text-xs text-slate-500">{entry.note}</td>
       <td className="text-center px-3 py-1.5">
-        <span className={`text-xs px-2 py-0.5 rounded ${entry.status === 'synced' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-          {entry.status === 'synced' ? '반영' : '대기'}
+        <span className={`text-xs px-2 py-0.5 rounded border ${entry.status === 'synced' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+          {entry.status === 'synced' ? '원장반영' : '서버저장'}
         </span>
       </td>
       <td className="text-center px-3 py-1.5">

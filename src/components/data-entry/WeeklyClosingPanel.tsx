@@ -54,6 +54,47 @@ interface PreviewSampleRow {
   detail: string;
 }
 
+interface ClosingPlanRow {
+  id: string;
+  before_date: string;
+  after_date: string;
+  transaction_date?: string;
+  time?: string;
+  amount?: number;
+  description?: string;
+  deposit?: number;
+  withdrawal?: number;
+}
+
+interface DryRunResponse {
+  success: boolean;
+  error?: string;
+  prevClosedAt: string | null;
+  currClosingAt: string;
+  classificationSummary: {
+    alreadyProcessed: number;
+    inThisCycle: number;
+    futureCycle: number;
+    noTime: number;
+  };
+  plan: {
+    targetRecordedSunday: string;
+    targetClosingAt: string;
+    bank: { toUpdate: ClosingPlanRow[]; unchanged: number };
+    income: { toUpdate: ClosingPlanRow[]; unchanged: number };
+    expense: { toUpdate: ClosingPlanRow[]; unchanged: number };
+  };
+  summary: {
+    bankToUpdate: number;
+    bankUnchanged: number;
+    incomeToUpdate: number;
+    incomeUnchanged: number;
+    expenseToUpdate: number;
+    expenseUnchanged: number;
+    totalToUpdate: number;
+  };
+}
+
 interface PreviewResponse {
   success: boolean;
   error?: string;
@@ -83,6 +124,11 @@ export function WeeklyClosingPanel() {
   const [lastActive, setLastActive] = useState<ClosingHistoryEntry | null>(null);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // Phase 3-A: 드라이런 결과
+  const [dryRun, setDryRun] = useState<DryRunResponse | null>(null);
+  const [dryRunError, setDryRunError] = useState<string | null>(null);
+  const [loadingDryRun, setLoadingDryRun] = useState(false);
 
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -116,6 +162,9 @@ export function WeeklyClosingPanel() {
   const loadPreview = useCallback(async () => {
     setLoadingPreview(true);
     setPreviewError(null);
+    // 새 미리보기 호출 시 이전 드라이런 결과 무효화 (혼란 방지)
+    setDryRun(null);
+    setDryRunError(null);
     try {
       const r = await fetch('/api/weekly-closing/preview');
       const data = await r.json();
@@ -132,6 +181,32 @@ export function WeeklyClosingPanel() {
       setLoadingPreview(false);
     }
   }, []);
+
+  // Phase 3-A: 드라이런 — 시트 변경 없이 보정 시뮬레이션
+  const loadDryRun = useCallback(async () => {
+    if (!preview) return;
+    setLoadingDryRun(true);
+    setDryRunError(null);
+    try {
+      const r = await fetch('/api/weekly-closing/dry-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ closing_at: preview.currClosingAt }),
+      });
+      const data = await r.json();
+      if (data.success) {
+        setDryRun(data);
+      } else {
+        setDryRun(null);
+        setDryRunError(data.error || '드라이런 실패');
+      }
+    } catch {
+      setDryRun(null);
+      setDryRunError('드라이런 중 오류');
+    } finally {
+      setLoadingDryRun(false);
+    }
+  }, [preview]);
 
   useEffect(() => {
     loadHistory();
@@ -341,6 +416,66 @@ export function WeeklyClosingPanel() {
                 </div>
               )}
 
+              {/* Phase 3-A: 드라이런 영역 */}
+              <div className="border-t pt-3 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    onClick={loadDryRun}
+                    disabled={loadingDryRun || preview.summary.inThisCycle.count === 0}
+                    variant="outline"
+                    className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                  >
+                    {loadingDryRun ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+                    드라이런 (보정 시뮬레이션, 시트 변경 X)
+                  </Button>
+                  <span className="text-xs text-slate-500">
+                    실제 보정 적용 전에 어떤 행이 어떻게 바뀔지 확인합니다.
+                  </span>
+                </div>
+
+                {dryRunError && (
+                  <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-800">
+                    <AlertTriangle className="h-4 w-4 inline mr-1" />
+                    {dryRunError}
+                  </div>
+                )}
+
+                {dryRun && (
+                  <div className="space-y-2 bg-purple-50/40 border border-purple-200 rounded p-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="text-sm font-medium text-purple-900">
+                        드라이런 결과 — 보정 대상 주일: <span className="font-mono">{dryRun.plan.targetRecordedSunday}</span>
+                      </div>
+                      <div className="text-xs text-purple-700">
+                        총 보정 대상: <span className="font-bold">{dryRun.summary.totalToUpdate}건</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <DryRunCounter label="은행원장" toUpdate={dryRun.summary.bankToUpdate} unchanged={dryRun.summary.bankUnchanged} />
+                      <DryRunCounter label="수입부 INC" toUpdate={dryRun.summary.incomeToUpdate} unchanged={dryRun.summary.incomeUnchanged} />
+                      <DryRunCounter label="지출부 EXP" toUpdate={dryRun.summary.expenseToUpdate} unchanged={dryRun.summary.expenseUnchanged} />
+                    </div>
+
+                    {dryRun.plan.bank.toUpdate.length > 0 && (
+                      <PlanTable title="은행원장 — date 변경 예정" rows={dryRun.plan.bank.toUpdate} />
+                    )}
+                    {dryRun.plan.income.toUpdate.length > 0 && (
+                      <PlanTable title="수입부 INC — date 변경 예정" rows={dryRun.plan.income.toUpdate} />
+                    )}
+                    {dryRun.plan.expense.toUpdate.length > 0 && (
+                      <PlanTable title="지출부 EXP — date 변경 예정" rows={dryRun.plan.expense.toUpdate} />
+                    )}
+
+                    {dryRun.summary.totalToUpdate === 0 && (
+                      <div className="text-sm text-slate-600 py-2">
+                        보정 대상 0건 — 이번 사이클 거래가 이미 모두 올바른 회계 기준일로 들어가 있습니다.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* 확정 버튼 */}
               <div className="flex items-center justify-end gap-2 pt-2">
                 {isSuperAdmin ? (
@@ -539,6 +674,82 @@ function SummaryCard({ label, data, color, highlight = false }: {
       <div className="text-xs space-y-0.5">
         {data.deposit > 0 && <div>+{fmt(data.deposit)}</div>}
         {data.withdrawal > 0 && <div>-{fmt(data.withdrawal)}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Phase 3-A: 드라이런 카테고리별 카운터
+function DryRunCounter({ label, toUpdate, unchanged }: {
+  label: string;
+  toUpdate: number;
+  unchanged: number;
+}) {
+  return (
+    <div className="bg-white border border-purple-100 rounded p-2">
+      <div className="text-slate-600">{label}</div>
+      <div className="flex items-baseline gap-2 mt-0.5">
+        <span className="text-purple-700 font-bold">{fmt(toUpdate)}</span>
+        <span className="text-xs text-slate-500">변경</span>
+        <span className="text-slate-400">/</span>
+        <span className="text-slate-500">{fmt(unchanged)}</span>
+        <span className="text-xs text-slate-400">동일</span>
+      </div>
+    </div>
+  );
+}
+
+// Phase 3-A: 보정 대상 행 표 (접기 가능)
+function PlanTable({ title, rows }: {
+  title: string;
+  rows: ClosingPlanRow[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleRows = expanded ? rows : rows.slice(0, 5);
+  return (
+    <div className="bg-white border border-purple-100 rounded">
+      <button
+        type="button"
+        className="w-full px-3 py-2 text-left text-xs font-medium text-purple-900 hover:bg-purple-50 flex items-center justify-between"
+        onClick={() => setExpanded(v => !v)}
+      >
+        <span>{title} ({rows.length}건)</span>
+        <span className="text-purple-500">
+          {expanded ? '접기 ▲' : rows.length > 5 ? `${rows.length - 5}건 더 ▼` : '펼치기 ▼'}
+        </span>
+      </button>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-purple-50/50 border-t">
+            <tr>
+              <th className="text-left px-2 py-1">ID</th>
+              <th className="text-left px-2 py-1">실제 거래</th>
+              <th className="text-left px-2 py-1">변경 전 date</th>
+              <th className="text-left px-2 py-1">변경 후 date</th>
+              <th className="text-right px-2 py-1">금액</th>
+              <th className="text-left px-2 py-1">내역</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRows.map(row => (
+              <tr key={row.id} className="border-t">
+                <td className="px-2 py-1 font-mono text-slate-500 text-[10px]">{row.id}</td>
+                <td className="px-2 py-1 font-mono text-slate-700">
+                  {row.transaction_date || '—'}
+                  {row.time && <span className="text-slate-400 ml-1">{row.time}</span>}
+                </td>
+                <td className="px-2 py-1 font-mono text-slate-500">{row.before_date || '(빈값)'}</td>
+                <td className="px-2 py-1 font-mono text-purple-700 font-medium">{row.after_date}</td>
+                <td className="px-2 py-1 text-right">
+                  {row.deposit ? <span className="text-blue-700">+{fmt(row.deposit)}</span> : null}
+                  {row.withdrawal ? <span className="text-red-600">-{fmt(row.withdrawal)}</span> : null}
+                  {row.amount && !row.deposit && !row.withdrawal ? <span>{fmt(row.amount)}</span> : null}
+                </td>
+                <td className="px-2 py-1 truncate max-w-xs">{row.description || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

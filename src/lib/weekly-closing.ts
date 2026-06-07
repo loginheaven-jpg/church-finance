@@ -120,3 +120,146 @@ export function getRecordedSundayForDatetime(datetime: string): string {
   next.setUTCDate(d.getUTCDate() + (7 - dayOfWeek));
   return next.toISOString().slice(0, 10);
 }
+
+// ============================================
+// 보정 plan (Phase 3-A)
+// ============================================
+
+import type { IncomeRecord, ExpenseRecord } from '@/types';
+
+export interface ClosingPlanRow {
+  id: string;
+  before_date: string;
+  after_date: string;
+  // 식별용 부가정보 (UI 표시)
+  transaction_date?: string;
+  time?: string;
+  amount?: number;
+  description?: string; // 은행 거래 description / 헌금자 / 거래처
+  deposit?: number;
+  withdrawal?: number;
+}
+
+export interface ClosingPlan {
+  targetRecordedSunday: string;       // 보정 대상 주일
+  targetClosingAt: string;            // 이번 마감 시각
+
+  bank: {
+    toUpdate: ClosingPlanRow[];       // date 변경 필요
+    unchanged: number;                // 이미 동일 (변경 0)
+  };
+  income: {
+    toUpdate: ClosingPlanRow[];
+    unchanged: number;
+  };
+  expense: {
+    toUpdate: ClosingPlanRow[];
+    unchanged: number;
+  };
+}
+
+/**
+ * 이번 사이클 BankTransaction(inThisCycle)으로부터 보정 plan 계산.
+ *
+ * 입력:
+ *   inThisCycleBank: classifyTransactions의 inThisCycle 결과
+ *   targetSunday: 보정 대상 주일 (예: '2026-06-07')
+ *   targetClosingAt: 이번 마감 시각
+ *   allIncome: 전체 수입부 레코드
+ *   allExpense: 전체 지출부 레코드
+ *
+ * 출력: ClosingPlan
+ *
+ * 안전: 입력값 변경 없음. 순수 함수.
+ */
+export function computeClosingPlan(
+  inThisCycleBank: BankTransaction[],
+  targetSunday: string,
+  targetClosingAt: string,
+  allIncome: IncomeRecord[],
+  allExpense: ExpenseRecord[],
+): ClosingPlan {
+  const plan: ClosingPlan = {
+    targetRecordedSunday: targetSunday,
+    targetClosingAt,
+    bank: { toUpdate: [], unchanged: 0 },
+    income: { toUpdate: [], unchanged: 0 },
+    expense: { toUpdate: [], unchanged: 0 },
+  };
+
+  // 1) BankTransaction 보정
+  // matched_ids 모음 (매칭된 income/expense 추적용)
+  const matchedIncomeIds = new Set<string>();
+  const matchedExpenseIds = new Set<string>();
+
+  for (const tx of inThisCycleBank) {
+    const after = targetSunday;
+    const row: ClosingPlanRow = {
+      id: tx.id,
+      before_date: tx.date,
+      after_date: after,
+      transaction_date: tx.transaction_date,
+      time: tx.time,
+      deposit: tx.deposit,
+      withdrawal: tx.withdrawal,
+      description: `${tx.description || ''} ${tx.detail || ''}`.trim(),
+    };
+    if (tx.date !== after) plan.bank.toUpdate.push(row);
+    else plan.bank.unchanged++;
+
+    // matched_ids는 ID 또는 ID,ID 형태 (matching-engine.ts에서 단일 매칭은 단일 ID)
+    if (tx.matched_ids) {
+      const ids = tx.matched_ids.split(',').map(s => s.trim()).filter(Boolean);
+      const type = tx.matched_type || '';
+      for (const id of ids) {
+        if (type.startsWith('income') || type === 'cash_offering_batch') {
+          matchedIncomeIds.add(id);
+        } else if (type.startsWith('expense') || type === 'card_payment_batch') {
+          matchedExpenseIds.add(id);
+        } else {
+          // 타입 모를 때 양쪽에 추가 (안전 — 잘못 매치된 건 income/expense 측에서 무시됨)
+          matchedIncomeIds.add(id);
+          matchedExpenseIds.add(id);
+        }
+      }
+    }
+  }
+
+  // 2) 수입부 보정 (매칭된 inc만 대상)
+  for (const inc of allIncome) {
+    if (!matchedIncomeIds.has(inc.id)) continue;
+    const after = targetSunday;
+    if (inc.date !== after) {
+      plan.income.toUpdate.push({
+        id: inc.id,
+        before_date: inc.date,
+        after_date: after,
+        transaction_date: inc.transaction_date,
+        amount: inc.amount,
+        description: `${inc.source || ''} ${inc.donor_name || ''}`.trim(),
+      });
+    } else {
+      plan.income.unchanged++;
+    }
+  }
+
+  // 3) 지출부 보정 (매칭된 exp만 대상)
+  for (const exp of allExpense) {
+    if (!matchedExpenseIds.has(exp.id)) continue;
+    const after = targetSunday;
+    if (exp.date !== after) {
+      plan.expense.toUpdate.push({
+        id: exp.id,
+        before_date: exp.date,
+        after_date: after,
+        transaction_date: exp.transaction_date,
+        amount: exp.amount,
+        description: `${exp.vendor || ''} ${exp.description || ''}`.trim(),
+      });
+    } else {
+      plan.expense.unchanged++;
+    }
+  }
+
+  return plan;
+}

@@ -3825,7 +3825,8 @@ export async function initWeeklyClosingSheet(): Promise<void> {
   });
 }
 
-// 모든 마감 이력 (취소된 것 포함, cancelled_at 비어있는 것만 활성)
+// 모든 마감 이력 (취소된 것 포함, cancelled_at 비어있는 것만 활성).
+// 구글시트가 '0:00:00' 같은 한 자리 시간으로 저장한 경우 자릿수 정규화 후 반환.
 export async function getWeeklyClosings(): Promise<WeeklyClosing[]> {
   const rows = await readSheet(FINANCE_CONFIG.sheets.weeklyClosing);
   if (rows.length <= 1) return [];
@@ -3834,22 +3835,42 @@ export async function getWeeklyClosings(): Promise<WeeklyClosing[]> {
   return rows.slice(1).map((row, i) => ({
     rowIndex: i + 2,
     closing_week: row[idx('closing_week')] || '',
-    closed_at: row[idx('closed_at')] || '',
+    closed_at: normalizeDatetimeStr(row[idx('closed_at')] || ''),
     closed_by: row[idx('closed_by')] || '',
     note: row[idx('note')] || undefined,
-    cancelled_at: row[idx('cancelled_at')] || undefined,
+    cancelled_at: row[idx('cancelled_at')]
+      ? normalizeDatetimeStr(row[idx('cancelled_at')])
+      : undefined,
     cancelled_by: row[idx('cancelled_by')] || undefined,
   })).filter(c => c.closing_week);
 }
 
 // 가장 최근 활성 마감 (취소되지 않은 마지막 행). 없으면 null.
+// closed_at은 이미 getWeeklyClosings에서 정규화되어 자릿수 일관됨 → localeCompare 안전.
 export async function getLastActiveClosing(): Promise<WeeklyClosing | null> {
   const all = await getWeeklyClosings();
   const active = all.filter(c => !c.cancelled_at);
   if (active.length === 0) return null;
-  // closed_at 내림차순 정렬
   active.sort((a, b) => b.closed_at.localeCompare(a.closed_at));
   return active[0];
+}
+
+// 인라인 normalize (weekly-closing.ts 의존성 회피 — google-sheets.ts는 lib 코어).
+// 'YYYY-MM-DD H:m:s' → 'YYYY-MM-DD HH:mm:ss'
+function normalizeDatetimeStr(s: string): string {
+  if (!s) return '';
+  const trimmed = s.trim();
+  const parts = trimmed.split(/\s+/);
+  if (parts.length < 1) return '';
+  const date = parts[0];
+  if (parts.length === 1) return date;
+  const time = parts[1];
+  const timeParts = time.split(':');
+  if (timeParts.length < 2 || timeParts.length > 3) return trimmed;
+  const hh = (timeParts[0] || '0').padStart(2, '0');
+  const mm = (timeParts[1] || '0').padStart(2, '0');
+  const ss = (timeParts[2] || '0').padStart(2, '0');
+  return `${date} ${hh}:${mm}:${ss}`;
 }
 
 // 마감 추가 (확정)

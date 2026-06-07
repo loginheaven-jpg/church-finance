@@ -122,6 +122,7 @@ export const FINANCE_CONFIG = {
     accounts: '계정',
     cardExpenseTemp: '카드내역임시',
     cashOfferingEntry: '헌금함입력',
+    weeklyClosing: '주간마감',
   },
 };
 
@@ -3777,4 +3778,133 @@ export async function initCashOfferingEntrySheet(): Promise<void> {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [CASH_OFFERING_ENTRY_HEADERS] },
   });
+}
+
+// ============================================
+// 주간 마감 (weekly closing) — Phase 1
+// 매주 [주간 마감] 실행 시 (closing_week, closed_at, closed_by)를 누적.
+// 기존 데이터/플로우에는 영향 없음. 마감을 실행하지 않으면 시스템 동작 동일.
+// ============================================
+
+export interface WeeklyClosing {
+  rowIndex: number;
+  closing_week: string;       // 회계 인식 주일 (YYYY-MM-DD)
+  closed_at: string;          // 마감 시각 (YYYY-MM-DD HH:mm:ss, KST)
+  closed_by: string;          // 마감 실행자 이름
+  note?: string;              // 비고 (예: '초기 시작점', '직전 마감 취소')
+  cancelled_at?: string;      // 취소 시각 (있으면 무효 처리)
+  cancelled_by?: string;
+}
+
+const WEEKLY_CLOSING_HEADERS = [
+  'closing_week', 'closed_at', 'closed_by', 'note', 'cancelled_at', 'cancelled_by',
+];
+
+// 시트가 없으면 헤더와 함께 생성
+export async function initWeeklyClosingSheet(): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.weeklyClosing;
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+  });
+  const exists = meta.data.sheets?.some(s => s.properties?.title === sheetName);
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: sheetName } } }],
+      },
+    });
+  }
+  const lastCol = String.fromCharCode(65 + WEEKLY_CLOSING_HEADERS.length - 1);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!A1:${lastCol}1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [WEEKLY_CLOSING_HEADERS] },
+  });
+}
+
+// 모든 마감 이력 (취소된 것 포함, cancelled_at 비어있는 것만 활성)
+export async function getWeeklyClosings(): Promise<WeeklyClosing[]> {
+  const rows = await readSheet(FINANCE_CONFIG.sheets.weeklyClosing);
+  if (rows.length <= 1) return [];
+  const header = rows[0];
+  const idx = (name: string) => header.indexOf(name);
+  return rows.slice(1).map((row, i) => ({
+    rowIndex: i + 2,
+    closing_week: row[idx('closing_week')] || '',
+    closed_at: row[idx('closed_at')] || '',
+    closed_by: row[idx('closed_by')] || '',
+    note: row[idx('note')] || undefined,
+    cancelled_at: row[idx('cancelled_at')] || undefined,
+    cancelled_by: row[idx('cancelled_by')] || undefined,
+  })).filter(c => c.closing_week);
+}
+
+// 가장 최근 활성 마감 (취소되지 않은 마지막 행). 없으면 null.
+export async function getLastActiveClosing(): Promise<WeeklyClosing | null> {
+  const all = await getWeeklyClosings();
+  const active = all.filter(c => !c.cancelled_at);
+  if (active.length === 0) return null;
+  // closed_at 내림차순 정렬
+  active.sort((a, b) => b.closed_at.localeCompare(a.closed_at));
+  return active[0];
+}
+
+// 마감 추가 (확정)
+export async function addWeeklyClosing(entry: Omit<WeeklyClosing, 'rowIndex'>): Promise<void> {
+  const row = WEEKLY_CLOSING_HEADERS.map(h => {
+    const v = (entry as unknown as Record<string, unknown>)[h];
+    return v === undefined || v === null ? '' : String(v);
+  });
+  try {
+    await appendToSheet(FINANCE_CONFIG.sheets.weeklyClosing, [row]);
+  } catch (e) {
+    const msg = String((e as Error)?.message || e);
+    if (/Unable to parse range|not found|grid/i.test(msg)) {
+      await initWeeklyClosingSheet();
+      await appendToSheet(FINANCE_CONFIG.sheets.weeklyClosing, [row]);
+      return;
+    }
+    throw e;
+  }
+}
+
+// 직전 활성 마감 취소 (cancelled_at/cancelled_by 채움)
+export async function cancelLastActiveClosing(cancelledBy: string): Promise<WeeklyClosing | null> {
+  const last = await getLastActiveClosing();
+  if (!last) return null;
+
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.weeklyClosing;
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    range: `${sheetName}!1:1`,
+  });
+  const header = headerRes.data.values?.[0] || [];
+  const cancelledAtCol = header.indexOf('cancelled_at');
+  const cancelledByCol = header.indexOf('cancelled_by');
+  if (cancelledAtCol < 0 || cancelledByCol < 0) {
+    throw new Error('주간마감 시트에 cancelled_at/cancelled_by 컬럼이 없습니다');
+  }
+  const cancelledAt = getKSTDateTime();
+  const colLetter = (i: number) => String.fromCharCode(65 + i);
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        {
+          range: `${sheetName}!${colLetter(cancelledAtCol)}${last.rowIndex}`,
+          values: [[cancelledAt]],
+        },
+        {
+          range: `${sheetName}!${colLetter(cancelledByCol)}${last.rowIndex}`,
+          values: [[cancelledBy]],
+        },
+      ],
+    },
+  });
+  return { ...last, cancelled_at: cancelledAt, cancelled_by: cancelledBy };
 }

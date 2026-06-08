@@ -284,18 +284,30 @@ function findBestMatchingRule(
 ): MatchingRule | null {
   // 수입/지출에 따라 검색 대상 분리
   let searchText: string;
+  let amount: number;
   if (transaction.deposit > 0) {
     // 수입: memo만 검토
     searchText = (transaction.memo || '').toLowerCase();
+    amount = transaction.deposit;
   } else {
     // 지출: detail + description 검토
     searchText = `${transaction.detail || ''} ${transaction.description || ''}`.toLowerCase();
+    amount = transaction.withdrawal;
   }
 
   let bestMatch: MatchingRule | null = null;
   let bestScore = 0;
 
   for (const rule of rules) {
+    // 금액 조건 검증 — 룰에 amount_min/max 설정되어 있고 거래 금액이 범위 밖이면 스킵
+    // (둘 다 미지정이면 기존 동작과 동일하게 모든 금액 통과)
+    if (rule.amount_min !== undefined && rule.amount_min !== null && Number(rule.amount_min) > 0) {
+      if (amount < Number(rule.amount_min)) continue;
+    }
+    if (rule.amount_max !== undefined && rule.amount_max !== null && Number(rule.amount_max) > 0) {
+      if (amount > Number(rule.amount_max)) continue;
+    }
+
     const score = calculateMatchScore(searchText, rule);
     if (score > bestScore) {
       bestScore = score;

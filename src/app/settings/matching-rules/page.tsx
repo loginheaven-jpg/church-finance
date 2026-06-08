@@ -66,8 +66,12 @@ export default function MatchingRulesPage() {
             <Zap className="h-5 w-5" />
             자동 매칭 규칙
           </CardTitle>
-          <CardDescription>
-            수동 분류 시 자동으로 학습됩니다. 사용량이 높을수록 신뢰도가 높아집니다.
+          <CardDescription className="space-y-1">
+            <div>수동 분류 시 자동으로 학습됩니다. 사용량이 높을수록 신뢰도가 높아집니다.</div>
+            <div className="text-xs text-amber-700">
+              <strong>금액 조건</strong>: 같은 vendor를 금액으로 분기할 때 사용 (예: 한국전력 금액 50만원 이상 = 교회 전기 / 50만원 미만 = 사택 전기).
+              현재는 구글시트 &apos;매칭규칙&apos; 시트의 <code className="bg-amber-100 px-1 rounded">amount_min</code> / <code className="bg-amber-100 px-1 rounded">amount_max</code> 컬럼에 직접 숫자 입력하여 수정. 빈값 = 금액 무관.
+            </div>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -82,6 +86,7 @@ export default function MatchingRulesPage() {
                   <TableHead>유형</TableHead>
                   <TableHead>패턴</TableHead>
                   <TableHead>대상 항목</TableHead>
+                  <TableHead className="text-right">금액 조건</TableHead>
                   <TableHead className="text-right">신뢰도</TableHead>
                   <TableHead className="text-right">사용 횟수</TableHead>
                   <TableHead>생성일</TableHead>
@@ -107,6 +112,17 @@ export default function MatchingRulesPage() {
                         <div className="font-medium">{rule.target_name}</div>
                         <div className="text-slate-500">코드: {rule.target_code}</div>
                       </div>
+                    </TableCell>
+                    <TableCell className="text-right text-xs">
+                      {rule.amount_min || rule.amount_max ? (
+                        <div className="text-blue-700">
+                          {rule.amount_min ? `≥${Number(rule.amount_min).toLocaleString()}` : ''}
+                          {rule.amount_min && rule.amount_max ? <br /> : ''}
+                          {rule.amount_max ? `≤${Number(rule.amount_max).toLocaleString()}` : ''}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">제한 없음</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className={`font-medium ${

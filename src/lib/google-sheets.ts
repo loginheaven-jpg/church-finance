@@ -1152,11 +1152,42 @@ export async function getCardOwners(): Promise<CardOwner[]> {
 // 매칭 규칙 관련
 // ============================================
 
+// 매칭규칙 시트 헤더 자동 보강 — 기존 시트에 amount_min/amount_max 등 누락 컬럼 추가
+const MATCHING_RULES_HEADERS = [
+  'id', 'rule_type', 'pattern', 'target_type', 'target_code',
+  'target_name', 'confidence', 'usage_count', 'created_at', 'updated_at',
+  'amount_min', 'amount_max',
+];
+
+async function ensureMatchingRulesHeader(): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+  const sheetName = FINANCE_CONFIG.sheets.matchingRules;
+  try {
+    const headerRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      range: `${sheetName}!1:1`,
+    });
+    const existing = headerRes.data.values?.[0] || [];
+    const missing = MATCHING_RULES_HEADERS.filter(h => !existing.includes(h));
+    if (missing.length === 0) return;
+    const lastCol = String.fromCharCode(65 + MATCHING_RULES_HEADERS.length - 1);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+      range: `${sheetName}!A1:${lastCol}1`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [MATCHING_RULES_HEADERS] },
+    });
+  } catch {
+    // 시트 없으면 initializeSheets에서 처리
+  }
+}
+
 export async function getMatchingRules(): Promise<MatchingRule[]> {
   return getSheetData<MatchingRule>(FINANCE_CONFIG.sheets.matchingRules);
 }
 
 export async function addMatchingRule(rule: Omit<MatchingRule, 'id'>): Promise<string> {
+  await ensureMatchingRulesHeader();
   const id = generateId('RULE');
   const row = [
     id,
@@ -1169,6 +1200,9 @@ export async function addMatchingRule(rule: Omit<MatchingRule, 'id'>): Promise<s
     rule.usage_count,
     rule.created_at,
     rule.updated_at,
+    // 빈 값이면 빈 문자열 (시트의 number 셀 비교 시 falsy 처리)
+    rule.amount_min !== undefined && rule.amount_min !== null ? rule.amount_min : '',
+    rule.amount_max !== undefined && rule.amount_max !== null ? rule.amount_max : '',
   ];
 
   await appendToSheet(FINANCE_CONFIG.sheets.matchingRules, [row]);
@@ -1208,10 +1242,10 @@ export async function clearMatchingRules(): Promise<number> {
 
   const deleteCount = rows.length - 1;
 
-  // 헤더를 제외한 모든 데이터 삭제 (2행부터)
+  // 헤더를 제외한 모든 데이터 삭제 (2행부터). L열까지 amount_min/amount_max 포함
   await sheets.spreadsheets.values.clear({
     spreadsheetId: FINANCE_CONFIG.spreadsheetId,
-    range: `${FINANCE_CONFIG.sheets.matchingRules}!A2:J${rows.length}`,
+    range: `${FINANCE_CONFIG.sheets.matchingRules}!A2:L${rows.length}`,
   });
 
   return deleteCount;
@@ -1577,7 +1611,8 @@ export async function initializeSheets(): Promise<void> {
     ],
     [FINANCE_CONFIG.sheets.matchingRules]: [
       'id', 'rule_type', 'pattern', 'target_type', 'target_code',
-      'target_name', 'confidence', 'usage_count', 'created_at', 'updated_at'
+      'target_name', 'confidence', 'usage_count', 'created_at', 'updated_at',
+      'amount_min', 'amount_max'
     ],
     [FINANCE_CONFIG.sheets.budget]: [
       'year', 'category_code', 'category_item', 'account_code', 'account_item',

@@ -141,6 +141,11 @@ export interface MatchingRule {
   usage_count: number;
   created_at: string;
   updated_at: string;
+  // 금액 조건 (선택). 같은 vendor를 금액으로 분기할 때 사용.
+  // 예: 한국전력 + amount_min=500000 → 62번 교회 전기 / amount_max=499999 → 61번 사택 전기
+  // 둘 다 비어있으면 금액 무관 (기존 동작과 동일)
+  amount_min?: number;
+  amount_max?: number;
 }
 
 // 예산

@@ -2412,11 +2412,13 @@ export async function updateAccountInfo(
     const row = rows[i];
     if (!row || row.length === 0) continue;
     if ((row[0] || '').trim() === name.trim()) {
+      // 계좌번호 leading zero 보존: apostrophe prefix로 텍스트 강제
+      const accountNumberCell = accountNumber ? `'${accountNumber}` : '';
       await sheets.spreadsheets.values.update({
         spreadsheetId: FINANCE_CONFIG.spreadsheetId,
         range: `${FINANCE_CONFIG.sheets.accounts}!B${i + 1}:C${i + 1}`,
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[bankName, accountNumber]] },
+        requestBody: { values: [[bankName, accountNumberCell]] },
       });
       return true;
     }
@@ -2658,6 +2660,9 @@ export async function addExpenseClaim(claim: {
   bankName: string;
   receiptUrl?: string;
 }): Promise<void> {
+  // 계좌번호: USER_ENTERED가 숫자로 자동 변환하지 않도록 leading apostrophe 추가.
+  // 시트엔 텍스트로 저장되고 표시·읽기 시 apostrophe는 보이지 않음.
+  const accountNumberCell = claim.accountNumber ? `'${claim.accountNumber}` : '';
   const row = [
     claim.claimId,
     claim.claimDate,
@@ -2666,7 +2671,7 @@ export async function addExpenseClaim(claim: {
     claim.accountCode,
     claim.amount,
     claim.description,
-    claim.accountNumber,
+    accountNumberCell,
     claim.receiptUrl || '',   // I: 영수증
     claim.bankName,
     '',

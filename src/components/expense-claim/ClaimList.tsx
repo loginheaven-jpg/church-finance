@@ -278,6 +278,18 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
     ws['!cols'] = [
       { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 20 }, { wch: 15 },
     ];
+
+    // 계좌번호 컬럼(B열)의 모든 데이터 셀을 text type 's'로 강제 → '040...' 앞자리 0 보존
+    // json_to_sheet가 숫자만의 문자열을 자동으로 number type으로 만들 수 있어 명시적 차단
+    for (let r = 2; r <= selectedClaims.length + 1; r++) {
+      const cellRef = `B${r}`;
+      if (ws[cellRef]) {
+        ws[cellRef].t = 's';
+        ws[cellRef].v = String(ws[cellRef].v ?? '');
+        ws[cellRef].w = ws[cellRef].v;
+      }
+    }
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '지출청구');
 

@@ -28,7 +28,13 @@ export async function POST(request: NextRequest) {
     const currentBalance = e11Cell ? parseAmount(e11Cell.v) : null;
 
     // JSON으로 변환
-    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
+    // raw: false → 셀의 formatted text(.w) 사용. 숫자 셀의 앞자리 0 보존 (예: 계좌번호 '040...').
+    // defval: '' → 빈 셀을 ''로 채워 row[idx] undefined 방지.
+    const rawData = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      raw: false,
+      defval: '',
+    }) as unknown[][];
 
     // 헤더 찾기 (농협 XLS 형식)
     // 실제 컬럼 헤더를 찾음 (제목 행과 구분하기 위해 여러 컬럼 헤더가 있는 행을 찾음)
@@ -205,17 +211,22 @@ function parseDatetime(value: unknown): { date: string; time: string } {
   }
 
   // String 형식 파싱
-  // "2024/01/15 14:30:00" or "2024-01-15 14:30"
-  const parts = str.split(' ');
-  const datePart = parts[0].replace(/\//g, '-');
+  // formatted text는 셀 표시 형식에 따라 다양:
+  // "2024/01/15 14:30:00", "2024-01-15 14:30", "2024.01.15 14:30:00" 등
+  const parts = str.trim().split(/\s+/);
+  // 슬래시, 점 모두 하이픈으로 통일
+  const datePart = (parts[0] || '').replace(/[/.]/g, '-');
   const timePart = parts[1] || '';
 
-  // 날짜 형식 확인
   const dateMatch = datePart.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (dateMatch) {
     const [, year, month, day] = dateMatch;
     const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-    const time = timePart.substring(0, 5) || '';
+    // HH:MM 또는 HH:MM:SS 모두 처리
+    const timeMatch = timePart.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    const time = timeMatch
+      ? `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}${timeMatch[3] ? ':' + timeMatch[3] : ''}`
+      : '';
     return { date, time };
   }
 

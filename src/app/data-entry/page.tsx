@@ -2,18 +2,53 @@
 
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { FileSpreadsheet } from 'lucide-react';
+import { toast } from 'sonner';
 import { CashOfferingSync } from '@/components/data-entry/CashOfferingSync';
 import { BankUpload } from '@/components/data-entry/BankUpload';
 import { FinanceReflection } from '@/components/data-entry/FinanceReflection';
 import { IncomeCorrection } from '@/components/data-entry/IncomeCorrection';
 import { WeeklyClosingPanel } from '@/components/data-entry/WeeklyClosingPanel';
+import { useFinanceSession } from '@/lib/auth/use-finance-session';
 
 export default function DataEntryPage() {
   const [activeTab, setActiveTab] = useState('sync');
+  const session = useFinanceSession();
+  const isSuperAdmin = session?.finance_role === 'super_admin';
+
+  // super_admin 클릭 시 재정관리 구글시트를 새 탭으로 오픈
+  const handleOpenLedger = async () => {
+    try {
+      const res = await fetch('/api/admin/finance-sheet-url');
+      const data = await res.json();
+      if (data.success && data.url) {
+        window.open(data.url, '_blank', 'noopener,noreferrer');
+      } else {
+        toast.error(data.error || '원장 URL 조회 실패');
+      }
+    } catch {
+      toast.error('원장 열기 중 오류');
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-slate-900">데이터 입력</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-slate-900">데이터 입력</h1>
+        {isSuperAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenLedger}
+            title="재정관리 구글시트 (원장) 열기"
+            className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            원장
+          </Button>
+        )}
+      </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-4">

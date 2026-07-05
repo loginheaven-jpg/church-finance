@@ -37,8 +37,14 @@ export interface ExpenseRecord {
 // 은행 거래
 export interface BankTransaction {
   id: string;
-  transaction_date: string; // 실제 거래일
-  date: string; // 기준일 (해당 주의 일요일)
+  transaction_date: string; // 실제 거래일 (YYYY-MM-DD)
+  /**
+   * 기준일 (해당 주의 일요일, YYYY-MM-DD).
+   * INVARIANT: date === getWeekEndingSunday(transaction_date).
+   * 서버가 addBankTransactions / updateBankTransaction 에서 자동 계산·강제한다.
+   * 클라이언트/스크립트에서 임의 값 지정 금지.
+   */
+  date: string;
   withdrawal: number;
   deposit: number;
   balance: number;
@@ -47,7 +53,7 @@ export interface BankTransaction {
   branch: string;
   time: string;
   memo: string;
-  matched_status: 'pending' | 'matched' | 'suppressed' | 'ignored';
+  matched_status: 'pending' | 'matched' | 'suppressed';
   matched_type?: string;
   matched_ids?: string;
   suppressed: boolean;

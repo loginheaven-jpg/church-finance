@@ -74,6 +74,10 @@ npm run lint         # ESLint
 
 데이터 변경 API에서 `invalidateYearCache(year)` 호출 필수. `CACHE_VERSION = 'v3'` — 읽기 로직 변경 시 버전 올리기.
 
+### 은행원장 write 규칙 (안 α, 2026-07-05)
+
+**은행원장 시트 write는 반드시 `src/lib/google-sheets.ts` 함수 (`addBankTransactions`, `updateBankTransaction`, `updateBankTransactionsBatch`) 경유.** `sheets.spreadsheets.values.{append,update,batchUpdate}`를 은행원장 대상으로 직접 호출 금지. 이 함수들이 `date = getWeekEndingSunday(transaction_date)` INVARIANT를 강제한다 (자세한 내용은 ARCHITECTURE.md).
+
 ### 패스 별칭
 
 `@/*` → `./src/*` (tsconfig paths)

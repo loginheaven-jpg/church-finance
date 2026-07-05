@@ -64,9 +64,9 @@ export async function syncCashOfferingsWithDuplicatePrevention(
     return text.includes('헌금함') || text.includes('헌금') || text.includes('현금');
   });
 
-  // 금액이 일치하는 입금 찾기 (오차 1000원 허용)
+  // 안 α (N2): 1원 단위 정확 일치 — 오차 허용 제거
   const matchingDeposit = cashDepositCandidates.find(tx =>
-    Math.abs(tx.deposit - totalAmount) < 1000
+    tx.deposit === totalAmount
   );
 
   if (matchingDeposit) {
@@ -169,9 +169,9 @@ export async function registerCardTransactionsWithDuplicatePrevention(
       text.includes('카드대금');
   });
 
-  // 금액이 일치하는 출금 찾기
+  // 안 α (N2): 1원 단위 정확 일치 — 오차 허용 제거
   const matchingWithdrawal = cardPaymentCandidates.find(tx =>
-    Math.abs(tx.withdrawal - totalAmount) < 1000
+    tx.withdrawal === totalAmount
   );
 
   if (matchingWithdrawal) {
@@ -202,81 +202,9 @@ export async function registerCardTransactionsWithDuplicatePrevention(
 // ============================================
 // 3. 자동 매칭 엔진
 // ============================================
-
-export async function autoMatchBankTransactions(): Promise<AutoMatchResult> {
-  const rules = await getMatchingRules();
-  const allTransactions = await getBankTransactions();
-  const unmatchedTransactions = allTransactions.filter(tx =>
-    tx.matched_status === 'pending' && !tx.suppressed
-  );
-
-  const result: AutoMatchResult = {
-    autoMatched: [],
-    suppressed: [],
-    needsReview: [],
-  };
-
-  for (const tx of unmatchedTransactions) {
-    // 말소 대상 체크
-    if (shouldSuppressTransaction(tx)) {
-      result.suppressed.push(tx);
-      await updateBankTransaction(tx.id, {
-        matched_status: 'suppressed',
-        suppressed: true,
-        suppressed_reason: '자동 말소 (헌금함/카드결제)',
-      });
-      continue;
-    }
-
-    // 매칭 규칙 찾기
-    const matchedRule = findBestMatchingRule(tx, rules);
-
-    if (matchedRule && matchedRule.confidence >= 0.8) {
-      // 신뢰도 80% 이상 → 자동 매칭
-      if (tx.deposit > 0) {
-        const income = createIncomeFromBankTransaction(tx, matchedRule);
-        await addIncomeRecords([income]);
-        await updateBankTransaction(tx.id, {
-          matched_status: 'matched',
-          matched_type: 'income_detail',
-          matched_ids: income.id,
-        });
-        await incrementRuleUsage(matchedRule.id);
-        result.autoMatched.push({ transaction: tx, match: matchedRule, record: income });
-      } else if (tx.withdrawal > 0) {
-        const expense = createExpenseFromBankTransaction(tx, matchedRule);
-        await addExpenseRecords([expense]);
-        await updateBankTransaction(tx.id, {
-          matched_status: 'matched',
-          matched_type: 'expense_detail',
-          matched_ids: expense.id,
-        });
-        await incrementRuleUsage(matchedRule.id);
-        result.autoMatched.push({ transaction: tx, match: matchedRule, record: expense });
-      }
-    } else {
-      // 신뢰도 낮음
-      if (tx.deposit > 0) {
-        // 수입: 기본 분류 로직 적용
-        const defaultCode = getDefaultIncomeCode(tx.deposit);
-        const income = createIncomeFromBankTransactionWithCode(tx, defaultCode.code, defaultCode.name);
-        await addIncomeRecords([income]);
-        await updateBankTransaction(tx.id, {
-          matched_status: 'matched',
-          matched_type: 'income_detail',
-          matched_ids: income.id,
-        });
-        result.autoMatched.push({ transaction: tx, match: null, record: income });
-      } else {
-        // 지출: 수동 검토
-        const suggestions = getSuggestedRules(tx, rules, 3);
-        result.needsReview.push({ transaction: tx, suggestions });
-      }
-    }
-  }
-
-  return result;
-}
+// (N1) autoMatchBankTransactions() 함수는 어떤 API에서도 호출되지 않는 dead code 였습니다.
+//      실제 자동 매칭은 /api/match/auto 라우트가 자체 구현으로 수행합니다.
+//      dead code는 매칭 실패 원인 추적을 어렵게 하므로 삭제했습니다.
 
 function findBestMatchingRule(
   transaction: BankTransaction,

@@ -924,25 +924,40 @@ export async function deleteExpenseRecord(id: string): Promise<void> {
 // ============================================
 
 export async function addBankTransactions(transactions: BankTransaction[]): Promise<void> {
-  const rows = transactions.map(t => [
-    t.id,
-    t.transaction_date, // 실제 거래일
-    t.date, // 기준일 (주일)
-    t.withdrawal,
-    t.deposit,
-    t.balance,
-    t.description,
-    t.detail,
-    t.branch,
-    t.time,
-    t.memo,
-    t.matched_status,
-    t.matched_type || '',
-    t.matched_ids || '',
-    t.suppressed,
-    t.suppressed_reason || '',
-    t.uploaded_at,
-  ]);
+  const rows = transactions.map(t => {
+    // 안 α (K1): transaction_date 형식 검증
+    if (!t.transaction_date || !/^\d{4}-\d{2}-\d{2}$/.test(t.transaction_date)) {
+      throw new Error(
+        `[addBankTransactions] transaction_date invalid: ${t.transaction_date} (id=${t.id})`
+      );
+    }
+    // 안 α (K1): date 강제 재계산 (호출자 값 무시). BankTransaction.date INVARIANT: date === getWeekEndingSunday(transaction_date).
+    const canonicalDate = getWeekEndingSunday(t.transaction_date);
+    if (t.date && t.date !== canonicalDate) {
+      console.warn(
+        `[addBankTransactions] date auto-corrected: ${t.date} → ${canonicalDate} (id=${t.id}, tx=${t.transaction_date})`
+      );
+    }
+    return [
+      t.id,
+      t.transaction_date, // 실제 거래일
+      canonicalDate, // 기준일 (주일) — 서버 재계산 강제
+      t.withdrawal,
+      t.deposit,
+      t.balance,
+      t.description,
+      t.detail,
+      t.branch,
+      t.time,
+      t.memo,
+      t.matched_status,
+      t.matched_type || '',
+      t.matched_ids || '',
+      t.suppressed,
+      t.suppressed_reason || '',
+      t.uploaded_at,
+    ];
+  });
 
   await appendToSheet(FINANCE_CONFIG.sheets.bank, rows);
 }
@@ -974,6 +989,25 @@ export async function updateBankTransaction(
   // id 유지 보호망
   const safeUpdates = { ...updates };
   delete safeUpdates.id;
+
+  // 안 α (K2): date 수동수정 금지 — transaction_date 를 함께 갱신해 자동 재계산되도록 유도
+  if ('date' in safeUpdates) {
+    if (!('transaction_date' in safeUpdates)) {
+      throw new Error(
+        `[updateBankTransaction] 'date' 수동수정 금지 (id=${id}). transaction_date를 함께 갱신해 자동 재계산되도록 하세요.`
+      );
+    }
+    delete (safeUpdates as Partial<BankTransaction>).date;
+  }
+  // 안 α (K2): transaction_date 갱신 시 date 자동 재계산 강제
+  if (safeUpdates.transaction_date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(safeUpdates.transaction_date)) {
+      throw new Error(
+        `[updateBankTransaction] transaction_date invalid: ${safeUpdates.transaction_date}`
+      );
+    }
+    (safeUpdates as Partial<BankTransaction>).date = getWeekEndingSunday(safeUpdates.transaction_date);
+  }
 
   const updatedRow = mapper.updateRow(originalRow, safeUpdates);
   const range = mapper.getRange(rowIndex + 1);
@@ -1064,7 +1098,20 @@ export async function updateBankTransactionsBatch(
       },
     });
 
-    return { success: successIds, failed: failedIds };
+    // 안 α (K4): 부분 성공 검증 — Sheets API responses 배열의 updatedCells 확인
+    const responses = response.data.responses || [];
+    const verifiedSuccess: string[] = [];
+    const verifiedFail: string[] = [];
+    successIds.forEach((sid, i) => {
+      const r = responses[i];
+      const ok = !!r && (r.updatedCells ?? 0) > 0;
+      if (ok) verifiedSuccess.push(sid);
+      else verifiedFail.push(sid);
+    });
+    if (verifiedFail.length) {
+      console.error('[updateBankTransactionsBatch] 부분 실패 (updatedCells=0):', verifiedFail);
+    }
+    return { success: verifiedSuccess, failed: [...verifiedFail, ...failedIds] };
   } catch (error) {
     console.error('[updateBankTransactionsBatch] 배치 업데이트 실패:', error);
     // 배치 실패 시 모든 항목 실패로 처리

@@ -871,3 +871,37 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
    - preview API에서 엑셀 E11셀 값(현재잔고) 추출
    - 이전잔고 + A(수입합계) - B(지출합계) = C(E11 현재잔고) 자동 검증
    - 검증 결과를 카드 UI로 표시 (일치: 녹색, 불일치: 적색)
+
+---
+
+## 2026-07-05: 안 α — 은행원장 정합성 방어층
+
+### 문제 배경
+2026 상반기 은행원장에 이상 5건 (row 716·717·718·1428, tx=2026-05-11 47건). 원인 감사 결과: UI 직접편집 1건 + 봇 스크립트 4건 (`fix-bank-ledger.js`, `exec-cleanup-append.js` 등). 봇 스크립트가 `sheets.spreadsheets.values.append`를 직접 호출하면서 date 자동계산·매칭엔진·time 컬럼을 우회.
+
+### 봉쇄 지점 (K1~K8, N1·N2)
+
+| 봉쇄 | 위치 | 조치 |
+|---|---|---|
+| K1 | `google-sheets.ts:926 addBankTransactions` | `date = getWeekEndingSunday(transaction_date)` 서버측 재계산 강제 (호출자 값 무시) |
+| K2 | `google-sheets.ts:959 updateBankTransaction` | date만 수동수정 금지; transaction_date 갱신 시 date 자동 재계산 |
+| K3 | `/api/upload/bank/confirm/route.ts` | client 페이로드 sanitize (date 재계산 + matched_status='pending' 초기화 강제) |
+| K4 | `google-sheets.ts:1099 updateBankTransactionsBatch` | Sheets API `updatedCells` 확인으로 부분 성공 검증 |
+| K5 | `/api/match/confirm/route.ts` | `isCashOffering` 판별 강화 (detail/description 어디에든 '헌금함'); deposit tx가 expense 배치에 들어오면 400 반환 |
+| K6 | `/api/upload/bank/route.ts:189` | legacy time 파싱 초까지 보존 (preview와 통일) |
+| K7 | `types/index.ts:38 BankTransaction` | `date` 필드 INVARIANT JSDoc; `matched_status`에서 미사용 `'ignored'` 제거 |
+| N1 | `matching-engine.ts:206` | dead code `autoMatchBankTransactions` 삭제 (실제 매칭은 `/api/match/auto`가 자체 구현) |
+| N2 | `matching-engine.ts` 헌금함·카드 자동말소 | 오차 1000원 → 정확 일치 (1원 원칙) |
+| K8 | 프로젝트 루트 | 봇 스크립트 7개 삭제 (`exec-adjust-carryover.js`, `exec-cleanup-append.js`, `exec-normalize-dates.js`, `exec-rebuild-615-628.js`, `exec-restore.js`, `exec-sync-close.js`, `fix-bank-ledger.js`) |
+
+### 규칙
+**은행원장 write는 반드시 `src/lib/google-sheets.ts` 함수 경유.** `sheets.spreadsheets.values.{append,update,batchUpdate}` 직접 호출 금지.
+
+### 데이터 정정 완료
+- 수입부 624건 date 한국어 → ISO 정규화 (합계 109,349,242원 무변화)
+- 지출부 15건 tx_date 채움 (CARD_FIX_ 9건 = 2026-03-15 통일, 카드연회비 6건 = 결제월 첫날)
+- 은행원장 이상 A~D 수기 정정 + 이상 E 47건 date 일괄 5/17 + 6월 269건 append + 5/4 헌금함 1건 append
+- **최종 정합**: 148,788,103 + 253,504,460 − 357,648,255 = **44,644,308원** (myexcel 6/28 마지막 잔액과 1원 단위 일치)
+
+### 백업
+`은행원장_backup_20260705` 외 4개 시트에 원상태 보관.

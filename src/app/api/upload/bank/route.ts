@@ -186,7 +186,11 @@ function parseDatetime(value: unknown): { date: string; time: string } {
   if (dateMatch) {
     const [, year, month, day] = dateMatch;
     const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-    const time = timePart.substring(0, 5) || '';
+    // 안 α (K6): time 파싱 시 초까지 보존 (preview와 형식 통일)
+    const timeMatch = timePart.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    const time = timeMatch
+      ? `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}${timeMatch[3] ? ':' + timeMatch[3] : ''}`
+      : '';
     return { date, time };
   }
 

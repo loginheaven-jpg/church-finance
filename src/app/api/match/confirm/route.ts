@@ -64,18 +64,38 @@ export async function POST(request: NextRequest) {
     console.error('[match/confirm] 은행원장 읽기 실패:', error);
   }
 
+  // 안 α (K5): deposit tx가 expense 배치에 들어오면 원천 거부 (이상 A 유형 방어)
+  if (expense) {
+    for (const item of expense) {
+      if ((item.transaction.deposit ?? 0) > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `[match/confirm] 입금 거래는 지출로 매칭할 수 없습니다 (id=${item.transaction.id})`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+  }
+
   // ★ 서버 방어: income/expense에 포함된 헌금함 거래를 자동으로 suppressed로 이동
-  const isCashOffering = (detail: string) => (detail || '').substring(0, 3) === '헌금함';
-  const cashOfferingFromIncome = income?.filter(item => item.transaction.deposit > 0 && isCashOffering(item.transaction.detail)) || [];
-  const cashOfferingFromExpense = expense?.filter(item => isCashOffering(item.transaction.detail)) || [];
+  // 안 α (K5): 헌금함 판별 강화 — detail/description 어디에든 '헌금함' 포함 시 인정 (substring(0,3) 우회 방지)
+  const isCashOffering = (tx: BankTransaction) => {
+    const detail = (tx.detail || '').trim();
+    const desc = (tx.description || '').trim();
+    return detail.includes('헌금함') || desc.includes('헌금함');
+  };
+  const cashOfferingFromIncome = income?.filter(item => item.transaction.deposit > 0 && isCashOffering(item.transaction)) || [];
+  const cashOfferingFromExpense = expense?.filter(item => isCashOffering(item.transaction)) || [];
   if (cashOfferingFromIncome.length > 0 || cashOfferingFromExpense.length > 0) {
     console.warn('[match/confirm] 헌금함 거래가 income/expense에 포함됨 → suppressed로 이동:', {
       fromIncome: cashOfferingFromIncome.length,
       fromExpense: cashOfferingFromExpense.length,
     });
     // income/expense에서 제거
-    if (income) income = income.filter(item => !(item.transaction.deposit > 0 && isCashOffering(item.transaction.detail)));
-    if (expense) expense = expense.filter(item => !isCashOffering(item.transaction.detail));
+    if (income) income = income.filter(item => !(item.transaction.deposit > 0 && isCashOffering(item.transaction)));
+    if (expense) expense = expense.filter(item => !isCashOffering(item.transaction));
     // suppressed에 추가
     const additionalSuppressed = [
       ...cashOfferingFromIncome.map(item => ({ ...item.transaction, suppressed_reason: '자동 말소 (헌금함 — 서버 보정)' })),

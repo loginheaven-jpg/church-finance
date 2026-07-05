@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { addBankTransactions } from '@/lib/google-sheets';
+import { addBankTransactions, getWeekEndingSunday } from '@/lib/google-sheets';
 import type { BankTransaction } from '@/types';
 
 export async function POST(request: NextRequest) {
@@ -14,8 +14,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 안 α (K3): client 페이로드 신뢰 제거 — date 재계산 + 매칭상태 초기화 강제
+    const sanitized = (transactions as BankTransaction[]).map(t => ({
+      ...t,
+      date: getWeekEndingSunday(t.transaction_date),
+      matched_status: 'pending' as const,
+      matched_type: '',
+      matched_ids: '',
+      suppressed: false,
+      suppressed_reason: '',
+    }));
+
     // Google Sheets에 저장
-    await addBankTransactions(transactions as BankTransaction[]);
+    await addBankTransactions(sanitized);
 
     return NextResponse.json({
       success: true,

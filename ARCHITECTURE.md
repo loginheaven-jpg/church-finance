@@ -904,4 +904,147 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 - **최종 정합**: 148,788,103 + 253,504,460 − 357,648,255 = **44,644,308원** (myexcel 6/28 마지막 잔액과 1원 단위 일치)
 
 ### 백업
-`은행원장_backup_20260705` 외 4개 시트에 원상태 보관.
+`은행원장_backup_20260705` 외 4개 시트에 원상태 보관. **(2026-07-06 정리 완료: 8개 백업/폐지 시트 삭제)**
+
+---
+
+## 2026-07-06: 시스템 재설계 (안 β) — 주간마감 제거 + 자동 sync 흐름
+
+### 배경
+
+이전 시스템은 **주간마감(weekly closing)** 개념을 중심으로 데이터를 확정했다. 사용자가 한 주치 데이터를 수동 확인 후 "마감" 버튼을 눌러야 정합성이 확보되는 방식이었다. 이 방식은:
+- 마감 전까지 실시간 잔고가 부정확
+- 마감 후에도 은행/원장 사이 갭이 흔함
+- 마감 로직이 안 α INVARIANT를 우회할 여지 존재
+- 매칭엔진 1000원 오차 허용으로 소액 갭 누적
+
+2026 상반기 대정정 (44,644,308원 완전 정합 달성)을 계기로 주간마감 개념을 **완전 제거**하고 자동 sync 흐름으로 재설계한다.
+
+### 안 β 핵심 원칙
+
+1. **주간마감 개념 제거**: `주간마감` 시트 및 관련 API·UI 폐지
+2. **date 컬럼의 의미 확정**: `date` = 그 record가 속한 **월요일~일요일 주간을 대표하는 일요일 날짜** (getWeekEndingSunday 결과)
+3. **자동 sync 흐름**: 은행원장 write → 수입부/지출부 총액 자동 이관 → 세부내역 존재 시 자동 대체
+4. **1원 단위 정확 매칭**: 매칭엔진 오차 허용 완전 제거 (N2, 이미 반영)
+5. **안 α INVARIANT 강제**: `date = getWeekEndingSunday(transaction_date)` 서버 계산 강제 (K1~K7, 이미 반영)
+
+### 데이터 흐름 (재설계 후)
+
+```
+┌─────────────────────────────────────────┐
+│ [은행 xlsx 업로드] /api/upload/bank      │
+└──────────────┬──────────────────────────┘
+               ↓ addBankTransactions (K1)
+┌─────────────────────────────────────────┐
+│ 은행원장 시트 (date=주간 일요일 자동)     │
+└──────────────┬──────────────────────────┘
+               ↓ 자동 트리거 (신설)
+┌─────────────────────────────────────────┐
+│ 수입부/지출부 총액 자동 이관              │
+│  - 헌금함 입금 → 수입부 '(헌금함 총액)'   │
+│  - 카드대금 출금 → 지출부 'NH기업카드'    │
+│  - 개별 이체 → 개별 record (자동 분류)   │
+└──────────────┬──────────────────────────┘
+               ↓ 헌금함입력/카드내역임시 update
+┌─────────────────────────────────────────┐
+│ 세부내역 자동 대체 sync (신설)            │
+│  - 헌금함입력 완료 시 → 총액 record 삭제 │
+│    + 세부 record append (1원 단위 검증)  │
+│  - 카드내역임시 apply 시 → 동일 로직     │
+└──────────────┬──────────────────────────┘
+               ↓ 실시간 대시보드
+┌─────────────────────────────────────────┐
+│ 잔고 = 이월 + Σ수입부 − Σ지출부           │
+│ (주간마감 절차 없음, 실시간 정합)         │
+└─────────────────────────────────────────┘
+```
+
+### 각 API·모듈의 재설계
+
+#### `src/lib/google-sheets.ts`
+
+**신설**:
+- `autoTransferBankToLedger(bankTransactions)` — 은행원장 write 후 자동 호출. 각 은행 record를 수입부·지출부 총액으로 이관.
+- `replaceCashOfferingTotal(sundayDate, cashOfferingDetails)` — 헌금함입력 세부 sync 시 총액 record 삭제 + 세부 append. 1원 단위 검증.
+- `replaceCardPaymentTotal(sundayDate, cardDetails)` — 카드내역임시 apply 시 동일 로직.
+
+**폐지**:
+- `weekly-closing.ts` 관련 함수 전부
+- `주간마감` 시트 write 함수
+
+#### `src/app/api/upload/bank/confirm/route.ts`
+
+`addBankTransactions` 호출 직후 `autoTransferBankToLedger` 자동 호출. Redis 캐시 무효화 자동 처리.
+
+#### `src/app/api/cash-offering/sync/route.ts` (신설 or 재설계)
+
+헌금함입력 record 저장 완료 시 `replaceCashOfferingTotal` 자동 호출. 세부 합계 ≠ 총액이면 sync 보류 + 알림.
+
+#### `src/app/api/card-expense/apply/route.ts`
+
+카드내역임시 record status='applied' 시 `replaceCardPaymentTotal` 자동 호출. 은행원장 총액 record는 유지 (지출부의 총액 record만 대체).
+
+### 데이터 스키마 규칙 (확정)
+
+#### 공통
+
+- **`date`**: 그 record가 속한 **월요일~일요일 주간을 대표하는 일요일 날짜** (YYYY-MM-DD).
+  - 계산: `date = getWeekEndingSunday(transaction_date)`
+  - 예: transaction_date=2026-06-08(월) → date=2026-06-14(일)
+  - 예: transaction_date=2026-06-14(일) → date=2026-06-14(일)
+  - **수동 편집 금지** (K2 INVARIANT). Google Sheets protectedRange로 봉쇄 검토.
+
+- **`transaction_date`**: 실제 발생일 (은행 인출/입금일, 카드 사용일, 헌금 실수령일 등)
+
+#### 수입부
+
+- `source`: `헌금함` | `계좌이체` | `수작업` (제한된 vocabulary)
+- 총액 record (자동 이관): `donor_name='(헌금함 총액)'`, `input_method='은행원장'`
+- 세부 record (헌금함입력 sync): `input_method='헌금함입력'`
+- 개별 이체 (자동 분류): `input_method='은행원장'`, `donor_name`은 헌금자정보 조회 후 결정
+
+#### 지출부
+
+- `payment_method`: `계좌이체` | `법인카드` | `수작업`
+- 총액 record (자동 이관): `vendor='NH기업카드'`, `description='NH카드대금'`
+- 세부 record (카드내역임시 apply): 카드사 세부 그대로
+
+### UI 변화
+
+#### 제거
+- 데이터 입력 페이지의 "주간마감" 탭·버튼
+- 주간마감 완료 표시
+
+#### 신설/변경
+- 대시보드 상단에 **실시간 정합 배지**: "원장 잔고 = 은행원장 balance (갭 X원)"
+- 은행원장 업로드 완료 시 "자동 이관됨" 토스트 (수동 승인 절차 없음)
+- 헌금함입력 폼: 저장 시 자동 sync (기존은 별도 sync 버튼)
+- 카드내역임시: `apply` 버튼 = 세부 sync 트리거
+
+### 트리거 규칙
+
+| 트리거 | 조건 | 결과 |
+|---|---|---|
+| 은행 xlsx 업로드 confirm | K3 sanitize 통과 | 은행원장 append + 자동 이관 |
+| 은행원장 개별 수정 | matched_status='matched' 유지 | 원장 재sync (기존 총액 update) |
+| 헌금함입력 저장 | Σ세부 = 은행 총액 (1원) | 총액 record 삭제 + 세부 append |
+| 카드내역임시 apply | Σ세부 = 은행 카드 총액 (1원) | 총액 record 삭제 + 세부 append |
+| 은행 상계 record 등록 | user 수동 지정 | 이유 note에 기록, 안 α 예외 표시 |
+
+### 정합성 검증
+
+**대시보드 실시간 갭 표시**:
+```
+원장 관점 = 이월 + Σ수입부(date ≤ endDate) − Σ지출부(date ≤ endDate)
+은행 관점 = 이월 + Σ은행입금(tx ≤ endDate) − Σ은행출금(tx ≤ endDate)
+                (또는 은행원장 balance chain 마지막 값)
+```
+
+두 값이 다르면 **경고 표시** + 갭 원인 추적 링크 (미매칭 record 목록).
+
+### 마이그레이션 완료 상태 (2026-07-06)
+
+- 2026 상반기 6개월 완전 정합 달성 (**44,644,308원 6/28**)
+- 헌금함 세부 137건 (6월) + 카드 세부 73건 (6월) 자동 sync 프로토타입 검증
+- 백업 시트 8개 정리 (은행원장_backup_20260705 외 7개)
+- **다음 단계**: 위 재설계 사항을 코드로 구현 (`src/lib/google-sheets.ts`, `src/app/api/*/route.ts`, UI)

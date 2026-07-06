@@ -284,7 +284,7 @@ export function BankUpload() {
     const newData = data.filter((_, index) => !duplicateIndices.has(index));
 
     if (newData.length === 0) {
-      toast.error('저장할 신규 데이터가 없습니다 (모두 중복)');
+      toast.info(`이미 모두 반영된 파일입니다 (${duplicateIndices.size}건 전부 은행원장에 존재). 추가할 신규 거래가 없습니다.`);
       return;
     }
 
@@ -308,6 +308,18 @@ export function BankUpload() {
           toast.success(`${result.message} (${dupCount}건 중복 제외)`);
         } else {
           toast.success(result.message);
+        }
+
+        // 안 β: 자동 이관 결과 표시
+        if (result.transferred) {
+          const incCount = result.transferred.income ?? 0;
+          const expCount = result.transferred.expense ?? 0;
+          toast.success(
+            `📥 자동 이관 완료: 수입부 ${incCount}건 · 지출부 ${expCount}건`,
+            { duration: 5000 }
+          );
+        } else if (result.warning) {
+          toast.warning(`⚠️ ${result.warning}`, { duration: 8000 });
         }
 
         // ★ 크로스체크: 저장 후 은행원장에서 다시 읽어서 건수/금액 확인

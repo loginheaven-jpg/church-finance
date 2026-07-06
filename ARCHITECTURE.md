@@ -1048,3 +1048,102 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 - 헌금함 세부 137건 (6월) + 카드 세부 73건 (6월) 자동 sync 프로토타입 검증
 - 백업 시트 8개 정리 (은행원장_backup_20260705 외 7개)
 - **다음 단계**: 위 재설계 사항을 코드로 구현 (`src/lib/google-sheets.ts`, `src/app/api/*/route.ts`, UI)
+
+---
+
+## 2026-07-07: 안 β′ — autoTransferBankToLedger 정확도 복원
+
+### 배경
+
+안 β 최초 구현(f5827b7)은 자동 sync 흐름을 성립시켰지만, **분류/그룹핑 지능이 회귀**했다.
+- 수입 이관: 헌금함=14, 계좌이체=11 **두 값만** 사용 (십일조·감사·건축·선교·구제·이자 모두 "주일헌금")
+- 지출 이관: 모든 record `account_code=90` 하드코딩 (지출부코드 마스터에 없는 값 → orphan)
+- `donor_name = representative` 하드코딩 (헌금자정보 시트 미참조)
+- `skipPledgeMatching=true` 강제 → 계좌이체 작정헌금이 pledge 이행률에 반영 안 됨
+- `matching_rules` 시트 (사용자 학습 규칙, 커밋 b466b42) 완전 무시
+
+INVARIANT (안 α K1~K7, 안 β marker) 는 유지됐지만, **이관된 record 의 code 정확도는 사실상 0에 수렴**.
+
+### 조치: helpers 추출 + 결정 로직 총동원
+
+#### 1. `src/lib/matching-helpers.ts` 신설
+
+`match/auto/route.ts` 에만 존재하던 검증된 결정 로직 8개를 재사용 가능한 helpers 로 추출:
+
+| Helper | 역할 |
+|---|---|
+| `isCashOfferingTransaction(tx)` | detail 좌측 3자리 === '헌금함' 판정 |
+| `findRepresentative(name, donors)` | 헌금자정보 → representative 조회 |
+| `extractDonorName(detail)` | "십일조최병희" → "최병희" (접두 처리) |
+| `INCOME_MATCHING_RULES` | 수입 10종 우선순위 (건축=501, 이자=31, 십일조=12, 구제=22, 선교=21, 특별=14, 감사=13, 지정=24, 잡=32, 주일=11) |
+| `determineIncomeOfferingCode(memo, detail, amount, description)` | 키워드 매칭 + 금액 fallback (5만↓=11, 만원 단위 미딱=12, 딱=13) |
+| `extractAccountCodeFromDetail(detail)` | 지출 detail 앞 2/3자리 (50=대출은 3자리) |
+| `findBestMatchingRule(tx, rules)` | matching_rules 시트 (amount_min/max 조건 포함) |
+| `getSuggestedRules(tx, rules, N)` | needsReview UI 지원 |
+
+`route.ts` 와 `google-sheets.ts` 가 **동일 소스** 참조 → future divergence 방지.
+
+#### 2. `autoTransferBankToLedger` 로직 총 개편
+
+```typescript
+// (수입) 계좌이체
+const rule = findBestMatchingRule(t, rules);
+let offeringCode: number, donorName: string;
+if (rule && rule.confidence >= 0.8) {
+  offeringCode = rule.target_code;  // 사용자 학습 규칙 (b466b42)
+} else {
+  const r = determineIncomeOfferingCode(t.memo, detail, t.deposit, description);
+  offeringCode = r.code;  // 10종 키워드 + 금액 fallback
+}
+const donorName = extractDonorName(detail) || t.memo || fallback;
+const representative = findRepresentative(donorName, donors);  // 헌금자정보 조회
+
+// (지출) 일반
+const extracted = extractAccountCodeFromDetail(detail);  // 앞 2자리
+if (extracted) accountCode = extracted.code;
+else if (rule && rule.confidence >= 0.8) accountCode = rule.target_code;
+else accountCode = 90;  // fallback, note에 [needs-review] marker
+categoryCode = Math.floor(accountCode / 10) * 10;  // 유도
+```
+
+#### 3. pledge 매칭 조건부 활성화 (G7)
+
+```typescript
+// 헌금함 총액 record 만 있으면 skip (총액이므로 pledge 매칭 무의미)
+// 계좌이체 record 하나라도 있으면 activate (개별 십일조/작정 → pledge tracking)
+const skipPledgeMatching = !hasNonCashOfferingIncome;
+await addIncomeRecords(newIncomes, skipPledgeMatching);
+```
+
+#### 4. note 원본 문맥 보존 (G10)
+
+이전: `note: '[bank:xxx][auto]'` (marker만)
+현재: `note: '[bank:xxx][auto] | {description} | {detail}'` (marker + 원본)
+- 사후 감사·정정 시 원본 문맥 확인 가능
+- marker regex 무영향 (첫 `[bank:...]` 만 매치)
+
+### INVARIANT 무결성 유지
+
+| 원칙 | 유지 | 근거 |
+|---|:-:|---|
+| K1 date=getWeekEndingSunday(tx) | ✓ | expectedDate 재계산 로직 변경 없음 |
+| K2 은행원장 write 함수 경유 | ✓ | 이관은 income/expense write |
+| K3~K7 sanitize/원자성/1원 매칭 | ✓ | 결정 로직은 detail 텍스트+금액만 참조, date 독립 |
+| 안 β marker idempotency | ✓ | `[bank:${id}]` 스캔 로직 무변경 |
+| 안 β bank/confirm 트리거 | ✓ | 시그니처 무변경 |
+
+### 남은 갭 (안 γ 후속)
+
+- G9: `account_code=90` 은 실제로 지출부코드 마스터에 없는 값 → 별도 seed 마이그레이션으로 "99 미분류" 신설 (별도 세션)
+- G11: 헌금함 감지 엄격도 (substring vs includes)
+- G13: 코드 마스터 존재 검증 assertion
+- G14: needsReview 큐 UI (현재는 `[needs-review]` note marker 만)
+- G15: 자동이체 시트 신규 도입
+- G16: learnFromManualMatch 통합
+- G17: `t.date` in-place mutation 제거
+
+### 기존 6월 이관 데이터 처리 방침
+
+- **이번 커밋 범위 아님**: 신규 이관 로직만 적용 (미래 업로드부터 정확 동작)
+- 6월 269건 이관 데이터는 code 재분류 필요 → 별도 세션에서 사용자 승인 후 batch 정정
+

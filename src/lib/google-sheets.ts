@@ -23,6 +23,14 @@ import type {
   PledgeStatus,
   CardExpenseTempRecord,
 } from '@/types';
+import {
+  isCashOfferingTransaction,
+  findBestMatchingRule,
+  findRepresentative,
+  extractDonorName,
+  determineIncomeOfferingCode,
+  extractAccountCodeFromDetail,
+} from './matching-helpers';
 
 // ============================================
 // Google Sheets ORM Mapper
@@ -1129,24 +1137,23 @@ export async function updateBankTransactionsBatch(
 // 재실행 안전(idempotency), 1원 단위 정확 검증, 안 α INVARIANT 미훼손 원칙.
 // Redis 캐시 무효화는 호출측 API route 가 담당 (library → cache 역방향 의존 회피).
 
-// 은행원장 tx.detail 문자열에서 입금자/거래처명 추출 (앞뒤 공백/빈문자 fallback)
-function parseCounterpartyFromDetail(detail: string, fallback: string): string {
-  const trimmed = (detail || '').trim();
-  if (!trimmed) return fallback;
-  // '전자금융' / 'ATM' 등 노이즈 제거 - 첫 단어 사용
-  const parts = trimmed.split(/\s+/).filter(Boolean);
-  return parts[0] || fallback;
-}
-
 // 카드대금 관련 키워드 (deposit/withdrawal 공통)
 const CARD_PAYMENT_KEYWORDS = ['nh카드대금', 'nh기업카드', 'nh카드', '농협카드', '카드대금'];
 
-// 헌금함 키워드 (deposit)
-const CASH_OFFERING_KEYWORDS = ['헌금함'];
-
 // 은행 tx 를 수입/지출 총액 record 로 이관.
 // 각 record.note 에 `[bank:${id}][auto]` marker 를 남겨 재실행 시 skip.
-// autoTransferBankToLedger 는 addIncomeRecords(skipPledgeMatching=true) / addExpenseRecords 를 각 1회만 호출.
+// autoTransferBankToLedger 는 addIncomeRecords / addExpenseRecords 를 각 1회만 호출.
+//
+// 2026-07-07 개편 (안 β 정확도 복원):
+// - matching-helpers.ts 의 검증된 로직 재사용 (route.ts / autoTransfer 공통 참조)
+// - 헌금자정보 → representative 자동 조회 (G1)
+// - donor_name 정교 파싱 — 십일조/감사/선교 접두 분리 (G2)
+// - offering_code 10종 우선순위 키워드 매칭 + 금액 fallback (G3, G4)
+// - 지출 detail 앞 2/3자리 account_code 추출 (G5)
+// - matching_rules 시트 활용 — amount_min/max 조건 포함 (G6)
+// - category_code = Math.floor(code/10)*10 유도 (G8)
+// - pledge 매칭 조건부 활성화 (G7) — 계좌이체 record 만 activate, 헌금함 총액은 skip
+// - note 원본 문맥 보존 (G10) — marker + " | " + 원본 detail
 export async function autoTransferBankToLedger(
   transactions: BankTransaction[]
 ): Promise<{
@@ -1157,10 +1164,15 @@ export async function autoTransferBankToLedger(
     return { income: { added: 0, skipped: 0, ids: [] }, expense: { added: 0, skipped: 0, ids: [] } };
   }
 
-  // 1. 기존 marker 스캔 — 수입부/지출부의 note 컬럼(수입 idx 7, 지출 idx 8) 에서 [bank:${id}] 추출
-  const [incomeRows, expenseRows] = await Promise.all([
+  // 1. 기존 marker 스캔 + 결정 로직 데이터 소스 로드
+  //    [bank:${id}] marker: 재실행 시 skip 판정
+  //    donors: 헌금자정보 → representative 조회 (G1)
+  //    rules: matching_rules 시트 활용 (G6)
+  const [incomeRows, expenseRows, donors, rules] = await Promise.all([
     readSheet(FINANCE_CONFIG.sheets.income),
     readSheet(FINANCE_CONFIG.sheets.expense),
+    getDonorInfo().catch(() => [] as DonorInfo[]),
+    getMatchingRules().catch(() => [] as MatchingRule[]),
   ]);
 
   const markerRegex = /\[bank:([^\]]+)\]/g;
@@ -1190,6 +1202,7 @@ export async function autoTransferBankToLedger(
   const newExpenses: ExpenseRecord[] = [];
   let incomeSkipped = 0;
   let expenseSkipped = 0;
+  let hasNonCashOfferingIncome = false; // pledge 매칭 조건부 활성화용
 
   for (const t of transactions) {
     // M1 INVARIANT (K1): BankTransaction.date === getWeekEndingSunday(transaction_date)
@@ -1211,27 +1224,69 @@ export async function autoTransferBankToLedger(
         incomeSkipped++;
         continue;
       }
-      const isCashOffering = CASH_OFFERING_KEYWORDS.some(kw => detail.includes(kw) || description.includes(kw));
-      const source = isCashOffering ? '헌금함' : '계좌이체';
-      const offering_code = isCashOffering ? 14 : 11; // 헌금함=특별헌금(14), 계좌이체=주일헌금(11) default
-      const donor_name = isCashOffering
-        ? '(헌금함 총액)'
-        : parseCounterpartyFromDetail(detail, '(자동이관)');
 
-      newIncomes.push({
-        id: generateId('INC'),
-        date: t.date, // K1 로 이미 canonical sunday
-        source,
-        offering_code,
-        donor_name,
-        representative: '',
-        amount: t.deposit,
-        note: `[bank:${t.id}][auto]`,
-        input_method: '은행원장',
-        created_at: createdAt,
-        created_by: 'auto:bank-transfer',
-        transaction_date: t.transaction_date,
-      });
+      // 헌금함 판정 (helpers.isCashOfferingTransaction: detail 좌측 3자리 === '헌금함')
+      const isCashOffering = isCashOfferingTransaction(t);
+
+      if (isCashOffering) {
+        // 헌금함 총액 record — pledge 매칭 skip 대상
+        newIncomes.push({
+          id: generateId('INC'),
+          date: t.date,
+          source: '헌금함',
+          offering_code: 14, // 특별헌금 (총액)
+          donor_name: '(헌금함 총액)',
+          representative: '',
+          amount: t.deposit,
+          note: `[bank:${t.id}][auto] | ${detail}`,
+          input_method: '은행원장',
+          created_at: createdAt,
+          created_by: 'auto:bank-transfer',
+          transaction_date: t.transaction_date,
+        });
+      } else {
+        // 계좌이체 수입 — 결정 로직 총동원 (G1~G4, G6)
+
+        // (a) matching_rules 우선 시도 (사용자 학습 규칙, amount_min/max 지원)
+        const rule = findBestMatchingRule(t, rules);
+        let offeringCode: number;
+        let donorName: string;
+
+        if (rule && rule.confidence >= 0.8) {
+          offeringCode = rule.target_code;
+          donorName = extractDonorName(detail) || t.memo || rule.target_name;
+        } else {
+          // (b) 키워드 우선순위 매칭 + 금액 fallback (helpers.determineIncomeOfferingCode)
+          const offeringResult = determineIncomeOfferingCode(
+            t.memo,
+            detail,
+            t.deposit,
+            description
+          );
+          offeringCode = offeringResult.code;
+          donorName = extractDonorName(detail) || t.memo || offeringResult.name;
+        }
+
+        // (c) 헌금자정보 → representative 자동 조회 (G1)
+        const representative = findRepresentative(donorName, donors);
+
+        newIncomes.push({
+          id: generateId('INC'),
+          date: t.date,
+          source: '계좌이체',
+          offering_code: offeringCode,
+          donor_name: donorName,
+          representative,
+          amount: t.deposit,
+          note: `[bank:${t.id}][auto] | ${description} | ${detail}`,
+          input_method: '은행원장',
+          created_at: createdAt,
+          created_by: 'auto:bank-transfer',
+          transaction_date: t.transaction_date,
+        });
+
+        hasNonCashOfferingIncome = true;
+      }
     } else if (t.withdrawal && t.withdrawal > 0) {
       if (existingExpenseBankIds.has(t.id)) {
         expenseSkipped++;
@@ -1240,6 +1295,7 @@ export async function autoTransferBankToLedger(
       const isCardPayment = CARD_PAYMENT_KEYWORDS.some(kw => haystack.includes(kw));
 
       if (isCardPayment) {
+        // 카드대금 총액 — 이후 replaceCardPaymentTotal 로 세부 대체 예정
         newExpenses.push({
           id: generateId('EXP'),
           date: t.date,
@@ -1249,23 +1305,54 @@ export async function autoTransferBankToLedger(
           amount: t.withdrawal,
           account_code: 950,
           category_code: 90,
-          note: `[bank:${t.id}][auto]`,
+          note: `[bank:${t.id}][auto] | ${detail}`,
           created_at: createdAt,
           created_by: 'auto:bank-transfer',
           transaction_date: t.transaction_date,
         });
       } else {
-        const vendor = parseCounterpartyFromDetail(detail, '(자동이관)');
+        // 일반 지출 — 결정 로직 총동원 (G5, G6, G8)
+
+        // (a) detail 앞 2/3자리 account_code 추출 (helpers.extractAccountCodeFromDetail)
+        const extracted = extractAccountCodeFromDetail(detail);
+
+        let accountCode: number;
+        let vendor: string;
+        let descText: string;
+        let noteBody: string;
+
+        if (extracted) {
+          accountCode = extracted.code;
+          vendor = t.memo || '기타';
+          descText = '';
+          noteBody = extracted.rest;
+        } else {
+          // (b) matching_rules 시도 (사용자 학습 규칙)
+          const rule = findBestMatchingRule(t, rules);
+          if (rule && rule.confidence >= 0.8) {
+            accountCode = rule.target_code;
+            vendor = t.memo || detail || description || rule.target_name;
+            descText = '';
+            noteBody = detail;
+          } else {
+            // (c) 매칭 실패 fallback — needsReview 대신 90(미분류) 로 이관하되 note 에 표시
+            accountCode = 90;
+            vendor = t.memo || (detail.split(/\s+/)[0] || '(자동이관)');
+            descText = detail || vendor;
+            noteBody = `[needs-review] ${detail}`;
+          }
+        }
+
         newExpenses.push({
           id: generateId('EXP'),
           date: t.date,
           payment_method: '계좌이체',
           vendor,
-          description: detail || vendor,
+          description: descText,
           amount: t.withdrawal,
-          account_code: 90,
-          category_code: 90,
-          note: `[bank:${t.id}][auto]`,
+          account_code: accountCode,
+          category_code: Math.floor(accountCode / 10) * 10, // G8
+          note: `[bank:${t.id}][auto] | ${noteBody}`,
           created_at: createdAt,
           created_by: 'auto:bank-transfer',
           transaction_date: t.transaction_date,
@@ -1279,8 +1366,12 @@ export async function autoTransferBankToLedger(
   }
 
   // 2. append (한 번의 API 호출씩)
+  // pledge 매칭 조건부 활성화 (G7):
+  // - 헌금함 총액 record 만 존재하면 skip (총액이므로 pledge 매칭 무의미)
+  // - 계좌이체 수입이 하나라도 있으면 activate (개별 십일조/작정헌금 → pledge tracking)
   if (newIncomes.length > 0) {
-    await addIncomeRecords(newIncomes, true); // skipPledgeMatching=true (총액 record 이므로)
+    const skipPledgeMatching = !hasNonCashOfferingIncome;
+    await addIncomeRecords(newIncomes, skipPledgeMatching);
   }
   if (newExpenses.length > 0) {
     await addExpenseRecords(newExpenses);

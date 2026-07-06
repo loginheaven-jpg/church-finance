@@ -376,6 +376,27 @@ export async function GET(request: NextRequest) {
     // 미분류 거래 수
     const unmatchedCount = unmatchedBank.length + unmatchedCard.length;
 
+    // 안 β: 실시간 정합 배지 — 원장 잔고 vs 은행 마지막 balance (1원 단위 정확)
+    // gap = 원장 - 은행 (부호 유지)
+    const bankLedgerGap = balance - lastBankBalance;
+    const bankLedgerIsAligned = lastBankBalance !== 0 && Math.abs(bankLedgerGap) < 1;
+    let bankLedgerReason: string | null = null;
+    if (lastBankBalance === 0) {
+      bankLedgerReason = '은행 미업로드';
+    } else if (!bankLedgerIsAligned) {
+      const hints: string[] = [];
+      if (unmatchedBank.length > 0) hints.push(`미매칭 은행 ${unmatchedBank.length}건`);
+      if (unmatchedCard.length > 0) hints.push(`미매칭 카드 ${unmatchedCard.length}건`);
+      bankLedgerReason = hints.length > 0
+        ? `차이 ${bankLedgerGap.toLocaleString()}원 · ${hints.join(', ')}`
+        : `차이 ${bankLedgerGap.toLocaleString()}원`;
+    }
+    const bankLedgerAlign = {
+      isAligned: bankLedgerIsAligned,
+      gap: bankLedgerGap,
+      reason: bankLedgerReason,
+    };
+
     // 동기집행률 계산
     // 동기예산 = 연간예산 / 365 * 경과일수
     const totalBudget = budgetData
@@ -539,6 +560,8 @@ export async function GET(request: NextRequest) {
       // super_admin 검증용 은행잔액 정보
       lastBankBalance,
       lastBankDate,
+      // 안 β: 실시간 원장-은행 정합 배지
+      bankLedgerAlign,
       // 실제 표시 날짜 (마감 전 자동 이전 주 이동 반영)
       displaySunday: endDate,
       weekShifted,
@@ -586,6 +609,11 @@ export async function GET(request: NextRequest) {
       topOverBudgetItems: [],
       lastBankBalance: 0,
       lastBankDate: null,
+      bankLedgerAlign: {
+        isAligned: false,
+        gap: 0,
+        reason: '은행 미업로드',
+      },
       displaySunday: null,
       weekShifted: false,
     });

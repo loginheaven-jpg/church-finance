@@ -1120,6 +1120,527 @@ export async function updateBankTransactionsBatch(
 }
 
 // ============================================
+// 자동 sync (안 β) — 2026-07-06
+// ============================================
+// 은행원장 write 직후 트리거되는 자동 이관 / 세부 대체 함수.
+// - autoTransferBankToLedger : 은행 tx → 수입부/지출부 총액 row 자동 append
+// - replaceCashOfferingTotal : 수입부 헌금함 총액 → 헌금함입력 세부내역으로 대체
+// - replaceCardPaymentTotal  : 지출부 NH카드대금 총액 → 카드내역임시 세부내역으로 대체 + 은행 row suppressed
+// 재실행 안전(idempotency), 1원 단위 정확 검증, 안 α INVARIANT 미훼손 원칙.
+// Redis 캐시 무효화는 호출측 API route 가 담당 (library → cache 역방향 의존 회피).
+
+// 은행원장 tx.detail 문자열에서 입금자/거래처명 추출 (앞뒤 공백/빈문자 fallback)
+function parseCounterpartyFromDetail(detail: string, fallback: string): string {
+  const trimmed = (detail || '').trim();
+  if (!trimmed) return fallback;
+  // '전자금융' / 'ATM' 등 노이즈 제거 - 첫 단어 사용
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  return parts[0] || fallback;
+}
+
+// 카드대금 관련 키워드 (deposit/withdrawal 공통)
+const CARD_PAYMENT_KEYWORDS = ['nh카드대금', 'nh기업카드', 'nh카드', '농협카드', '카드대금'];
+
+// 헌금함 키워드 (deposit)
+const CASH_OFFERING_KEYWORDS = ['헌금함'];
+
+// 은행 tx 를 수입/지출 총액 record 로 이관.
+// 각 record.note 에 `[bank:${id}][auto]` marker 를 남겨 재실행 시 skip.
+// autoTransferBankToLedger 는 addIncomeRecords(skipPledgeMatching=true) / addExpenseRecords 를 각 1회만 호출.
+export async function autoTransferBankToLedger(
+  transactions: BankTransaction[]
+): Promise<{
+  income: { added: number; skipped: number; ids: string[] };
+  expense: { added: number; skipped: number; ids: string[] };
+}> {
+  if (!transactions || transactions.length === 0) {
+    return { income: { added: 0, skipped: 0, ids: [] }, expense: { added: 0, skipped: 0, ids: [] } };
+  }
+
+  // 1. 기존 marker 스캔 — 수입부/지출부의 note 컬럼(수입 idx 7, 지출 idx 8) 에서 [bank:${id}] 추출
+  const [incomeRows, expenseRows] = await Promise.all([
+    readSheet(FINANCE_CONFIG.sheets.income),
+    readSheet(FINANCE_CONFIG.sheets.expense),
+  ]);
+
+  const markerRegex = /\[bank:([^\]]+)\]/g;
+  const existingIncomeBankIds = new Set<string>();
+  for (let i = 1; i < incomeRows.length; i++) {
+    const note = String(incomeRows[i]?.[7] || '');
+    if (!note) continue;
+    let m: RegExpExecArray | null;
+    markerRegex.lastIndex = 0;
+    while ((m = markerRegex.exec(note)) !== null) {
+      existingIncomeBankIds.add(m[1]);
+    }
+  }
+  const existingExpenseBankIds = new Set<string>();
+  for (let i = 1; i < expenseRows.length; i++) {
+    const note = String(expenseRows[i]?.[8] || '');
+    if (!note) continue;
+    let m: RegExpExecArray | null;
+    markerRegex.lastIndex = 0;
+    while ((m = markerRegex.exec(note)) !== null) {
+      existingExpenseBankIds.add(m[1]);
+    }
+  }
+
+  const createdAt = getKSTDateTime();
+  const newIncomes: IncomeRecord[] = [];
+  const newExpenses: ExpenseRecord[] = [];
+  let incomeSkipped = 0;
+  let expenseSkipped = 0;
+
+  for (const t of transactions) {
+    // M1 INVARIANT (K1): BankTransaction.date === getWeekEndingSunday(transaction_date)
+    // 방어적 검증 — 위반 시 warn 후 재계산 (수입/지출 record 의 date 를 canonical Sunday 로 보정)
+    const expectedDate = getWeekEndingSunday(t.transaction_date);
+    if (t.date !== expectedDate) {
+      console.warn(
+        `[autoTransferBankToLedger] date INVARIANT 위반 — 재계산: id=${t.id} from=${t.date} to=${expectedDate} (transaction_date=${t.transaction_date})`
+      );
+      t.date = expectedDate;
+    }
+
+    const detail = String(t.detail || '');
+    const description = String(t.description || '');
+    const haystack = `${detail} ${description}`.toLowerCase();
+
+    if (t.deposit && t.deposit > 0) {
+      if (existingIncomeBankIds.has(t.id)) {
+        incomeSkipped++;
+        continue;
+      }
+      const isCashOffering = CASH_OFFERING_KEYWORDS.some(kw => detail.includes(kw) || description.includes(kw));
+      const source = isCashOffering ? '헌금함' : '계좌이체';
+      const offering_code = isCashOffering ? 14 : 11; // 헌금함=특별헌금(14), 계좌이체=주일헌금(11) default
+      const donor_name = isCashOffering
+        ? '(헌금함 총액)'
+        : parseCounterpartyFromDetail(detail, '(자동이관)');
+
+      newIncomes.push({
+        id: generateId('INC'),
+        date: t.date, // K1 로 이미 canonical sunday
+        source,
+        offering_code,
+        donor_name,
+        representative: '',
+        amount: t.deposit,
+        note: `[bank:${t.id}][auto]`,
+        input_method: '은행원장',
+        created_at: createdAt,
+        created_by: 'auto:bank-transfer',
+        transaction_date: t.transaction_date,
+      });
+    } else if (t.withdrawal && t.withdrawal > 0) {
+      if (existingExpenseBankIds.has(t.id)) {
+        expenseSkipped++;
+        continue;
+      }
+      const isCardPayment = CARD_PAYMENT_KEYWORDS.some(kw => haystack.includes(kw));
+
+      if (isCardPayment) {
+        newExpenses.push({
+          id: generateId('EXP'),
+          date: t.date,
+          payment_method: '계좌이체',
+          vendor: 'NH기업카드',
+          description: 'NH카드대금',
+          amount: t.withdrawal,
+          account_code: 950,
+          category_code: 90,
+          note: `[bank:${t.id}][auto]`,
+          created_at: createdAt,
+          created_by: 'auto:bank-transfer',
+          transaction_date: t.transaction_date,
+        });
+      } else {
+        const vendor = parseCounterpartyFromDetail(detail, '(자동이관)');
+        newExpenses.push({
+          id: generateId('EXP'),
+          date: t.date,
+          payment_method: '계좌이체',
+          vendor,
+          description: detail || vendor,
+          amount: t.withdrawal,
+          account_code: 90,
+          category_code: 90,
+          note: `[bank:${t.id}][auto]`,
+          created_at: createdAt,
+          created_by: 'auto:bank-transfer',
+          transaction_date: t.transaction_date,
+        });
+      }
+    } else {
+      // deposit/withdrawal 둘 다 0 — skip (예: 잔액 조정 row)
+      console.warn(`[autoTransferBankToLedger] deposit/withdrawal 모두 0 인 bank tx skip: ${t.id}`);
+      continue;
+    }
+  }
+
+  // 2. append (한 번의 API 호출씩)
+  if (newIncomes.length > 0) {
+    await addIncomeRecords(newIncomes, true); // skipPledgeMatching=true (총액 record 이므로)
+  }
+  if (newExpenses.length > 0) {
+    await addExpenseRecords(newExpenses);
+  }
+
+  console.log(
+    `[autoTransferBankToLedger] 이관 완료: 수입 +${newIncomes.length}건 (skip ${incomeSkipped}) / 지출 +${newExpenses.length}건 (skip ${expenseSkipped})`
+  );
+
+  return {
+    income: {
+      added: newIncomes.length,
+      skipped: incomeSkipped,
+      ids: newIncomes.map(r => r.id),
+    },
+    expense: {
+      added: newExpenses.length,
+      skipped: expenseSkipped,
+      ids: newExpenses.map(r => r.id),
+    },
+  };
+}
+
+// 주(sundayDate) 의 수입부 헌금함 총액 row(source='헌금함', donor_name='(헌금함 총액)') 를
+// 헌금함입력 세부내역으로 치환.
+// - 1원 단위 정확 검증 (Σ총액 === Σ세부)
+// - 총액 0건이면 idempotency marker 로 재실행 판정
+//   • marker 존재 → 이미 완료 (alreadyApplied=true, no-op)
+//   • marker 없음 → delete/append 사이 크래시 복구 → 세부 append (silent drop 방지)
+export async function replaceCashOfferingTotal(
+  sundayDate: string,
+  offeringDetails: IncomeRecord[]
+): Promise<{
+  replaced: boolean;
+  aggregateDeleted: number;
+  detailsAdded: number;
+  aggregateAmount: number;
+  detailsAmount: number;
+  alreadyApplied?: boolean;
+}> {
+  if (!sundayDate || !/^\d{4}-\d{2}-\d{2}$/.test(sundayDate)) {
+    throw new Error(`[replaceCashOfferingTotal] sundayDate invalid: ${sundayDate}`);
+  }
+
+  // M1 INVARIANT: sundayDate 가 실제 일요일인지 검증 (getWeekEndingSunday(x) 는 x 가 일요일이면 x 반환)
+  const canonicalSunday = getWeekEndingSunday(sundayDate);
+  if (sundayDate !== canonicalSunday) {
+    console.warn(
+      `[replaceCashOfferingTotal] sundayDate INVARIANT 위반 — 재계산: from=${sundayDate} to=${canonicalSunday}`
+    );
+    sundayDate = canonicalSunday;
+  }
+
+  // M1 INVARIANT: 각 세부 record 의 date === sundayDate 검증 (헌금함 세부는 주 단위 대체)
+  for (const d of offeringDetails) {
+    if (d.date !== sundayDate) {
+      console.warn(
+        `[replaceCashOfferingTotal] detail.date INVARIANT 위반 — 재계산: id=${d.id} from=${d.date} to=${sundayDate}`
+      );
+      d.date = sundayDate;
+    }
+  }
+
+  // idempotency marker — 세부 append 시 note 에 삽입해 재실행 판정 근거로 사용
+  const syncMarker = `[cash-offering-sync:${sundayDate}]`;
+  // 각 record 의 note 에 marker 를 안전하게 주입 (원본 record 변형 방지 위해 shallow copy)
+  const markRecords = (records: IncomeRecord[]): IncomeRecord[] =>
+    records.map(r => {
+      const existingNote = (r.note ?? '').toString();
+      if (existingNote.includes(syncMarker)) return r;
+      const nextNote = existingNote.length > 0 ? `${existingNote} ${syncMarker}` : syncMarker;
+      return { ...r, note: nextNote };
+    });
+
+  const detailsAmount = offeringDetails.reduce((s, r) => s + parseAmount(r.amount), 0);
+
+  const rows = await readSheet(FINANCE_CONFIG.sheets.income);
+  if (rows.length <= 1) {
+    // 수입부가 비어있음 — 이관도 안 됐으므로 세부만 append (marker 포함)
+    if (offeringDetails.length === 0) {
+      return { replaced: false, aggregateDeleted: 0, detailsAdded: 0, aggregateAmount: 0, detailsAmount: 0 };
+    }
+    await addIncomeRecords(markRecords(offeringDetails), false);
+    console.warn(
+      `[replaceCashOfferingTotal] ${sundayDate}: 수입부 empty — 총액 없이 세부만 append (${offeringDetails.length}건, ${detailsAmount}원)`
+    );
+    return {
+      replaced: false,
+      aggregateDeleted: 0,
+      detailsAdded: offeringDetails.length,
+      aggregateAmount: 0,
+      detailsAmount,
+    };
+  }
+
+  // 1. 총액 record 검색 + marker record 동시 스캔
+  //    - aggregate: date===sundayDate && source==='헌금함' && donor_name==='(헌금함 총액)'
+  //    - marker:    date===sundayDate && note contains syncMarker (세부 append 흔적)
+  const aggregates: { id: string; amount: number }[] = [];
+  let markerFound = false;
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const date = String(row[1] || '');
+    if (date !== sundayDate) continue;
+    const source = String(row[2] || '');
+    const donorName = String(row[4] || '');
+    const note = String(row[7] || '');
+    if (source === '헌금함' && donorName === '(헌금함 총액)') {
+      aggregates.push({ id: String(row[0] || ''), amount: parseAmount(row[6]) });
+    }
+    if (!markerFound && note.includes(syncMarker)) {
+      markerFound = true;
+    }
+  }
+
+  const aggregateAmount = aggregates.reduce((s, a) => s + a.amount, 0);
+
+  // 2. 총액 0건 — idempotency marker 로 재실행 판정
+  if (aggregates.length === 0) {
+    if (markerFound) {
+      // 이미 정상 완료된 상태 (aggregate 삭제 + 세부 append 완료)
+      console.log(
+        `[replaceCashOfferingTotal] ${sundayDate}: 총액 0건 + marker 발견 — alreadyApplied (no-op)`
+      );
+      return {
+        replaced: true,
+        aggregateDeleted: 0,
+        detailsAdded: 0,
+        aggregateAmount: 0,
+        detailsAmount,
+        alreadyApplied: true,
+      };
+    }
+    // marker 없음 → delete 완료 후 append 직전 크래시 시나리오 → 세부 복구 append
+    if (offeringDetails.length === 0) {
+      console.log(
+        `[replaceCashOfferingTotal] ${sundayDate}: 총액 0건 + marker 없음 + 세부 empty — no-op`
+      );
+      return {
+        replaced: false,
+        aggregateDeleted: 0,
+        detailsAdded: 0,
+        aggregateAmount: 0,
+        detailsAmount: 0,
+      };
+    }
+    console.warn(
+      `[replaceCashOfferingTotal] ${sundayDate}: 총액 0건 + marker 없음 — 크래시 복구 append (${offeringDetails.length}건, ${detailsAmount}원)`
+    );
+    await addIncomeRecords(markRecords(offeringDetails), false);
+    return {
+      replaced: false,
+      aggregateDeleted: 0,
+      detailsAdded: offeringDetails.length,
+      aggregateAmount: 0,
+      detailsAmount,
+    };
+  }
+
+  // 3. 1원 단위 정확 검증
+  if (Math.abs(aggregateAmount - detailsAmount) >= 1) {
+    throw new Error(
+      `[replaceCashOfferingTotal] ${sundayDate}: 총액 ${aggregateAmount}원 ≠ 세부 ${detailsAmount}원 (차이 ${aggregateAmount - detailsAmount}원)`
+    );
+  }
+
+  // 4. 총액 records 순차 삭제 (실패 시 즉시 throw — 이미 삭제한 것은 백업 로그만)
+  const deletedIds: string[] = [];
+  for (const agg of aggregates) {
+    try {
+      await deleteIncomeRecord(agg.id);
+      deletedIds.push(agg.id);
+    } catch (err) {
+      console.error(
+        `[replaceCashOfferingTotal] ${sundayDate}: 총액 삭제 실패 (id=${agg.id}) — 이미 삭제된 ${deletedIds.length}건: ${deletedIds.join(',')}`
+      );
+      throw new Error(
+        `[replaceCashOfferingTotal] ${sundayDate}: 총액 삭제 도중 실패 (id=${agg.id}, err=${(err as Error).message})`
+      );
+    }
+  }
+
+  // 5. 세부 append — marker 삽입 (skipPledgeMatching=false — 세부는 정상 매칭 대상)
+  if (offeringDetails.length > 0) {
+    await addIncomeRecords(markRecords(offeringDetails), false);
+  }
+
+  console.log(
+    `[replaceCashOfferingTotal] ${sundayDate}: 총액 ${aggregates.length}건(${aggregateAmount}원) → 세부 ${offeringDetails.length}건(${detailsAmount}원) 대체`
+  );
+
+  return {
+    replaced: true,
+    aggregateDeleted: aggregates.length,
+    detailsAdded: offeringDetails.length,
+    aggregateAmount,
+    detailsAmount,
+  };
+}
+
+// 지출부 NH카드대금 총액 row 를 카드내역임시 세부로 대체 + 은행원장 대응 row suppressed.
+// - 세부 append 는 필수(실패 시 throw)
+// - aggregate delete / bank suppress 는 관용(실패 시 warn only)
+export async function replaceCardPaymentTotal(
+  cardDetails: ExpenseRecord[],
+  opts: {
+    aggregateExpenseId: string | null;
+    bankKeywords?: string[];
+  }
+): Promise<{
+  detailsAdded: number;
+  aggregateDeleted: string | null;
+  bankSuppressed: string | null;
+  totalAmount: number;
+  alreadyApplied?: boolean;
+}> {
+  if (!cardDetails || cardDetails.length === 0) {
+    throw new Error('[replaceCardPaymentTotal] cardDetails 가 비어있습니다');
+  }
+
+  // M1 INVARIANT (K1): cardDetails 의 date === getWeekEndingSunday(transaction_date)
+  // 방어적 검증 — 위반 시 warn 후 재계산 (route 에서 matching_record_date 를 잘못 넘길 수 있음)
+  for (const d of cardDetails) {
+    if (!d.transaction_date) {
+      console.warn(
+        `[replaceCardPaymentTotal] transaction_date 누락 — INVARIANT 검증 skip: id=${d.id}`
+      );
+      continue;
+    }
+    const expected = getWeekEndingSunday(d.transaction_date);
+    if (d.date !== expected) {
+      console.warn(
+        `[replaceCardPaymentTotal] detail.date INVARIANT 위반 — 재계산: id=${d.id} from=${d.date} to=${expected} (transaction_date=${d.transaction_date})`
+      );
+      d.date = expected;
+    }
+  }
+
+  const totalAmount = cardDetails.reduce((s, r) => s + parseAmount(r.amount), 0);
+  const bankKeywords = opts.bankKeywords ?? CARD_PAYMENT_KEYWORDS;
+
+  // 0. 재실행 안전 (H1) — note marker 로 기 적용 여부 판정
+  //    marker: [card-apply:${aggregateExpenseId}]
+  //    이미 세부가 append 되어 있으면 no-op 반환 (재실행 시 세부 중복 append 방지)
+  const marker = opts.aggregateExpenseId
+    ? `[card-apply:${opts.aggregateExpenseId}]`
+    : null;
+  if (marker) {
+    const existingExpenses = await getExpenseRecords();
+    const alreadyMarked = existingExpenses.some((r) =>
+      String(r.note || '').includes(marker)
+    );
+    if (alreadyMarked) {
+      console.log(
+        `[replaceCardPaymentTotal] 이미 적용됨 (marker=${marker}) — 재실행 skip`
+      );
+      return {
+        detailsAdded: 0,
+        aggregateDeleted: null,
+        bankSuppressed: null,
+        totalAmount,
+        alreadyApplied: true,
+      };
+    }
+  }
+
+  // 1. aggregateExpenseId 존재 시 재확인 (M2: mismatch → throw)
+  //    - 실측 aggregate 발견 && id 불일치 → throw (엉뚱한 aggregate 삭제 방지)
+  //    - 실측 aggregate 없음 → 이미 삭제된 경우일 수 있으므로 warn 후 진행
+  if (opts.aggregateExpenseId) {
+    let aggregate: (ExpenseRecord & { rowIndex: number }) | null = null;
+    try {
+      aggregate = await findNhCardExpenseRecord(totalAmount);
+    } catch (err) {
+      console.warn(
+        `[replaceCardPaymentTotal] aggregate 재확인 중 오류 (관용):`,
+        err
+      );
+    }
+    if (aggregate && aggregate.id !== opts.aggregateExpenseId) {
+      throw new Error(
+        `[replaceCardPaymentTotal] aggregate id 불일치: 요청=${opts.aggregateExpenseId} 실측=${aggregate.id} (금액 ${totalAmount}원) — 잘못된 aggregate 삭제 위험, 중단`
+      );
+    }
+    if (!aggregate) {
+      console.warn(
+        `[replaceCardPaymentTotal] aggregate 실측 없음 (금액 ${totalAmount}원, 요청 id=${opts.aggregateExpenseId}) — 이미 삭제되었을 수 있음`
+      );
+    }
+  }
+
+  // M3: aggregate delete → 세부 append 순서로 반전
+  //   - 기존 순서(append→delete): 두 API 호출 사이 window 에서 총액+세부 병존 → 2x 노출
+  //   - 반전 순서(delete→append): 두 API 호출 사이 window 에서 총액도 세부도 없음 → 0x 노출 (안전)
+  //   - crash 시나리오: delete 성공 후 append 실패 → 재실행 시 marker 없음 + aggregate 없음
+  //     → 정상 흐름 재개 (delete no-op + append) → 세부 복구됨
+
+  // 2. aggregate delete 먼저 (try/catch 관용)
+  let aggregateDeleted: string | null = null;
+  if (opts.aggregateExpenseId) {
+    try {
+      await deleteExpenseRecord(opts.aggregateExpenseId);
+      aggregateDeleted = opts.aggregateExpenseId;
+    } catch (err) {
+      console.warn(
+        `[replaceCardPaymentTotal] aggregate 삭제 실패 (id=${opts.aggregateExpenseId}, 관용): ${(err as Error).message}`
+      );
+    }
+  }
+
+  // 3. 세부 append (필수) — H1: note 에 marker 삽입해 재실행 idempotency 확보
+  const detailsToAppend = marker
+    ? cardDetails.map((r) => ({
+        ...r,
+        note: r.note ? `${r.note} ${marker}` : marker,
+      }))
+    : cardDetails;
+  await addExpenseRecords(detailsToAppend);
+
+  // 4. 은행원장 대응 row suppressed (try/catch 관용)
+  let bankSuppressed: string | null = null;
+  try {
+    const bankTransactions = await getBankTransactions();
+    const cardBankTx = bankTransactions.find(tx => {
+      if (tx.withdrawal !== totalAmount) return false;
+      if (tx.matched_status === 'suppressed') return false;
+      if (tx.suppressed) return false;
+      const detail = String(tx.detail || '').toLowerCase();
+      const desc = String(tx.description || '').toLowerCase();
+      return bankKeywords.some(kw => detail.includes(kw) || desc.includes(kw));
+    });
+    if (cardBankTx) {
+      // K2 통과: updateBankTransaction 은 date 수동수정 금지 검증만 하므로 아래 3필드는 안전
+      await updateBankTransaction(cardBankTx.id, {
+        matched_status: 'suppressed',
+        suppressed: true,
+        suppressed_reason: '카드 세부내역으로 대체',
+      });
+      bankSuppressed = cardBankTx.id;
+      console.log(`[replaceCardPaymentTotal] 은행원장 카드대금 suppressed: ${cardBankTx.id} (${totalAmount}원)`);
+    } else {
+      console.warn(`[replaceCardPaymentTotal] 은행원장에서 카드대금 출금 미발견 (금액 ${totalAmount}원)`);
+    }
+  } catch (err) {
+    console.warn(`[replaceCardPaymentTotal] 은행 suppress 처리 실패 (관용): ${(err as Error).message}`);
+  }
+
+  console.log(
+    `[replaceCardPaymentTotal] 대체 완료: 세부 +${cardDetails.length}건 (${totalAmount}원), aggregate=${aggregateDeleted ?? 'skip'}, bank=${bankSuppressed ?? 'skip'}`
+  );
+
+  return {
+    detailsAdded: cardDetails.length,
+    aggregateDeleted,
+    bankSuppressed,
+    totalAmount,
+  };
+}
+
+// ============================================
 // 카드원본 관련
 // ============================================
 

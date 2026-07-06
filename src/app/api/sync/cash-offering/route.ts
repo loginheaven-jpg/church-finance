@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchCashOfferings, addIncomeRecords, generateId, getKSTDateTime, getWeekEndingSunday, bulkUpdateCashOfferingEntriesStatus } from '@/lib/google-sheets';
+import { fetchCashOfferings, generateId, getKSTDateTime, getWeekEndingSunday, bulkUpdateCashOfferingEntriesStatus, replaceCashOfferingTotal } from '@/lib/google-sheets';
 import { syncCashOfferingsWithDuplicatePrevention } from '@/lib/matching-engine';
 import { invalidateYearCache } from '@/lib/redis';
 import type { IncomeRecord } from '@/types';
@@ -54,7 +54,34 @@ export async function POST(request: NextRequest) {
         transaction_date: item.date, // 실제 거래일
       }));
 
-      await addIncomeRecords(incomeRecords);
+      // 안 β: addIncomeRecords 를 주(week) 단위 replaceCashOfferingTotal 로 치환
+      // (은행원장 자동 이관으로 이미 존재하는 헌금함 총액 행을 세부로 대체)
+      const byWeek = new Map<string, IncomeRecord[]>();
+      for (const rec of incomeRecords) {
+        const w = rec.date; // 이미 getWeekEndingSunday 결과
+        const bucket = byWeek.get(w);
+        if (bucket) bucket.push(rec);
+        else byWeek.set(w, [rec]);
+      }
+
+      const replaceResult: Array<{
+        week: string;
+        replaced: boolean;
+        aggregateDeleted: number;
+        detailsAdded: number;
+        aggregateAmount: number;
+        detailsAmount: number;
+      }> = [];
+
+      for (const [week, recs] of byWeek) {
+        try {
+          const r = await replaceCashOfferingTotal(week, recs);
+          replaceResult.push({ week, ...r });
+        } catch (err) {
+          console.error(`[sync/cash-offering] ${week} 주 대체 실패:`, err);
+          warnings.push(`${week} 주 대체 실패: ${(err as Error).message}`);
+        }
+      }
 
       // 헌금함입력 시트의 status를 'synced'로 일괄 업데이트 + synced_to_inc_id 기록
       // (rowIndex 있는 항목만, 즉 신규 헌금함입력 시트에서 온 entries만)
@@ -95,7 +122,8 @@ export async function POST(request: NextRequest) {
         suppressedBankTransactions: 0, // sync 단계에선 자동말소 안 함 (매칭 단계에 일임)
         statusUpdatedCount,
         warnings,
-        message: `${incomeRecords.length}건의 현금헌금이 동기화되었습니다 (status 업데이트: ${statusUpdatedCount}건)`,
+        replaceResult,
+        message: `${incomeRecords.length}건 세부 대체 완료 (주 ${replaceResult.length}개, status 업데이트: ${statusUpdatedCount}건)`,
       });
     }
 

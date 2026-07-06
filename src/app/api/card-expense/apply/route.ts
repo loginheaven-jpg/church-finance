@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
 import {
-  addExpenseRecords,
-  deleteExpenseRecord,
   generateId,
   getKSTDateTime,
   getCardExpenseTemp,
   updateCardExpenseTempStatus,
-  getBankTransactions,
-  updateBankTransaction,
+  replaceCardPaymentTotal,
+  getWeekEndingSunday,
 } from '@/lib/google-sheets';
 import {
   hasRole,
@@ -76,63 +74,35 @@ export async function POST() {
     const matchingDate = pendingRecords[0].matching_record_date;
 
     // CardExpenseTempRecord -> ExpenseRecord 변환
+    // M1 INVARIANT: date === getWeekEndingSunday(transaction_date). matchingDate 는 이론상
+    // 이미 canonical Sunday(K1) 이지만, 방어적으로 매 record 를 transaction_date 기반으로 재계산.
     const createdAt = getKSTDateTime();
-    const expenseRecords: ExpenseRecord[] = pendingRecords.map((tx) => ({
-      id: generateId('EXP'),
-      date: matchingDate || tx.transaction_date, // 매칭된 날짜 또는 거래일
-      payment_method: '법인카드',
-      vendor: tx.vendor,
-      description: tx.description,
-      amount: tx.amount,
-      account_code: tx.account_code as number,
-      category_code: Math.floor((tx.account_code as number) / 10) * 10,
-      note: tx.note,
-      created_at: createdAt,
-      created_by: '카드대금반영',
-      transaction_date: tx.transaction_date,
-    }));
+    const expenseRecords: ExpenseRecord[] = pendingRecords.map((tx) => {
+      const canonicalDate = tx.transaction_date
+        ? getWeekEndingSunday(tx.transaction_date)
+        : matchingDate || tx.transaction_date;
+      return {
+        id: generateId('EXP'),
+        date: canonicalDate, // K1: 매 record 별 canonical Sunday
+        payment_method: '법인카드',
+        vendor: tx.vendor,
+        description: tx.description,
+        amount: tx.amount,
+        account_code: tx.account_code as number,
+        category_code: Math.floor((tx.account_code as number) / 10) * 10,
+        note: tx.note,
+        created_at: createdAt,
+        created_by: '카드대금반영',
+        transaction_date: tx.transaction_date,
+      };
+    });
 
-    // 1. 지출부에 세부내역 추가
-    await addExpenseRecords(expenseRecords);
-
-    // 2. 기존 NH카드대금 행 삭제 (ID가 있는 경우)
-    let deletedRecordId: string | undefined;
-    if (nhCardRecordId) {
-      try {
-        await deleteExpenseRecord(nhCardRecordId);
-        deletedRecordId = nhCardRecordId;
-      } catch (deleteError) {
-        console.error('Failed to delete NH카드대금 record:', deleteError);
-        // 삭제 실패해도 추가는 성공했으므로 계속 진행
-      }
-    }
-
-    // 3. 은행원장의 카드대금 출금을 suppressed로 변경
-    try {
-      const totalAmount = expenseRecords.reduce((sum, r) => sum + r.amount, 0);
-      const bankTransactions = await getBankTransactions();
-      const cardKeywords = ['nh카드대금', 'nh기업카드', 'nh카드', '농협카드', '카드대금'];
-      const cardBankTx = bankTransactions.find(tx => {
-        if (tx.withdrawal !== totalAmount) return false;
-        if (tx.matched_status === 'suppressed') return false;
-        const detail = (tx.detail || '').toLowerCase();
-        const desc = (tx.description || '').toLowerCase();
-        return cardKeywords.some(kw => detail.includes(kw) || desc.includes(kw));
-      });
-      if (cardBankTx) {
-        await updateBankTransaction(cardBankTx.id, {
-          matched_status: 'suppressed',
-          suppressed: true,
-          suppressed_reason: '카드 세부내역으로 대체 (법인카드)',
-        });
-        console.log('[card-expense/apply] 은행원장 카드대금 suppressed:', cardBankTx.id, totalAmount);
-      } else {
-        console.warn('[card-expense/apply] 은행원장에서 카드대금 출금을 찾지 못함 (금액:', totalAmount, ')');
-      }
-    } catch (bankError) {
-      console.error('[card-expense/apply] 은행원장 suppressed 처리 실패:', bankError);
-      // 실패해도 지출부 반영은 완료됨
-    }
+    // 안 β: 세부 add + aggregate delete + 은행 suppress 를 한 함수로 위임
+    const replaceResult = await replaceCardPaymentTotal(expenseRecords, {
+      aggregateExpenseId: nhCardRecordId ?? null,
+      bankKeywords: ['nh카드대금', 'nh기업카드', 'nh카드', '농협카드', '카드대금'],
+    });
+    const deletedRecordId = replaceResult.aggregateDeleted ?? undefined;
 
     // 4. 임시 데이터 상태를 'applied'로 변경
     const tempIds = pendingRecords.map((r) => r.tempId);
@@ -154,7 +124,7 @@ export async function POST() {
     return NextResponse.json<ApplyResponse>({
       success: true,
       message,
-      addedCount: expenseRecords.length,
+      addedCount: replaceResult.detailsAdded,
       deletedRecordId,
     });
   } catch (error) {

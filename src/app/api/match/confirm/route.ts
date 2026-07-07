@@ -65,23 +65,12 @@ export async function POST(request: NextRequest) {
     console.error('[match/confirm] 은행원장 읽기 실패:', error);
   }
 
-  // 안 α (K5): deposit tx가 expense 배치에 들어오면 원천 거부 (이상 A 유형 방어)
-  if (expense) {
-    for (const item of expense) {
-      if ((item.transaction.deposit ?? 0) > 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `[match/confirm] 입금 거래는 지출로 매칭할 수 없습니다 (id=${item.transaction.id})`,
-          },
-          { status: 400 }
-        );
-      }
-    }
-  }
+  // β⁴ (2026-07-07): 순서 반전 — 헌금함 자동 흡수 먼저, K5 방어는 그 뒤에.
+  // 이유: K5 가 먼저 실행되면 배치 전체가 400 으로 죽어 정상 record 도 함께 실패.
+  //       헌금함(deposit>0)이 지출탭에 실수로 포함되어도 자동 suppressed 이동 후 통과되도록.
 
-  // ★ 서버 방어: income/expense에 포함된 헌금함 거래를 자동으로 suppressed로 이동
-  // 안 α (K5): 헌금함 판별 강화 — detail/description 어디에든 '헌금함' 포함 시 인정 (substring(0,3) 우회 방지)
+  // ★ 서버 방어 1: income/expense 에 포함된 헌금함 거래를 자동으로 suppressed 로 이동
+  // 헌금함 판별 강화 — detail/description 어디에든 '헌금함' 포함 시 인정
   const isCashOffering = (tx: BankTransaction) => {
     const detail = (tx.detail || '').trim();
     const desc = (tx.description || '').trim();
@@ -94,16 +83,29 @@ export async function POST(request: NextRequest) {
       fromIncome: cashOfferingFromIncome.length,
       fromExpense: cashOfferingFromExpense.length,
     });
-    // income/expense에서 제거
     if (income) income = income.filter(item => !(item.transaction.deposit > 0 && isCashOffering(item.transaction)));
     if (expense) expense = expense.filter(item => !isCashOffering(item.transaction));
-    // suppressed에 추가
     const additionalSuppressed = [
       ...cashOfferingFromIncome.map(item => ({ ...item.transaction, suppressed_reason: '자동 말소 (헌금함 — 서버 보정)' })),
       ...cashOfferingFromExpense.map(item => ({ ...item.transaction, suppressed_reason: '자동 말소 (헌금함 — 서버 보정)' })),
     ];
     if (!suppressed) suppressed = [];
     suppressed = [...suppressed, ...additionalSuppressed];
+  }
+
+  // ★ 서버 방어 2 (K5): 헌금함 아닌 deposit tx 가 여전히 expense 배치에 남았으면 배치 전체 거부
+  if (expense) {
+    for (const item of expense) {
+      if ((item.transaction.deposit ?? 0) > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `[match/confirm] 입금 거래는 지출로 매칭할 수 없습니다 (id=${item.transaction.id})`,
+          },
+          { status: 400 }
+        );
+      }
+    }
   }
 
   let incomeCount = 0;
@@ -152,16 +154,19 @@ export async function POST(request: NextRequest) {
 
         // P0-1: learnFromManualMatch — 사용자 확정 결과를 matching_rules 시트에 학습
         // 다음 이관 시 동일 패턴 자동 분류
-        for (const item of newIncomeItems) {
-          try {
-            await learnFromManualMatch(item.transaction, {
+        // β⁴ (2026-07-07): 순차 await → Promise.allSettled 병렬화 (응답 지연 대폭 축소)
+        const learnResults = await Promise.allSettled(
+          newIncomeItems.map(item =>
+            learnFromManualMatch(item.transaction, {
               type: 'income',
               code: item.record.offering_code,
-              name: '', // 코드명은 확장 시 별도 조회
-            });
-          } catch (learnErr) {
-            console.warn('[match/confirm] learnFromManualMatch 수입 실패:', learnErr);
-          }
+              name: '',
+            })
+          )
+        );
+        const failedLearns = learnResults.filter(r => r.status === 'rejected').length;
+        if (failedLearns > 0) {
+          console.warn(`[match/confirm] learnFromManualMatch 수입 ${failedLearns}/${newIncomeItems.length}건 실패`);
         }
       }
     } catch (error) {
@@ -213,16 +218,19 @@ export async function POST(request: NextRequest) {
         }
 
         // P0-1: learnFromManualMatch — 사용자 확정 결과 학습
-        for (const item of validExpenseItems) {
-          try {
-            await learnFromManualMatch(item.transaction, {
+        // β⁴: 순차 await → Promise.allSettled 병렬화
+        const learnResults = await Promise.allSettled(
+          validExpenseItems.map(item =>
+            learnFromManualMatch(item.transaction, {
               type: 'expense',
               code: item.record.account_code,
               name: '',
-            });
-          } catch (learnErr) {
-            console.warn('[match/confirm] learnFromManualMatch 지출 실패:', learnErr);
-          }
+            })
+          )
+        );
+        const failedLearns = learnResults.filter(r => r.status === 'rejected').length;
+        if (failedLearns > 0) {
+          console.warn(`[match/confirm] learnFromManualMatch 지출 ${failedLearns}/${validExpenseItems.length}건 실패`);
         }
       }
     } catch (error) {

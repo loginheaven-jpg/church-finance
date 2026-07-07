@@ -70,6 +70,7 @@ interface UnifiedIncomeItem {
   transaction: BankTransaction;
   record: IncomeRecord | null;
   match: MatchingRule | null;
+  suggestions?: MatchingRule[]; // needsReview 시 top-3 후보
 }
 
 interface UnifiedExpenseItem {
@@ -162,11 +163,16 @@ export function FinanceReflection() {
   }, []);
 
   // 통합 리스트 생성
+  // 2026-07-07 (β⁴ fix): needsReview 큐를 방향(deposit/withdrawal)으로 필터링.
+  // 이전 버그: 헌금함 deposit tx 가 방향 판정 없이 지출탭에 dump.
   const buildUnifiedLists = useCallback((result: MatchPreviewResult) => {
     const incomeItems: UnifiedIncomeItem[] = [
       ...result.suppressed
         .filter(tx => tx.deposit > 0)
         .map(tx => ({ type: 'suppressed' as ItemType, transaction: tx, record: null, match: null })),
+      ...result.needsReview
+        .filter(item => item.transaction.deposit > 0)   // ★ 신규
+        .map(item => ({ type: 'needsReview' as ItemType, transaction: item.transaction, record: null, match: null, suggestions: item.suggestions })),
       ...result.income
         .map(item => ({ type: 'matched' as ItemType, transaction: item.transaction, record: item.record, match: item.match })),
     ];
@@ -176,6 +182,7 @@ export function FinanceReflection() {
         .filter(tx => tx.withdrawal > 0)
         .map(tx => ({ type: 'suppressed' as ItemType, transaction: tx, record: null, match: null })),
       ...result.needsReview
+        .filter(item => item.transaction.withdrawal > 0)  // ★ 신규
         .map(item => ({ type: 'needsReview' as ItemType, transaction: item.transaction, record: null, match: null, suggestions: item.suggestions })),
       ...result.expense
         .map(item => ({ type: 'matched' as ItemType, transaction: item.transaction, record: item.record, match: item.match })),
@@ -704,16 +711,15 @@ export function FinanceReflection() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {item.type !== 'suppressed' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveUnifiedIncome(index)}
-                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            )}
+                            {/* β⁴: matched/needsReview/suppressed 모두 삭제 가능 */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveUnifiedIncome(index)}
+                              className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -882,16 +888,15 @@ export function FinanceReflection() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {item.type === 'matched' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveUnifiedExpense(index)}
-                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            )}
+                            {/* β⁴: matched/needsReview/suppressed 모두 삭제 가능 */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveUnifiedExpense(index)}
+                              className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}

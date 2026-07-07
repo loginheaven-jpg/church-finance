@@ -85,6 +85,7 @@ interface UnifiedIncomeItem {
   transaction: BankTransaction;
   record: IncomeRecord | null;
   match: MatchingRule | null;
+  suggestions?: MatchingRule[]; // needsReview 시 top-3 rule 후보
 }
 
 interface UnifiedExpenseItem {
@@ -143,22 +144,28 @@ export function BankUpload() {
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
 
   // matchResult가 변경되면 통합 리스트 생성
+  // 2026-07-07 (β⁴ fix): needsReview 큐를 방향(deposit/withdrawal)으로 필터링.
+  // 이전 버그: 헌금함 deposit tx 가 방향 판정 없이 지출탭에 dump 되어 금액=0/계정=0 으로 표시.
   const buildUnifiedLists = useCallback((result: MatchPreviewResult) => {
-    // 수입부: 말소된 수입 거래 + 정상 매칭 수입
+    // 수입부: 말소된 수입 거래 + 검토필요 수입(헌금함 mismatch 등) + 정상 매칭 수입
     const incomeItems: UnifiedIncomeItem[] = [
       ...result.suppressed
         .filter(tx => tx.deposit > 0)
         .map(tx => ({ type: 'suppressed' as ItemType, transaction: tx, record: null, match: null })),
+      ...result.needsReview
+        .filter(item => item.transaction.deposit > 0)   // ★ 신규: 입금 tx 만 수입탭
+        .map(item => ({ type: 'needsReview' as ItemType, transaction: item.transaction, record: null, match: null, suggestions: item.suggestions })),
       ...result.income
         .map(item => ({ type: 'matched' as ItemType, transaction: item.transaction, record: item.record, match: item.match })),
     ];
 
-    // 지출부: 말소된 지출 거래 + 수동검토 지출 + 정상 매칭 지출
+    // 지출부: 말소된 지출 거래 + 검토필요 지출 + 정상 매칭 지출
     const expenseItems: UnifiedExpenseItem[] = [
       ...result.suppressed
         .filter(tx => tx.withdrawal > 0)
         .map(tx => ({ type: 'suppressed' as ItemType, transaction: tx, record: null, match: null })),
       ...result.needsReview
+        .filter(item => item.transaction.withdrawal > 0)  // ★ 신규: 출금 tx 만 지출탭
         .map(item => ({ type: 'needsReview' as ItemType, transaction: item.transaction, record: null, match: null, suggestions: item.suggestions })),
       ...result.expense
         .map(item => ({ type: 'matched' as ItemType, transaction: item.transaction, record: item.record, match: item.match })),
@@ -1139,16 +1146,15 @@ export function BankUpload() {
                                 )}
                               </TableCell>
                               <TableCell>
-                                {item.type !== 'suppressed' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRemoveUnifiedIncome(index)}
-                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                )}
+                                {/* β⁴: matched/needsReview/suppressed 모두 삭제 가능 */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveUnifiedIncome(index)}
+                                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1307,16 +1313,15 @@ export function BankUpload() {
                                 )}
                               </TableCell>
                               <TableCell>
-                                {item.type === 'matched' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRemoveUnifiedExpense(index)}
-                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                )}
+                                {/* β⁴: matched/needsReview/suppressed 모두 삭제 가능 */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveUnifiedExpense(index)}
+                                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
                               </TableCell>
                             </TableRow>
                           ))}

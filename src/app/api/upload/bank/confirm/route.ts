@@ -4,6 +4,7 @@ import {
   getWeekEndingSunday,
   autoTransferBankToLedger,
 } from '@/lib/google-sheets';
+import { verifyBankLedgerIntegrity, repairOrphanBankPending } from '@/lib/integrity';
 import { invalidateYearCache } from '@/lib/redis';
 import type { BankTransaction } from '@/types';
 
@@ -55,6 +56,28 @@ export async function POST(request: NextRequest) {
     }
 
     if (transferResult) {
+      // β⁵ (2026-07-07): 이관 직후 정합성 검증 + 자동 복구
+      // 이관 범위 = 이번에 저장된 tx 의 transaction_date 최소/최대
+      let integrityReport: Awaited<ReturnType<typeof verifyBankLedgerIntegrity>> | null = null;
+      let repairResult: Awaited<ReturnType<typeof repairOrphanBankPending>> | null = null;
+      try {
+        const dates = sanitized.map(t => t.transaction_date).filter(Boolean).sort();
+        if (dates.length > 0) {
+          const from = dates[0];
+          const to = dates[dates.length - 1];
+          integrityReport = await verifyBankLedgerIntegrity(from, to);
+          // orphanBankPending 있으면 자동 복구 (β⁵: append 성공했는데 status 갱신 실패한 경우)
+          if (integrityReport.orphanBankPending.length > 0) {
+            repairResult = await repairOrphanBankPending(integrityReport);
+            console.log(
+              `[bank/confirm] 정합성 자동 복구: ${repairResult.success.length}건 성공, ${repairResult.failed.length}건 실패`
+            );
+          }
+        }
+      } catch (integrityErr) {
+        console.warn('[bank/confirm] 정합성 검증/복구 실패 (이관 자체는 성공):', integrityErr);
+      }
+
       return NextResponse.json({
         success: true,
         uploaded: sanitized.length,
@@ -65,7 +88,19 @@ export async function POST(request: NextRequest) {
           expenseSkipped: transferResult.expense.skipped,
         },
         needsReview: transferResult.needsReview,
-        message: `은행 ${sanitized.length}건 저장 · 수입 ${transferResult.income.added}건 · 지출 ${transferResult.expense.added}건 자동 이관 · 검토필요 ${transferResult.needsReview.length}건`,
+        // β⁵: 자동 이관 후 status 갱신 실패한 tx (autoTransferBankToLedger 내부에서 부분 실패)
+        failedBankUpdates: transferResult.failedBankUpdates,
+        // β⁵: 정합성 리포트 (autoTransferBankToLedger 실행 후 실 상태)
+        integrity: integrityReport
+          ? {
+              orphanBankPending: integrityReport.orphanBankPending.length,
+              orphanLedgerMissing: integrityReport.orphanLedgerMissing.length,
+              mismatched: integrityReport.mismatched.length,
+              repaired: repairResult?.success.length ?? 0,
+              repairFailed: repairResult?.failed.length ?? 0,
+            }
+          : null,
+        message: `은행 ${sanitized.length}건 저장 · 수입 ${transferResult.income.added}건 · 지출 ${transferResult.expense.added}건 자동 이관 · 검토필요 ${transferResult.needsReview.length}건${repairResult && repairResult.success.length > 0 ? ` · 정합 자동복구 ${repairResult.success.length}건` : ''}`,
       });
     }
 

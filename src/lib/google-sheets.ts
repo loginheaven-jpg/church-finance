@@ -1182,6 +1182,8 @@ export async function autoTransferBankToLedger(
   }>;
   // P1-2: 헌금함 정합성 검사로 자동 말소된 은행 tx 목록
   suppressed: Array<{ bankTxId: string; reason: string }>;
+  // β⁵: 은행원장 status 갱신에 실패한 tx id 목록 (append 는 성공했지만 status 갱신 실패)
+  failedBankUpdates: string[];
 }> {
   if (!transactions || transactions.length === 0) {
     return {
@@ -1189,6 +1191,7 @@ export async function autoTransferBankToLedger(
       expense: { added: 0, skipped: 0, ids: [] },
       needsReview: [],
       suppressed: [],
+      failedBankUpdates: [],
     };
   }
 
@@ -1251,19 +1254,33 @@ export async function autoTransferBankToLedger(
   }> = [];
   const usedRuleIds = new Set<string>(); // P1-11: 사용된 rule의 usage_count 배치 갱신용
   const suppressed: Array<{ bankTxId: string; reason: string }> = []; // P1-2
+  // β⁵ (2026-07-07): bank tx id → income/expense record id 매핑
+  //   append 완료 후 은행원장 status 를 matched 로 갱신 시 matched_ids 로 사용.
+  //   이전엔 이 갱신 자체가 없어서 자동 이관 후 status 가 영구 pending 이었음 (원인 A).
+  const bankToIncomeId = new Map<string, string>();
+  const bankToExpenseId = new Map<string, string>();
   let incomeSkipped = 0;
   let expenseSkipped = 0;
   let hasNonCashOfferingIncome = false; // pledge 매칭 조건부 활성화용
 
   // P1-1: 수입부의 헌금함 세부 record 를 transaction_date 별로 합계
   // 은행 tx 가 헌금함인데 이미 수입부에 세부 record 있으면 aggregate 생성 skip + suppressed 추가
+  //
+  // β⁵ (2026-07-07) FIX: parseAmount 사용 필수.
+  //   Google Sheets 가 "1,366,000" 처럼 콤마 포함 문자열을 반환하는 경우가 있음.
+  //   Number("1,366,000") = NaN → 0 이 되어 헌금함 정합성 검사 완전 무력화 됐음
+  //   (원래 40,668건 중 40,656건 = 99.97% 파싱 실패).
+  //   원인 B (workflow ledger-integrity-audit 진단 결과).
   const cashOfferingByDate = new Map<string, number>();
   for (let i = 1; i < incomeRows.length; i++) {
     const row = incomeRows[i];
     const source = String(row?.[2] || '');
     if (source !== '헌금함') continue;
+    // 세부 record 만 (aggregate 는 제외 — donor_name='(헌금함 총액)')
+    const donorName = String(row?.[4] || '');
+    if (donorName === '(헌금함 총액)') continue;
     const txDate = String(row?.[11] || row?.[1] || '');  // transaction_date 또는 date
-    const amount = Number(row?.[6]) || 0;
+    const amount = parseAmount(row?.[6]);
     if (!txDate) continue;
     cashOfferingByDate.set(txDate, (cashOfferingByDate.get(txDate) || 0) + amount);
   }
@@ -1320,8 +1337,10 @@ export async function autoTransferBankToLedger(
           });
         }
         // 헌금함 총액 record — pledge 매칭 skip 대상
+        const cashAggregateId = generateId('INC');
+        bankToIncomeId.set(t.id, cashAggregateId); // β⁵ 매핑 저장
         newIncomes.push({
-          id: generateId('INC'),
+          id: cashAggregateId,
           date: t.date,
           source: '헌금함',
           offering_code: 14, // 특별헌금 (총액)
@@ -1389,8 +1408,10 @@ export async function autoTransferBankToLedger(
         // representative: override 우선, 없으면 헌금자정보(B→A) 조회
         const representative = ruleRepOverride || findRepresentative(donorName, donors);
 
+        const transferIncomeId = generateId('INC');
+        bankToIncomeId.set(t.id, transferIncomeId); // β⁵ 매핑
         newIncomes.push({
-          id: generateId('INC'),
+          id: transferIncomeId,
           date: t.date,
           source: '계좌이체',
           offering_code: offeringCode,
@@ -1432,8 +1453,10 @@ export async function autoTransferBankToLedger(
 
       if (isCardPayment) {
         // 카드대금 총액 — 이후 replaceCardPaymentTotal 로 세부 대체 예정
+        const cardExpenseId = generateId('EXP');
+        bankToExpenseId.set(t.id, cardExpenseId); // β⁵ 매핑
         newExpenses.push({
-          id: generateId('EXP'),
+          id: cardExpenseId,
           date: t.date,
           payment_method: '계좌이체',
           vendor: 'NH기업카드',
@@ -1533,8 +1556,10 @@ export async function autoTransferBankToLedger(
           }
         }
 
+        const generalExpenseId = generateId('EXP');
+        bankToExpenseId.set(t.id, generalExpenseId); // β⁵ 매핑
         newExpenses.push({
-          id: generateId('EXP'),
+          id: generalExpenseId,
           date: t.date,
           payment_method: '계좌이체',
           vendor,
@@ -1584,6 +1609,60 @@ export async function autoTransferBankToLedger(
     await addExpenseRecords(newExpenses);
   }
 
+  // β⁵ (2026-07-07): 은행원장 status 갱신 통합
+  // 이전엔 이 갱신 자체가 코드에 없어서 자동 이관 후에도 status='pending' 영구 잔존.
+  // 이제 append 완료 → 즉시 matched/suppressed 갱신 (원자성 향상).
+  // 실패는 warning + failedBankUpdates 반환 (upstream 감지 가능).
+  const statusUpdates: Array<{
+    id: string;
+    matched_status: 'matched' | 'suppressed';
+    matched_type?: string;
+    matched_ids?: string;
+    suppressed?: boolean;
+    suppressed_reason?: string;
+  }> = [];
+
+  // 이관 성공한 tx → matched
+  for (const [bankId, incomeId] of bankToIncomeId) {
+    statusUpdates.push({
+      id: bankId,
+      matched_status: 'matched',
+      matched_type: 'income_auto',
+      matched_ids: incomeId,
+    });
+  }
+  for (const [bankId, expenseId] of bankToExpenseId) {
+    statusUpdates.push({
+      id: bankId,
+      matched_status: 'matched',
+      matched_type: 'expense_auto',
+      matched_ids: expenseId,
+    });
+  }
+  // 자동 말소 (헌금함 정합 성공) → suppressed
+  for (const s of suppressed) {
+    statusUpdates.push({
+      id: s.bankTxId,
+      matched_status: 'suppressed',
+      suppressed: true,
+      suppressed_reason: s.reason,
+    });
+  }
+
+  const failedBankUpdates: string[] = [];
+  if (statusUpdates.length > 0) {
+    try {
+      const result = await updateBankTransactionsBatch(statusUpdates);
+      failedBankUpdates.push(...result.failed);
+      if (result.failed.length > 0) {
+        console.warn(`[autoTransferBankToLedger] 은행 status 갱신 실패 ${result.failed.length}/${statusUpdates.length}건: ${result.failed.slice(0, 5).join(',')}${result.failed.length > 5 ? '...' : ''}`);
+      }
+    } catch (err) {
+      console.error('[autoTransferBankToLedger] updateBankTransactionsBatch 예외:', err);
+      failedBankUpdates.push(...statusUpdates.map(u => u.id));
+    }
+  }
+
   // P1-11: 사용된 rule의 usage_count 배치 갱신 (실패해도 이관 흐름 방해 안 함)
   if (usedRuleIds.size > 0) {
     for (const ruleId of usedRuleIds) {
@@ -1602,7 +1681,7 @@ export async function autoTransferBankToLedger(
   }
 
   console.log(
-    `[autoTransferBankToLedger] 이관 완료: 수입 +${newIncomes.length}건 (skip ${incomeSkipped}) / 지출 +${newExpenses.length}건 (skip ${expenseSkipped}) / 검토필요 ${needsReview.length}건 / 자동말소 ${suppressed.length}건 / rule 갱신 ${usedRuleIds.size}건`
+    `[autoTransferBankToLedger] 이관 완료: 수입 +${newIncomes.length}건 (skip ${incomeSkipped}) / 지출 +${newExpenses.length}건 (skip ${expenseSkipped}) / 검토필요 ${needsReview.length}건 / 자동말소 ${suppressed.length}건 / rule 갱신 ${usedRuleIds.size}건 / 은행status 갱신 ${statusUpdates.length - failedBankUpdates.length}/${statusUpdates.length}`
   );
 
   return {
@@ -1618,6 +1697,7 @@ export async function autoTransferBankToLedger(
     },
     needsReview,
     suppressed,
+    failedBankUpdates,
   };
 }
 

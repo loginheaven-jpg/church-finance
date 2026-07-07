@@ -74,6 +74,33 @@ export function determineExpenseAccountCode(
 // 헌금 키워드 (이 키워드로 시작하면 뒤에서 이름 추출)
 export const OFFERING_KEYWORDS = ['십일', '주일', '감사', '선교', '구제', '건축', '성전', '특별'];
 
+// 이체 채널 keyword — 이 값이 오면 실제 이체 문구는 다른 컬럼에 있음
+// (예: 농협 이체 수입에서 G="폰신한은행", H="정의태주일헌금")
+export const TRANSFER_CHANNEL_PATTERNS: RegExp[] = [
+  /은행$/,
+  /뱅크$/,
+  /^폰[가-힣]/,
+  /^PC[가-힣]/,
+  /^NH/,
+  /^스마트/,
+  /카카오/,
+  /^ATM/i,
+  /올원/,
+  /콕송금/,
+  /^당행/,
+  /^전자금융/,
+];
+
+/**
+ * 문자열이 이체 채널 keyword(은행명, 이체 방식) 인지 판정.
+ * "폰신한은행", "NH올원뱅크", "PC하나은행", "스마트당행", "NH콕송금" 등.
+ */
+export function isTransferChannel(text: string | undefined): boolean {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return true;
+  return TRANSFER_CHANNEL_PATTERNS.some(p => p.test(trimmed));
+}
+
 // 헌금함 거래 판별 (detail 좌측 3자리가 '헌금함'인 경우)
 export function isCashOfferingTransaction(tx: BankTransaction): boolean {
   const donorName = (tx.detail || '').substring(0, 3);
@@ -89,15 +116,19 @@ export function findRepresentative(donorName: string, donors: DonorInfo[]): stri
 
 // detail에서 헌금자명 추출
 // 규칙:
+// 0. 이체 채널 keyword("폰신한은행", "NH올원뱅크" 등) 이면 즉시 실패 (fallback 유도)
 // 1. 특수문자(괄호 등) 모두 제거
 // 2. 헌금 키워드로 시작하면 → 뒤 3자리: "십일조최병희" → "최병희", "감사(김윤희)" → "김윤희"
 // 3. 그 외 → 앞 3자리: "김길동십일조" → "김길동", "오재혁(주일헌금)" → "오재혁"
 export function extractDonorName(detail: string | undefined): string {
-  if (!detail || detail.length < 2) return detail || '';
+  if (!detail || detail.length < 2) return '';
+
+  // 이체 채널이면 헌금자명 아님 → 빈 문자열 반환 (호출측 || fallback 유도)
+  if (isTransferChannel(detail)) return '';
 
   // 특수문자 모두 제거 (한글, 영문, 숫자만 유지)
   const cleaned = detail.replace(/[^가-힣a-zA-Z0-9]/g, '');
-  if (!cleaned) return detail.substring(0, 3);
+  if (!cleaned) return '';
 
   // 헌금 키워드로 시작하면 뒤 3자리
   const startsWithKeyword = OFFERING_KEYWORDS.some(kw => cleaned.startsWith(kw));

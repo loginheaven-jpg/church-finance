@@ -110,9 +110,10 @@ export async function GET(request: NextRequest) {
     // 디버그 모드 응답
     if (debug) {
       // transaction_date + time 정렬 (시간을 HH:MM:SS로 정규화)
+      // P0 (2026-07-07): endDate 컷오프로 실 계산과 동일 조건 유지 (아래 sortedBank 와 일관)
       const normalizeTime = (time: string | undefined) => (time || '00:00:00').padStart(8, '0');
       const debugSortedBank = bankTransactions
-        .filter(t => t.balance > 0)
+        .filter(t => t.balance > 0 && t.transaction_date <= endDate)
         .sort((a, b) => {
           const aDateTime = `${a.transaction_date} ${normalizeTime(a.time)}`;
           const bDateTime = `${b.transaction_date} ${normalizeTime(b.time)}`;
@@ -362,9 +363,13 @@ export async function GET(request: NextRequest) {
     // 은행원장의 마지막 잔액 (super_admin 검증용)
     // transaction_date + time 을 합쳐서 가장 늦은 시간의 balance 선택
     // 시간 정규화: "9:16:58" → "09:16:58" (H:MM:SS → HH:MM:SS)
+    //
+    // P0 (2026-07-07): endDate(기준 일요일) 이하 tx 만 대상.
+    // 사용자 시나리오: 7/7(월) 에 6/29~7/7 파일 업로드 시 은행에는 7/7 종가가 있지만,
+    // 원장 계산 잔고는 date<=7/5 로 필터되므로 7/6~7/7 순증감이 gap 으로 오탐되던 이슈.
     const normalizeTime = (time: string | undefined) => (time || '00:00:00').padStart(8, '0');
     const sortedBank = bankTransactions
-      .filter(t => t.balance > 0)
+      .filter(t => t.balance > 0 && t.transaction_date <= endDate)
       .sort((a, b) => {
         const aDateTime = `${a.transaction_date} ${normalizeTime(a.time)}`;
         const bDateTime = `${b.transaction_date} ${normalizeTime(b.time)}`;

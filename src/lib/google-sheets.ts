@@ -1375,8 +1375,13 @@ export async function autoTransferBankToLedger(
         //   (c) matching_rules 시트 → 사용자 학습 규칙 (amount_min/max)
         //   (d) fallback 90(미분류) + needsReview 큐
 
-        const extracted = extractAccountCodeFromDetail(detail);
-        // detail 첫 단어 (앞자리 숫자 제거 후 첫 단어)
+        // description(G열 적요) 우선 → detail(H열 비고) 순으로 앞자리 코드 시도.
+        // 사용자 지시 (2026-07-07): "'62청년부' 같은 코멘트는 주로 G컬럼에 있고,
+        // J컬럼은 '최철영'/'서주만' 이런 식으로 송금대상자 이름이 들어있거나 공란이다."
+        const extracted =
+          extractAccountCodeFromDetail(description) ||
+          extractAccountCodeFromDetail(detail);
+        // detail 첫 단어 (앞자리 숫자 제거 후 첫 단어) — 최종 fallback 용
         const detailHead = detail.split(/\s+/).filter(Boolean)[0] || '';
 
         let accountCode: number;
@@ -1390,9 +1395,11 @@ export async function autoTransferBankToLedger(
           // (a) 앞자리 숫자로 명시적 지정
           accountCode = extracted.code;
           accountName = `코드${extracted.code}`;
-          // vendor: memo(J열, 입금처) 우선 → detail rest 첫 단어 → '기타'
-          const restHead = extracted.rest.split(/\s+/).filter(Boolean)[0] || '';
-          vendor = t.memo || restHead || '기타';
+          // vendor: J(memo, 송금대상자) 우선 → G/H 코드 뒤 잔여 문자열 → '기타'
+          // 예: G="62청년부현수막" → account_code=62, rest="청년부현수막" → vendor="청년부현수막"
+          //     J="최철영" 있으면 → vendor="최철영"
+          const restText = extracted.rest.trim();
+          vendor = t.memo || restText || '기타';
           descText = '';
           noteBody = extracted.rest;
           expenseMatchedBy = 'extracted';

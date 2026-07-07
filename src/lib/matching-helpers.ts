@@ -189,11 +189,13 @@ export function findBestMatchingRule(
   transaction: BankTransaction,
   rules: MatchingRule[]
 ): MatchingRule | null {
+  // 수입/지출 공통 — description(G) + memo(J) + detail(H) 모두 검사
+  // (2026-07-07 수정: 기존은 수입 = memo 만 봤음. G 적요에 "전병문성전" 같은 문구가 있는데 놓쳤음.)
   let searchText: string;
   if (transaction.deposit > 0) {
-    searchText = (transaction.memo || '').toLowerCase();
+    searchText = `${transaction.description || ''} ${transaction.memo || ''} ${transaction.detail || ''}`.toLowerCase();
   } else {
-    searchText = `${transaction.detail || ''} ${transaction.description || ''}`.toLowerCase();
+    searchText = `${transaction.detail || ''} ${transaction.description || ''} ${transaction.memo || ''}`.toLowerCase();
   }
 
   const amount = transaction.deposit > 0 ? transaction.deposit : transaction.withdrawal;
@@ -234,11 +236,12 @@ export function getSuggestedRules(
   rules: MatchingRule[],
   limit: number
 ): MatchingRule[] {
+  // findBestMatchingRule 과 동일한 searchText 정책
   let searchText: string;
   if (transaction.deposit > 0) {
-    searchText = (transaction.memo || '').toLowerCase();
+    searchText = `${transaction.description || ''} ${transaction.memo || ''} ${transaction.detail || ''}`.toLowerCase();
   } else {
-    searchText = `${transaction.detail || ''} ${transaction.description || ''}`.toLowerCase();
+    searchText = `${transaction.detail || ''} ${transaction.description || ''} ${transaction.memo || ''}`.toLowerCase();
   }
 
   return rules

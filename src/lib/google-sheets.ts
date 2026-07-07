@@ -1280,6 +1280,14 @@ export async function autoTransferBankToLedger(
         });
       } else {
         // 계좌이체 수입 — 결정 로직 총동원 (G1~G4, G6)
+        //
+        // 사용자 지시 (2026-07-07): 원장 G(적요=description) 을 기반으로
+        //   1) 코드 판정 (예: "전병문성전" → 501)
+        //   2) donor_name 파싱 (E열, 예: "전병문")
+        //   3) representative 조회 (F열, 헌금자정보 B→A, 예: "전정자")
+        //   4) note 는 원본 그대로 (H열)
+        //
+        // donorName 파싱 우선순위: description(G) → detail(H) → memo(J) → fallback
 
         // (a) matching_rules 우선 시도 (사용자 학습 규칙, amount_min/max 지원)
         const rule = findBestMatchingRule(t, rules);
@@ -1291,7 +1299,11 @@ export async function autoTransferBankToLedger(
         if (rule && rule.confidence >= 0.8) {
           offeringCode = rule.target_code;
           offeringName = rule.target_name;
-          donorName = extractDonorName(detail) || t.memo || rule.target_name;
+          donorName =
+            extractDonorName(description) ||
+            extractDonorName(detail) ||
+            t.memo ||
+            rule.target_name;
           matchedBy = 'rule';
         } else {
           // (b) 키워드 우선순위 매칭 + 금액 fallback (helpers.determineIncomeOfferingCode)
@@ -1303,11 +1315,15 @@ export async function autoTransferBankToLedger(
           );
           offeringCode = offeringResult.code;
           offeringName = offeringResult.name;
-          donorName = extractDonorName(detail) || t.memo || offeringResult.name;
+          donorName =
+            extractDonorName(description) ||
+            extractDonorName(detail) ||
+            t.memo ||
+            offeringResult.name;
           matchedBy = offeringResult.matchedBy;
         }
 
-        // (c) 헌금자정보 → representative 자동 조회 (G1)
+        // (c) 헌금자정보 시트 (donor_name=B → representative=A) 조회
         const representative = findRepresentative(donorName, donors);
 
         newIncomes.push({

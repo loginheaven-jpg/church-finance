@@ -152,6 +152,15 @@ export interface MatchingRule {
   // 둘 다 비어있으면 금액 무관 (기존 동작과 동일)
   amount_min?: number;
   amount_max?: number;
+  // 오버라이드 필드 (2026-07-07 도입) — 자동 이관 시 강제 지정 값.
+  // 사용 예:
+  //   - 지출: pattern="국민건강" → target_code=63, vendor_override="최병희"
+  //   - 지출: pattern="91적립" → target_code=91, vendor_override="최병희"
+  //   - 수입: pattern="휴메지cms" → target_code=12, donor_override="김현식", representative_override="김현식"
+  // 지정된 필드만 override, 미지정 필드는 기존 자동 파싱 로직 사용.
+  vendor_override?: string;              // 지출 vendor 강제 지정
+  donor_override?: string;               // 수입 donor_name 강제 지정
+  representative_override?: string;      // 수입 representative 강제 지정
 }
 
 // 예산

@@ -28,9 +28,11 @@ import {
   findBestMatchingRule,
   findRepresentative,
   extractDonorName,
+  extractPersonName,
   determineIncomeOfferingCode,
   determineExpenseAccountCode,
   extractAccountCodeFromDetail,
+  getSuggestedRules,
 } from './matching-helpers';
 
 // ============================================
@@ -1176,6 +1178,7 @@ export async function autoTransferBankToLedger(
     assignedCode: number;
     assignedName: string;
     reason: string;
+    suggestions: MatchingRule[]; // P1-9: top-3 rule 후보 (UI 재분류 도우미)
   }>;
 }> {
   if (!transactions || transactions.length === 0) {
@@ -1190,14 +1193,20 @@ export async function autoTransferBankToLedger(
   //    [bank:${id}] marker: 재실행 시 skip 판정
   //    donors: 헌금자정보 → representative 조회 (G1)
   //    rules: matching_rules 시트 활용 (G6)
-  const [incomeRows, expenseRows, donors, rules] = await Promise.all([
+  //    expenseCodes: P1-10 accountName 라벨링 (예: "코드62" → "수도광열비")
+  const [incomeRows, expenseRows, donors, rules, expenseCodes] = await Promise.all([
     readSheet(FINANCE_CONFIG.sheets.income),
     readSheet(FINANCE_CONFIG.sheets.expense),
     getDonorInfo().catch(() => [] as DonorInfo[]),
     getMatchingRules().catch(() => [] as MatchingRule[]),
+    getExpenseCodes().catch(() => [] as ExpenseCode[]),
   ]);
+  const expenseCodeMap = new Map<number, string>(
+    expenseCodes.filter(c => c.active !== false).map(c => [c.code, c.item])
+  );
 
-  const markerRegex = /\[bank:([^\]]+)\]/g;
+  // P0-3: β 자동이관 marker `[bank:xxx]` + 6월 legacy marker `bank=BANKxxx` 둘 다 인식
+  const markerRegex = /\[bank:([^\]]+)\]|bank=(BANK[A-Za-z0-9]+)/g;
   const existingIncomeBankIds = new Set<string>();
   for (let i = 1; i < incomeRows.length; i++) {
     const note = String(incomeRows[i]?.[7] || '');
@@ -1205,7 +1214,8 @@ export async function autoTransferBankToLedger(
     let m: RegExpExecArray | null;
     markerRegex.lastIndex = 0;
     while ((m = markerRegex.exec(note)) !== null) {
-      existingIncomeBankIds.add(m[1]);
+      const bankId = m[1] || m[2];
+      if (bankId) existingIncomeBankIds.add(bankId);
     }
   }
   const existingExpenseBankIds = new Set<string>();
@@ -1215,7 +1225,8 @@ export async function autoTransferBankToLedger(
     let m: RegExpExecArray | null;
     markerRegex.lastIndex = 0;
     while ((m = markerRegex.exec(note)) !== null) {
-      existingExpenseBankIds.add(m[1]);
+      const bankId = m[1] || m[2];
+      if (bankId) existingExpenseBankIds.add(bankId);
     }
   }
 
@@ -1233,7 +1244,9 @@ export async function autoTransferBankToLedger(
     assignedCode: number;
     assignedName: string;
     reason: string;
+    suggestions: MatchingRule[]; // P1-9
   }> = [];
+  const usedRuleIds = new Set<string>(); // P1-11: 사용된 rule의 usage_count 배치 갱신용
   let incomeSkipped = 0;
   let expenseSkipped = 0;
   let hasNonCashOfferingIncome = false; // pledge 매칭 조건부 활성화용
@@ -1279,18 +1292,19 @@ export async function autoTransferBankToLedger(
           transaction_date: t.transaction_date,
         });
       } else {
-        // 계좌이체 수입 — 결정 로직 총동원 (G1~G4, G6)
+        // 계좌이체 수입 — 결정 로직 총동원 (G1~G4, G6, override 지원)
         //
-        // 사용자 지시 (2026-07-07): 원장 G(적요=description) 을 기반으로
-        //   1) 코드 판정 (예: "전병문성전" → 501)
-        //   2) donor_name 파싱 (E열, 예: "전병문")
-        //   3) representative 조회 (F열, 헌금자정보 B→A, 예: "전정자")
-        //   4) note 는 원본 그대로 (H열)
-        //
-        // donorName 파싱 우선순위: description(G) → detail(H) → memo(J) → fallback
+        // 우선순위:
+        //   (0) matching_rules override 필드 (donor_override, representative_override)
+        //   (a) matching_rules 매칭 성공 (confidence >= 0.8)
+        //   (b) determineIncomeOfferingCode (키워드 + 금액 fallback)
+        //   donorName: description(G) → detail(H) → memo(J) → fallback
+        //   representative: donor_override → findRepresentative(donorInfo 시트)
 
-        // (a) matching_rules 우선 시도 (사용자 학습 규칙, amount_min/max 지원)
         const rule = findBestMatchingRule(t, rules);
+        const ruleDonorOverride = rule?.donor_override || null;
+        const ruleRepOverride = rule?.representative_override || null;
+
         let offeringCode: number;
         let offeringName: string;
         let donorName: string;
@@ -1300,13 +1314,14 @@ export async function autoTransferBankToLedger(
           offeringCode = rule.target_code;
           offeringName = rule.target_name;
           donorName =
+            ruleDonorOverride ||
             extractDonorName(description) ||
             extractDonorName(detail) ||
             t.memo ||
             rule.target_name;
           matchedBy = 'rule';
+          usedRuleIds.add(rule.id); // P1-11
         } else {
-          // (b) 키워드 우선순위 매칭 + 금액 fallback (helpers.determineIncomeOfferingCode)
           const offeringResult = determineIncomeOfferingCode(
             t.memo,
             detail,
@@ -1316,6 +1331,7 @@ export async function autoTransferBankToLedger(
           offeringCode = offeringResult.code;
           offeringName = offeringResult.name;
           donorName =
+            ruleDonorOverride ||
             extractDonorName(description) ||
             extractDonorName(detail) ||
             t.memo ||
@@ -1323,8 +1339,8 @@ export async function autoTransferBankToLedger(
           matchedBy = offeringResult.matchedBy;
         }
 
-        // (c) 헌금자정보 시트 (donor_name=B → representative=A) 조회
-        const representative = findRepresentative(donorName, donors);
+        // representative: override 우선, 없으면 헌금자정보(B→A) 조회
+        const representative = ruleRepOverride || findRepresentative(donorName, donors);
 
         newIncomes.push({
           id: generateId('INC'),
@@ -1354,6 +1370,7 @@ export async function autoTransferBankToLedger(
             assignedCode: offeringCode,
             assignedName: offeringName,
             reason: '키워드 매칭 실패 — 금액 기반 자동 분류 (검토 권장)',
+            suggestions: getSuggestedRules(t, rules, 3),
           });
         }
 
@@ -1383,22 +1400,23 @@ export async function autoTransferBankToLedger(
           transaction_date: t.transaction_date,
         });
       } else {
-        // 일반 지출 — 결정 로직 총동원 (G5, G6, G8) + 안 β″ 키워드 규칙
+        // 일반 지출 — 결정 로직 총동원 + vendor_override (2026-07-07 β‴)
         //
         // 우선순위:
-        //   (a) detail 앞 2/3자리 숫자 → 명시적 코드 (사용자가 직접 지정)
-        //   (b) EXPENSE_KEYWORD_RULES → 결산지방세/법인세 등 하드코딩 keyword
-        //   (c) matching_rules 시트 → 사용자 학습 규칙 (amount_min/max)
-        //   (d) fallback 90(미분류) + needsReview 큐
+        //   code:   extracted → EXPENSE_KEYWORD_RULES → matching_rules → 90
+        //   vendor: rule.vendor_override → memo(K) → extractPersonName(rest) → rest → detailHead → '기타'
+        //
+        // vendor_override 는 pattern 매칭된 rule 이 있으면 최우선.
+        // 예: pattern="91적립" → vendor_override="최병희", pattern="국민건강" → vendor_override="최병희"
 
-        // description(G열 적요) 우선 → detail(H열 비고) 순으로 앞자리 코드 시도.
-        // 사용자 지시 (2026-07-07): "'62청년부' 같은 코멘트는 주로 G컬럼에 있고,
-        // J컬럼은 '최철영'/'서주만' 이런 식으로 송금대상자 이름이 들어있거나 공란이다."
         const extracted =
           extractAccountCodeFromDetail(description) ||
           extractAccountCodeFromDetail(detail);
-        // detail 첫 단어 (앞자리 숫자 제거 후 첫 단어) — 최종 fallback 용
         const detailHead = detail.split(/\s+/).filter(Boolean)[0] || '';
+
+        // rule 을 미리 매칭 (vendor_override 는 code 결정과 무관하게 우선 활용)
+        const rule = findBestMatchingRule(t, rules);
+        const ruleVendorOverride = rule?.vendor_override || null;
 
         let accountCode: number;
         let accountName: string;
@@ -1410,12 +1428,14 @@ export async function autoTransferBankToLedger(
         if (extracted) {
           // (a) 앞자리 숫자로 명시적 지정
           accountCode = extracted.code;
-          accountName = `코드${extracted.code}`;
-          // vendor: J(memo, 송금대상자) 우선 → G/H 코드 뒤 잔여 문자열 → '기타'
-          // 예: G="62청년부현수막" → account_code=62, rest="청년부현수막" → vendor="청년부현수막"
-          //     J="최철영" 있으면 → vendor="최철영"
+          accountName = expenseCodeMap.get(extracted.code) || `코드${extracted.code}`;
           const restText = extracted.rest.trim();
-          vendor = t.memo || restText || '기타';
+          vendor =
+            ruleVendorOverride ||
+            t.memo ||
+            extractPersonName(restText) ||
+            restText ||
+            '기타';
           descText = '';
           noteBody = extracted.rest;
           expenseMatchedBy = 'extracted';
@@ -1425,29 +1445,41 @@ export async function autoTransferBankToLedger(
           if (keywordMatch) {
             accountCode = keywordMatch.code;
             accountName = keywordMatch.name;
-            vendor = t.memo || detailHead || description || keywordMatch.name;
+            vendor =
+              ruleVendorOverride ||
+              t.memo ||
+              detailHead ||
+              description ||
+              keywordMatch.name;
             descText = '';
             noteBody = detail;
             expenseMatchedBy = 'keyword';
-          } else {
+          } else if (rule && rule.confidence >= 0.8) {
             // (c) matching_rules 시도 (사용자 학습 규칙)
-            const rule = findBestMatchingRule(t, rules);
-            if (rule && rule.confidence >= 0.8) {
-              accountCode = rule.target_code;
-              accountName = rule.target_name;
-              vendor = t.memo || detailHead || description || rule.target_name;
-              descText = '';
-              noteBody = detail;
-              expenseMatchedBy = 'rule';
-            } else {
-              // (d) 매칭 실패 fallback — 90(미분류) 로 이관 + needsReview 큐 push
-              accountCode = 90;
-              accountName = '미분류';
-              vendor = t.memo || detailHead || '(자동이관)';
-              descText = detail || vendor;
-              noteBody = `[needs-review] ${detail}`;
-              expenseMatchedBy = 'default';
-            }
+            accountCode = rule.target_code;
+            accountName = rule.target_name;
+            vendor =
+              ruleVendorOverride ||
+              t.memo ||
+              detailHead ||
+              description ||
+              rule.target_name;
+            descText = '';
+            noteBody = detail;
+            expenseMatchedBy = 'rule';
+            usedRuleIds.add(rule.id); // P1-11
+          } else {
+            // (d) 매칭 실패 fallback — 90(미분류) 로 이관 + needsReview 큐 push
+            accountCode = 90;
+            accountName = '미분류';
+            vendor =
+              ruleVendorOverride ||
+              t.memo ||
+              detailHead ||
+              '(자동이관)';
+            descText = detail || vendor;
+            noteBody = `[needs-review] ${detail}`;
+            expenseMatchedBy = 'default';
           }
         }
 
@@ -1479,6 +1511,7 @@ export async function autoTransferBankToLedger(
             assignedCode: accountCode,
             assignedName: accountName,
             reason: '계정 코드 매칭 실패 — 미분류(90)로 이관 (수동 재분류 필요)',
+            suggestions: getSuggestedRules(t, rules, 3),
           });
         }
       }
@@ -1501,8 +1534,25 @@ export async function autoTransferBankToLedger(
     await addExpenseRecords(newExpenses);
   }
 
+  // P1-11: 사용된 rule의 usage_count 배치 갱신 (실패해도 이관 흐름 방해 안 함)
+  if (usedRuleIds.size > 0) {
+    for (const ruleId of usedRuleIds) {
+      try {
+        const rule = rules.find(r => r.id === ruleId);
+        if (rule) {
+          await updateMatchingRule(ruleId, {
+            usage_count: (rule.usage_count || 0) + 1,
+            updated_at: createdAt,
+          });
+        }
+      } catch (err) {
+        console.warn(`[autoTransferBankToLedger] usage_count 갱신 실패 rule=${ruleId}:`, err);
+      }
+    }
+  }
+
   console.log(
-    `[autoTransferBankToLedger] 이관 완료: 수입 +${newIncomes.length}건 (skip ${incomeSkipped}) / 지출 +${newExpenses.length}건 (skip ${expenseSkipped}) / 검토필요 ${needsReview.length}건`
+    `[autoTransferBankToLedger] 이관 완료: 수입 +${newIncomes.length}건 (skip ${incomeSkipped}) / 지출 +${newExpenses.length}건 (skip ${expenseSkipped}) / 검토필요 ${needsReview.length}건 / rule 갱신 ${usedRuleIds.size}건`
   );
 
   return {
@@ -1936,11 +1986,12 @@ export async function getCardOwners(): Promise<CardOwner[]> {
 // 매칭 규칙 관련
 // ============================================
 
-// 매칭규칙 시트 헤더 자동 보강 — 기존 시트에 amount_min/amount_max 등 누락 컬럼 추가
+// 매칭규칙 시트 헤더 자동 보강 — 기존 시트에 amount_min/amount_max/*_override 등 누락 컬럼 추가
 const MATCHING_RULES_HEADERS = [
   'id', 'rule_type', 'pattern', 'target_type', 'target_code',
   'target_name', 'confidence', 'usage_count', 'created_at', 'updated_at',
   'amount_min', 'amount_max',
+  'vendor_override', 'donor_override', 'representative_override',
 ];
 
 async function ensureMatchingRulesHeader(): Promise<void> {
@@ -1987,6 +2038,9 @@ export async function addMatchingRule(rule: Omit<MatchingRule, 'id'>): Promise<s
     // 빈 값이면 빈 문자열 (시트의 number 셀 비교 시 falsy 처리)
     rule.amount_min !== undefined && rule.amount_min !== null ? rule.amount_min : '',
     rule.amount_max !== undefined && rule.amount_max !== null ? rule.amount_max : '',
+    rule.vendor_override || '',
+    rule.donor_override || '',
+    rule.representative_override || '',
   ];
 
   await appendToSheet(FINANCE_CONFIG.sheets.matchingRules, [row]);
@@ -2026,10 +2080,10 @@ export async function clearMatchingRules(): Promise<number> {
 
   const deleteCount = rows.length - 1;
 
-  // 헤더를 제외한 모든 데이터 삭제 (2행부터). L열까지 amount_min/amount_max 포함
+  // 헤더를 제외한 모든 데이터 삭제 (2행부터). O열까지 (amount_min/max + *_override 포함)
   await sheets.spreadsheets.values.clear({
     spreadsheetId: FINANCE_CONFIG.spreadsheetId,
-    range: `${FINANCE_CONFIG.sheets.matchingRules}!A2:L${rows.length}`,
+    range: `${FINANCE_CONFIG.sheets.matchingRules}!A2:O${rows.length}`,
   });
 
   return deleteCount;
@@ -2396,7 +2450,8 @@ export async function initializeSheets(): Promise<void> {
     [FINANCE_CONFIG.sheets.matchingRules]: [
       'id', 'rule_type', 'pattern', 'target_type', 'target_code',
       'target_name', 'confidence', 'usage_count', 'created_at', 'updated_at',
-      'amount_min', 'amount_max'
+      'amount_min', 'amount_max',
+      'vendor_override', 'donor_override', 'representative_override'
     ],
     [FINANCE_CONFIG.sheets.budget]: [
       'year', 'category_code', 'category_item', 'account_code', 'account_item',

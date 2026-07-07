@@ -6,6 +6,7 @@ import {
   readSheet,
   FINANCE_CONFIG,
 } from '@/lib/google-sheets';
+import { learnFromManualMatch } from '@/lib/matching-engine';
 import { getServerSession, hasRole } from '@/lib/auth/finance-permissions';
 import { invalidateYearCache } from '@/lib/redis';
 import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
@@ -149,7 +150,19 @@ export async function POST(request: NextRequest) {
           console.warn('[match/confirm] 수입 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건 (수입부에는 이미 반영됨)');
         }
 
-        // 규칙 사용 횟수 증가는 API 호출 과다를 방지하기 위해 생략
+        // P0-1: learnFromManualMatch — 사용자 확정 결과를 matching_rules 시트에 학습
+        // 다음 이관 시 동일 패턴 자동 분류
+        for (const item of newIncomeItems) {
+          try {
+            await learnFromManualMatch(item.transaction, {
+              type: 'income',
+              code: item.record.offering_code,
+              name: '', // 코드명은 확장 시 별도 조회
+            });
+          } catch (learnErr) {
+            console.warn('[match/confirm] learnFromManualMatch 수입 실패:', learnErr);
+          }
+        }
       }
     } catch (error) {
       incomeSuccess = false;
@@ -199,7 +212,18 @@ export async function POST(request: NextRequest) {
           console.warn('[match/confirm] 지출 은행거래 상태 업데이트 실패:', batchResult.failed.length, '건 (지출부에는 이미 반영됨)');
         }
 
-        // 규칙 사용 횟수 증가는 API 호출 과다를 방지하기 위해 생략
+        // P0-1: learnFromManualMatch — 사용자 확정 결과 학습
+        for (const item of validExpenseItems) {
+          try {
+            await learnFromManualMatch(item.transaction, {
+              type: 'expense',
+              code: item.record.account_code,
+              name: '',
+            });
+          } catch (learnErr) {
+            console.warn('[match/confirm] learnFromManualMatch 지출 실패:', learnErr);
+          }
+        }
       }
     } catch (error) {
       expenseSuccess = false;

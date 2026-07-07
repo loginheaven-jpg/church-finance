@@ -28,7 +28,7 @@ export const INCOME_MATCHING_RULES: IncomeMatchingRule[] = [
   { priority: 10, keywords: ['주일'], code: 11, name: '주일헌금' },
 ];
 
-// 지출부 키워드 매칭 규칙 (우선순위 기반, 사용자 지시 2026-07-07)
+// 지출부 키워드 매칭 규칙 (2026-07-07 β‴ 대폭 확장, 감사 P0-2/P1-5 반영)
 // 은행원장의 description/memo/detail 에 이 키워드가 있으면 자동으로 해당 account_code 로 분류.
 // detail 앞 2자리 숫자 추출(extractAccountCodeFromDetail) 실패 시 fallback 으로 사용.
 export interface ExpenseMatchingRule {
@@ -39,13 +39,74 @@ export interface ExpenseMatchingRule {
   name: string;
 }
 
+// 은행 이체 채널 노이즈 (지출 keyword 매칭 전 stripping, 감사 P1-5)
+export const CHANNEL_NOISE = [
+  'G-국민은행', 'G-신한은행', 'G-하나은행', 'G-우리은행', 'G-제일은행',
+  'PC신한은행', 'PC국민은행', 'PC하나은행', 'PC우리은행',
+  '폰토스뱅크', 'NH올원뱅크', 'NH콕송금',
+  '폰국민은행', '폰신한은행', '폰우리은행', '폰하나은행', '폰카카오', '폰카뱅', '폰토스',
+  '인터넷당행', '인터넷타행', '인터넷뱅킹', '폰뱅킹',
+  '자동이체', '자동납부', 'ATM출금', 'CD출금', '창구출금',
+  '이체수수료', '타행이체', '대체', '지로',
+  '전기료', '가스료', '수도료', '전화료',
+];
+
+/**
+ * 이체 채널 노이즈 제거 (지출 keyword 매칭 정확도 향상용).
+ * 채널명이 keyword 와 우연 충돌하여 오분류되는 것을 방지.
+ * 예: "폰신한은행 전기료 한전전기요금05월" → " 한전전기요금05월"
+ */
+export function stripChannelNoise(s: string | undefined): string {
+  let out = s || '';
+  for (const kw of CHANNEL_NOISE) out = out.split(kw).join(' ');
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 export const EXPENSE_KEYWORD_RULES: ExpenseMatchingRule[] = [
-  { priority: 1, keywords: ['결산지방세', '결산법인세', '법인세', '지방세'], code: 94, name: '법인세' },
+  // 세금과공과 (최우선)
+  { priority: 1, keywords: ['결산법인세', '결산지방세', '재산세', '자동차세', '부가세', '법인세', '지방세'], code: 94, name: '세금과공과' },
+  // 공과금 - 전기/가스/수도
+  { priority: 2, keywords: ['전기요금', '한국전력', '한전'], code: 61, name: '전기료' },
+  { priority: 3, keywords: ['도시가스', '코원에너지', '가스공사'], code: 62, name: '도시가스' },
+  { priority: 4, keywords: ['상수도', '수도요금', '국민건강', '국민연금', '건강보험', '고용보험', '산재보험'], code: 63, name: '수도료/보험' },
+  // 시설관리
+  { priority: 5, keywords: ['현대렌탈', '정수기', '공기청정기', '엘리베이터', '승강기', '소방', '전기안전', '진성전기'], code: 64, name: '시설관리비' },
+  { priority: 6, keywords: ['주유', '자동차', '차량정비', '오일'], code: 65, name: '차량유지비' },
+  { priority: 7, keywords: ['수리', '수선', '보수'], code: 66, name: '수선비' },
+  // 통신비
+  { priority: 8, keywords: ['LGU+', 'LG유플러스', 'KT', 'SK텔레콤', 'SKT', '통신료', '인터넷요금'], code: 71, name: '통신비' },
+  // 사무·인쇄
+  { priority: 9, keywords: ['인쇄', '주보', '현수막', '플래카드'], code: 72, name: '인쇄비' },
+  { priority: 10, keywords: ['회의', '간담'], code: 73, name: '회의비' },
+  { priority: 11, keywords: ['사무용품', '문구', '토너', 'A4'], code: 74, name: '사무용품비' },
+  // 인건비
+  { priority: 12, keywords: ['급여', '월급'], code: 11, name: '급여' },
+  { priority: 13, keywords: ['사례비', '월사례'], code: 12, name: '사례비' },
+  { priority: 14, keywords: ['수당', '상여'], code: 13, name: '수당' },
+  { priority: 15, keywords: ['식대', '식사', '만나'], code: 14, name: '식대' },
+  // 선교·전도·교육
+  { priority: 16, keywords: ['선교', '미션', '파송'], code: 33, name: '선교비' },
+  { priority: 17, keywords: ['전도'], code: 31, name: '전도비' },
+  { priority: 18, keywords: ['교육', '세미나', '컨퍼런스'], code: 41, name: '교육비' },
+  { priority: 19, keywords: ['어린이부', '유치부', '유년부'], code: 42, name: '어린이부' },
+  { priority: 20, keywords: ['청년부', '대학부'], code: 44, name: '청년부' },
+  // 경조·구제·후원
+  { priority: 21, keywords: ['경조', '축의', '부의'], code: 51, name: '경조비' },
+  { priority: 22, keywords: ['구제', '구호', '재난'], code: 52, name: '구제비' },
+  { priority: 23, keywords: ['어린이재단', '후원', '기부'], code: 53, name: '후원비' },
+  // 노회비
+  { priority: 24, keywords: ['상회비', '노회비', '총회비'], code: 81, name: '상회비' },
+  // 적립
+  { priority: 25, keywords: ['적립', '예비비'], code: 91, name: '예비비적립' },
+  // 대출
+  { priority: 26, keywords: ['대출금이자', '대출이자'], code: 501, name: '대출이자' },
+  { priority: 27, keywords: ['대출원금상환', '원금상환'], code: 502, name: '대출원금상환' },
+  { priority: 28, keywords: ['건축', '성전건축'], code: 500, name: '건축비' },
 ];
 
 /**
  * 지출 account_code 결정 (우선순위 기반 키워드 매칭)
- * - description + memo + detail 검토
+ * - description + memo + detail 검토 (CHANNEL_NOISE stripping 적용)
  * - 매칭 시 { code, name, matchedBy: 'keyword' } 반환
  * - 실패 시 null
  */
@@ -53,26 +114,84 @@ export function determineExpenseAccountCode(
   memo: string | undefined,
   detail: string | undefined,
   description?: string
-): { code: number; name: string; matchedBy: 'keyword' } | null {
-  const searchText = `${description || ''} ${memo || ''} ${detail || ''}`.toLowerCase();
+): { code: number; name: string; matchedBy: 'keyword'; matchedKeyword?: string } | null {
+  // 채널 노이즈 stripping 후 검색
+  const searchText = stripChannelNoise(
+    `${description || ''} ${memo || ''} ${detail || ''}`
+  ).toLowerCase();
 
   for (const rule of EXPENSE_KEYWORD_RULES) {
-    const hasKeyword = rule.keywords.some(kw => searchText.includes(kw.toLowerCase()));
-    if (!hasKeyword) continue;
-
-    if (rule.excludeKeywords) {
-      const hasExclude = rule.excludeKeywords.some(kw => searchText.includes(kw.toLowerCase()));
-      if (hasExclude) continue;
+    for (const kw of rule.keywords) {
+      const kwLower = kw.toLowerCase();
+      if (!searchText.includes(kwLower)) continue;
+      if (rule.excludeKeywords) {
+        const hasExclude = rule.excludeKeywords.some(ex => searchText.includes(ex.toLowerCase()));
+        if (hasExclude) continue;
+      }
+      return { code: rule.code, name: rule.name, matchedBy: 'keyword', matchedKeyword: kw };
     }
-
-    return { code: rule.code, name: rule.name, matchedBy: 'keyword' };
   }
 
   return null;
 }
 
 // 헌금 키워드 (이 키워드로 시작하면 뒤에서 이름 추출)
-export const OFFERING_KEYWORDS = ['십일', '주일', '감사', '선교', '구제', '건축', '성전', '특별'];
+// P1-6: 맥추/추수/부활/성탄/무명 + 전도/지정 추가 (감사 리포트)
+export const OFFERING_KEYWORDS = [
+  '십일', '주일', '감사', '선교', '구제', '건축', '성전', '특별',
+  '맥추', '추수', '부활', '성탄', '무명', '전도', '지정',
+];
+
+// 지출 상세 keyword (사람 이름 앞뒤에 붙는 지출 유형/사유 keyword)
+// "33서현철선교" → 서현철 / "방민혁사례" → 방민혁 / "사례현소희" → 현소희
+export const EXPENSE_DETAIL_KEYWORDS = [
+  '사례', '수업료', '보험료', '식사', '점심', '만나', '교통비', '적립',
+  '실김치', '식사재료', '지원', '수당',
+  // P1-7 확장 (감사 리포트)
+  '월사례', '반주', '노회', '후원', '학술원', '찬양단', '간사', '님',
+  // 국가/지역 (선교 관련)
+  '카메룬', '튀르키에', '일본', '필리핀', '대만', '네팔', '북한', '북재위',
+  '판교', '철원', '청송',
+];
+
+// 이름 파싱용 통합 keyword (헌금 + 지출)
+export const NAME_STRIPPER_KEYWORDS = [
+  ...OFFERING_KEYWORDS,
+  ...EXPENSE_DETAIL_KEYWORDS,
+];
+
+/**
+ * 문자열에서 사람 이름 부분만 추출 (지출 vendor 파싱용).
+ * - 접두 keyword 제거: "사례현소희" → "현소희"
+ * - 접미 keyword 제거: "서현철선교" → "서현철", "방민혁사례" → "방민혁"
+ * - 매칭 없으면 앞 3자리
+ * - 이체 채널 keyword 면 즉시 실패
+ */
+export function extractPersonName(text: string | undefined): string {
+  if (!text || text.length < 2) return '';
+  if (isTransferChannel(text)) return '';
+  const cleaned = text.replace(/[^가-힣a-zA-Z0-9]/g, '');
+  if (!cleaned) return '';
+
+  // 접두 keyword 제거 (예: "사례현소희" → "현소희")
+  for (const kw of NAME_STRIPPER_KEYWORDS) {
+    if (cleaned.startsWith(kw)) {
+      const rest = cleaned.slice(kw.length);
+      if (rest.length >= 2) return rest.slice(0, 3);
+    }
+  }
+
+  // 접미 keyword 제거 (예: "서현철선교" → "서현철", "방민혁사례" → "방민혁")
+  for (const kw of NAME_STRIPPER_KEYWORDS) {
+    if (cleaned.endsWith(kw)) {
+      const front = cleaned.slice(0, cleaned.length - kw.length);
+      if (front.length >= 2) return front.slice(0, 3);
+    }
+  }
+
+  // 그 외 앞 3자리
+  return cleaned.substring(0, 3);
+}
 
 // 이체 채널 keyword — 이 값이 오면 실제 이체 문구는 다른 컬럼에 있음
 // (예: 농협 이체 수입에서 G="폰신한은행", H="정의태주일헌금")
@@ -253,12 +372,43 @@ export function findBestMatchingRule(
   return bestMatch;
 }
 
-// 매칭 점수 계산 (pattern substring 검사)
+// 매칭 점수 계산 — P1-4 3-tier (substring + regex + 부분단어 70%)
+// 감사 리포트: engine.ts:249-275 의 원본 로직 복원
 export function calculateMatchScore(searchText: string, rule: MatchingRule): number {
-  if (searchText.includes(rule.pattern.toLowerCase())) {
-    return rule.confidence;
-  }
-  return 0;
+  const s = searchText.toLowerCase();
+  const p = (rule.pattern || '').toLowerCase();
+  if (!p) return 0;
+
+  // Tier 1: substring (완전 일치)
+  if (s.includes(p)) return rule.confidence;
+
+  // Tier 2: regex (pattern이 정규식일 수 있음)
+  try {
+    if (new RegExp(p, 'i').test(searchText)) return rule.confidence * 0.9;
+  } catch { /* invalid regex - skip */ }
+
+  // Tier 3: 부분단어 매칭 (words의 70% 이상 hit)
+  const words = p.split(/\s+/).filter(w => w.length >= 2);
+  if (words.length === 0) return 0;
+  const hits = words.filter(w => s.includes(w)).length;
+  const ratio = hits / words.length;
+  return ratio >= 0.7 ? rule.confidence * ratio * 0.8 : 0;
+}
+
+// P1-3: extractKeyPattern — 학습 시 pattern 정규화 (은행명/채널/숫자 제거)
+// 감사 리포트: engine.ts:432 의 dead code 복원
+const LEARN_CHANNEL_REGEX = /(국민|신한|우리|하나|농협|NH|KB|SC|씨티|카카오|토스|기업|산업)/g;
+const LEARN_PREFIX_REGEX = /(G-|S-|E-|PC|폰|NH콕송금|오픈뱅킹|자동이체|자동납부|인터넷당행|인터넷타행|ATM출금|CD출금|창구출금)/g;
+
+export function extractKeyPattern(text: string): string {
+  return (text || '')
+    .replace(/\d+/g, '')
+    .replace(LEARN_CHANNEL_REGEX, '')
+    .replace(LEARN_PREFIX_REGEX, '')
+    .replace(/[^\w가-힣\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 15);
 }
 
 // 추천 규칙 조회 (needsReview 큐 UI 지원용)

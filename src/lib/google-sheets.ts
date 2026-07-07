@@ -1335,13 +1335,17 @@ export async function autoTransferBankToLedger(
           transaction_date: t.transaction_date,
         });
       } else {
-        // 계좌이체 수입 — 결정 로직 총동원 (G1~G4, G6, override 지원)
+        // 계좌이체 수입 — 결정 로직 총동원 (β⁴ 2026-07-07)
         //
-        // 우선순위:
+        // 우선순위 정정: detail(H) 우선, description(G) fallback
+        //   이유: 실 은행 데이터에서 G(파일 F=거래내용)는 이체 채널명(E-SC제일, PC우리은행 등),
+        //         H(파일 G=거래기록사항)에 실제 이체 문구(김홍태주일, 정의태감사)가 담김.
+        //         이전 β″는 사용자 "원장파일 G컬럼" 지칭을 시트 G로 오해하여 description 우선했음.
+        //
         //   (0) matching_rules override 필드 (donor_override, representative_override)
         //   (a) matching_rules 매칭 성공 (confidence >= 0.8)
         //   (b) determineIncomeOfferingCode (키워드 + 금액 fallback)
-        //   donorName: description(G) → detail(H) → memo(J) → fallback
+        //   donorName: detail(H) → description(G) → memo(K) → fallback
         //   representative: donor_override → findRepresentative(donorInfo 시트)
 
         const rule = findBestMatchingRule(t, rules);
@@ -1358,8 +1362,8 @@ export async function autoTransferBankToLedger(
           offeringName = rule.target_name;
           donorName =
             ruleDonorOverride ||
-            extractDonorName(description) ||
-            extractDonorName(detail) ||
+            extractDonorName(detail) ||         // β⁴: H 우선
+            extractDonorName(description) ||    // β⁴: G fallback
             t.memo ||
             rule.target_name;
           matchedBy = 'rule';
@@ -1375,8 +1379,8 @@ export async function autoTransferBankToLedger(
           offeringName = offeringResult.name;
           donorName =
             ruleDonorOverride ||
-            extractDonorName(description) ||
-            extractDonorName(detail) ||
+            extractDonorName(detail) ||         // β⁴: H 우선
+            extractDonorName(description) ||    // β⁴: G fallback
             t.memo ||
             offeringResult.name;
           matchedBy = offeringResult.matchedBy;
@@ -1451,10 +1455,13 @@ export async function autoTransferBankToLedger(
         //
         // vendor_override 는 pattern 매칭된 rule 이 있으면 최우선.
         // 예: pattern="91적립" → vendor_override="최병희", pattern="국민건강" → vendor_override="최병희"
-
+        //
+        // β⁴ 정정 (2026-07-07): detail(H) 우선 → description(G) fallback
+        // 사용자 지시 "'62청년부' 같은 코멘트는 주로 G컬럼" 은 myexcel 파일 G(거래기록사항)
+        // = 시트 H(detail) 를 의미. 시트 G(description) 는 파일 F(거래내용) = 이체 채널명.
         const extracted =
-          extractAccountCodeFromDetail(description) ||
-          extractAccountCodeFromDetail(detail);
+          extractAccountCodeFromDetail(detail) ||
+          extractAccountCodeFromDetail(description);
         const detailHead = detail.split(/\s+/).filter(Boolean)[0] || '';
 
         // rule 을 미리 매칭 (vendor_override 는 code 결정과 무관하게 우선 활용)

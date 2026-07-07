@@ -40,12 +40,17 @@ export interface ExpenseMatchingRule {
 }
 
 // 은행 이체 채널 노이즈 (지출 keyword 매칭 전 stripping, 감사 P1-5)
+// 2026-07-07 β⁴ 확장: E-/G-/S- 계열 실 데이터 verbatim 추가
 export const CHANNEL_NOISE = [
   'G-국민은행', 'G-신한은행', 'G-하나은행', 'G-우리은행', 'G-제일은행',
+  'G-토스뱅크', 'G-카카오', 'G-기업은행', 'G-신용협동',
+  'E-SC제일', 'E-국민은행', 'E-하나은행', 'E-기업은행',
+  'S-국민은행', 'S-토스뱅크', 'S-신한은행', 'S-하나은행', 'S-카카오', 'S-새마을',
   'PC신한은행', 'PC국민은행', 'PC하나은행', 'PC우리은행',
+  'PC부산은행', 'PC카카오', 'PC토스뱅크',
   '폰토스뱅크', 'NH올원뱅크', 'NH콕송금',
   '폰국민은행', '폰신한은행', '폰우리은행', '폰하나은행', '폰카카오', '폰카뱅', '폰토스',
-  '인터넷당행', '인터넷타행', '인터넷뱅킹', '폰뱅킹',
+  '인터넷당행', '인터넷타행', '인터넷뱅킹', '폰뱅킹', '오픈뱅킹', '은행간입금',
   '자동이체', '자동납부', 'ATM출금', 'CD출금', '창구출금',
   '이체수수료', '타행이체', '대체', '지로',
   '전기료', '가스료', '수도료', '전화료',
@@ -195,9 +200,11 @@ export function extractPersonName(text: string | undefined): string {
 
 // 이체 채널 keyword — 이 값이 오면 실제 이체 문구는 다른 컬럼에 있음
 // (예: 농협 이체 수입에서 G="폰신한은행", H="정의태주일헌금")
+// 2026-07-07 β⁴ 확장: E-SC제일 오탐 사례 (donor_name="ESC") + 잠재 오탐 357 tx 대응
 export const TRANSFER_CHANNEL_PATTERNS: RegExp[] = [
   /은행$/,
   /뱅크$/,
+  /뱅킹$/,               // ADD: 오픈뱅킹, 인터넷뱅킹
   /^폰[가-힣]/,
   /^PC[가-힣]/,
   /^NH/,
@@ -208,6 +215,17 @@ export const TRANSFER_CHANNEL_PATTERNS: RegExp[] = [
   /콕송금/,
   /^당행/,
   /^전자금융/,
+  /^E-/,                 // ADD: E-SC제일 (29 tx), E-* 계열
+  /^G-/,                 // ADD: G-신용협동 등 (은행$ 로 대부분 커버되나 완전화)
+  /^S-/,                 // ADD: S-새마을, S-* 계열
+  /^오픈/,               // ADD: 오픈뱅킹 (24 tx)
+  /^인터넷/,             // ADD: 인터넷당행 (38 tx), 인터넷타행, 인터넷뱅킹
+  /^자동(이체|납부)/,    // ADD: 자동이체 (30), 자동납부 (28)
+  /^타행/,               // ADD: 타행이체 (173 tx)
+  /^은행간/,             // ADD: 은행간입금
+  /^(대체|지로)$/,       // ADD: 대체 (2), 지로 (24)
+  /^예금이자$/,          // ADD: 이자 수입 (donor_name="예금이" 오탐 방지)
+  /^대출금?이자$/,       // ADD: 이자 지출 오탐 방지
 ];
 
 /**
@@ -236,9 +254,10 @@ export function findRepresentative(donorName: string, donors: DonorInfo[]): stri
 // detail에서 헌금자명 추출
 // 규칙:
 // 0. 이체 채널 keyword("폰신한은행", "NH올원뱅크" 등) 이면 즉시 실패 (fallback 유도)
+// 0-b. (β⁴) 한글이 하나도 없으면 헌금자 아님 — "ESC", "LGU", "NH연" 등 순수 영문 원천 차단
 // 1. 특수문자(괄호 등) 모두 제거
 // 2. 헌금 키워드로 시작하면 → 뒤 3자리: "십일조최병희" → "최병희", "감사(김윤희)" → "김윤희"
-// 3. 그 외 → 앞 3자리: "김길동십일조" → "김길동", "오재혁(주일헌금)" → "오재혁"
+// 3. 그 외 → 앞 3자리 (단 앞 3자에 한글이 있어야 유효)
 export function extractDonorName(detail: string | undefined): string {
   if (!detail || detail.length < 2) return '';
 
@@ -249,14 +268,18 @@ export function extractDonorName(detail: string | undefined): string {
   const cleaned = detail.replace(/[^가-힣a-zA-Z0-9]/g, '');
   if (!cleaned) return '';
 
+  // β⁴ 안전망: 한글이 하나도 없으면 헌금자 아님 (2차 방어)
+  if (!/[가-힣]/.test(cleaned)) return '';
+
   // 헌금 키워드로 시작하면 뒤 3자리
   const startsWithKeyword = OFFERING_KEYWORDS.some(kw => cleaned.startsWith(kw));
   if (startsWithKeyword) {
     return cleaned.slice(-3);
   }
 
-  // 그 외 앞 3자리
-  return cleaned.substring(0, 3);
+  // 그 외 앞 3자리 (앞 3자에 한글이 있어야 유효)
+  const head = cleaned.substring(0, 3);
+  return /[가-힣]/.test(head) ? head : '';
 }
 
 // 기본 수입 코드 결정 (금액 기반 fallback)

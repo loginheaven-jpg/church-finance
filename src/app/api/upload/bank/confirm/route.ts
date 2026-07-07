@@ -35,10 +35,7 @@ export async function POST(request: NextRequest) {
 
     // 2) 안 β: 자동 이관 (수입부/지출부 총액 append)
     //    실패해도 은행원장 저장은 이미 성공한 상태 — warn 로그 남기고 부분 결과 반환
-    let transferResult: {
-      income: { added: number; skipped: number; ids: string[] };
-      expense: { added: number; skipped: number; ids: string[] };
-    } | null = null;
+    let transferResult: Awaited<ReturnType<typeof autoTransferBankToLedger>> | null = null;
     let transferError: string | null = null;
     try {
       transferResult = await autoTransferBankToLedger(sanitized);
@@ -67,7 +64,8 @@ export async function POST(request: NextRequest) {
           expense: transferResult.expense.added,
           expenseSkipped: transferResult.expense.skipped,
         },
-        message: `은행 ${sanitized.length}건 저장 · 수입 ${transferResult.income.added}건 · 지출 ${transferResult.expense.added}건 자동 이관`,
+        needsReview: transferResult.needsReview,
+        message: `은행 ${sanitized.length}건 저장 · 수입 ${transferResult.income.added}건 · 지출 ${transferResult.expense.added}건 자동 이관 · 검토필요 ${transferResult.needsReview.length}건`,
       });
     }
 

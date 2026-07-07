@@ -15,7 +15,29 @@ import {
 import { Upload, FileText, Loader2, CheckCircle2, FileSpreadsheet, ArrowRight, RefreshCw, AlertCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
+
+// 안 β″ 자동 이관 검토필요 항목 (팝업 리포트용)
+interface AutoTransferReviewItem {
+  bankTxId: string;
+  kind: 'income' | 'expense';
+  transaction_date: string;
+  amount: number;
+  detail: string;
+  memo: string;
+  description: string;
+  assignedCode: number;
+  assignedName: string;
+  reason: string;
+}
 
 // 워크플로우 단계 타입 (1-2단계만, 3단계는 재정부 반영 탭에서 처리)
 type UploadStep = 'upload' | 'preview' | 'saved' | 'matched';
@@ -116,6 +138,9 @@ export function BankUpload() {
     calculatedBalance: number;
     isValid: boolean | null;
   } | null>(null);
+  // 안 β″: 자동 이관 검토필요 항목 팝업 리포트
+  const [autoTransferReview, setAutoTransferReview] = useState<AutoTransferReviewItem[]>([]);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
 
   // matchResult가 변경되면 통합 리스트 생성
   const buildUnifiedLists = useCallback((result: MatchPreviewResult) => {
@@ -156,6 +181,8 @@ export function BankUpload() {
     setUnifiedExpense([]);
     setExistingKeys(new Set());
     setDuplicateIndices(new Set());
+    setAutoTransferReview([]);
+    setReviewDialogOpen(false);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -318,6 +345,17 @@ export function BankUpload() {
             `📥 자동 이관 완료: 수입부 ${incCount}건 · 지출부 ${expCount}건`,
             { duration: 5000 }
           );
+
+          // 안 β″: 검토필요 항목이 있으면 팝업 리포트 표시
+          const reviewItems: AutoTransferReviewItem[] = result.needsReview || [];
+          if (reviewItems.length > 0) {
+            setAutoTransferReview(reviewItems);
+            setReviewDialogOpen(true);
+            toast.warning(
+              `⚠️ 자동 분류 검토 필요 ${reviewItems.length}건 — 팝업에서 확인하세요`,
+              { duration: 8000 }
+            );
+          }
         } else if (result.warning) {
           toast.warning(`⚠️ ${result.warning}`, { duration: 8000 });
         }
@@ -1478,6 +1516,83 @@ export function BankUpload() {
             파일을 선택하면 미리보기 후 은행원장에 반영할 수 있습니다
           </div>
         )}
+
+        {/* 안 β″: 자동 이관 검토필요 항목 리포트 팝업 */}
+        <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+                자동 분류 검토 필요 ({autoTransferReview.length}건)
+              </DialogTitle>
+              <DialogDescription>
+                은행원장에서 자동으로 수입/지출부로 이관되었으나, 계정 코드 매칭이
+                실패했거나 정확도가 낮아 사후 검토가 필요한 항목입니다. 수입부/지출부 화면에서
+                해당 record 를 수동 재분류해 주세요.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="overflow-auto flex-1">
+              <Table>
+                <TableHeader className="sticky top-0 bg-white z-10">
+                  <TableRow>
+                    <TableHead className="w-[70px]">종류</TableHead>
+                    <TableHead className="w-[110px]">거래일</TableHead>
+                    <TableHead className="w-[110px] text-right">금액</TableHead>
+                    <TableHead className="w-[80px]">배정코드</TableHead>
+                    <TableHead>내용</TableHead>
+                    <TableHead>사유</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {autoTransferReview.map((item, idx) => (
+                    <TableRow key={`${item.bankTxId}-${idx}`}>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            'inline-block px-2 py-0.5 rounded text-xs font-medium',
+                            item.kind === 'income'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-red-100 text-red-700'
+                          )}
+                        >
+                          {item.kind === 'income' ? '수입' : '지출'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs">{item.transaction_date}</TableCell>
+                      <TableCell className="text-right text-xs font-mono">
+                        {item.amount.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        <span className="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-mono">
+                          {item.assignedCode} {item.assignedName}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs max-w-[280px]">
+                        <div className="truncate" title={item.detail}>
+                          <span className="text-slate-500">적요:</span> {item.description || '-'}
+                        </div>
+                        <div className="truncate text-slate-600" title={item.detail}>
+                          <span className="text-slate-500">비고:</span> {item.detail || '-'}
+                        </div>
+                        {item.memo && (
+                          <div className="truncate text-slate-600" title={item.memo}>
+                            <span className="text-slate-500">메모:</span> {item.memo}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-amber-700">{item.reason}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setReviewDialogOpen(false)}>
+                확인
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

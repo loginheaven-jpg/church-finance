@@ -1147,3 +1147,96 @@ await addIncomeRecords(newIncomes, skipPledgeMatching);
 - **이번 커밋 범위 아님**: 신규 이관 로직만 적용 (미래 업로드부터 정확 동작)
 - 6월 269건 이관 데이터는 code 재분류 필요 → 별도 세션에서 사용자 승인 후 batch 정정
 
+---
+
+## 2026-07-07: 안 β″ — 특수 keyword 규칙 + 검토필요 팝업 리포트
+
+### 사용자 지시 (3건)
+
+1. `myexcel.xls` F(거래내용) "예금이자" → 수입 31 (이자수입) 자동 분류
+2. F(거래내용) "결산지방세"/"결산법인세" → 지출 94 (법인세) 자동 분류
+3. 지출 이관 시 J(이체메모)에 있는 입금처를 `vendor` 컬럼에 사용
+4. 계정 분류 실패/정확도 낮은 항목을 팝업으로 리포트
+
+### 조치
+
+#### 1. `matching-helpers.ts` — 규칙 확장
+
+**INCOME_MATCHING_RULES** — 이자 keyword 확장:
+```typescript
+{ priority: 2, keywords: ['예금이자', '이자'], code: 31, name: '이자수입' }
+```
+(기존 `'이자'` 로도 매칭됐지만 명시적 등록으로 우선순위 확실)
+
+**EXPENSE_KEYWORD_RULES** (신설) + `determineExpenseAccountCode`:
+```typescript
+export const EXPENSE_KEYWORD_RULES = [
+  { priority: 1, keywords: ['결산지방세', '결산법인세', '법인세', '지방세'], code: 94, name: '법인세' },
+];
+export function determineExpenseAccountCode(memo, detail, description) {
+  const searchText = `${description} ${memo} ${detail}`.toLowerCase();
+  for (const rule of EXPENSE_KEYWORD_RULES) { ... }
+  return null;
+}
+```
+
+#### 2. `autoTransferBankToLedger` — 지출 우선순위 4단계
+
+```
+(a) extractAccountCodeFromDetail  — detail 앞 2/3자리
+(b) determineExpenseAccountCode   — EXPENSE_KEYWORD_RULES  ★신규
+(c) findBestMatchingRule           — matching_rules 시트
+(d) fallback 90(미분류) + needsReview 큐 push
+```
+
+수입 로직도 `matchedBy='default'` (금액 fallback) 인 경우 needsReview 큐에 추가.
+
+#### 3. vendor fallback 개선 (지적 3)
+
+기존:
+```typescript
+vendor = t.memo || '기타';  // memo 없으면 무조건 '기타'
+```
+
+개선:
+```typescript
+const restHead = extracted.rest.split(/\s+/).filter(Boolean)[0] || '';
+vendor = t.memo || restHead || '기타';  // memo → detail rest 첫 단어 → '기타'
+```
+
+지출 J(이체메모=memo) 필드가 있으면 여전히 최우선 사용. 없을 때 detail 잔여부의
+첫 단어를 vendor 로 (예: "62청년부현수막2800" → account_code=62 추출 후
+vendor="청년부현수막2800").
+
+#### 4. needsReview 배열 반환 + 팝업 리포트 UI
+
+**함수 반환값 확장**:
+```typescript
+autoTransferBankToLedger(txs) → {
+  income: { added, skipped, ids },
+  expense: { added, skipped, ids },
+  needsReview: Array<{
+    bankTxId, kind, transaction_date, amount,
+    detail, memo, description,
+    assignedCode, assignedName, reason
+  }>,
+}
+```
+
+**BankUpload UI 팝업 (Radix Dialog)**:
+- `handleSave` 성공 후 `result.needsReview.length > 0` 이면 Dialog 오픈
+- 종류(수입/지출), 거래일, 금액, 배정코드, 적요/비고/메모, 사유 컬럼
+- 사용자는 Dialog 닫은 후 수입부/지출부 화면에서 수동 재분류 (배정된 code 그대로 유지되나
+  note 에 `[needs-review]` marker 남음)
+
+### 검증
+
+- `npx tsc --noEmit`: 통과
+- `npm run build`: ✓ Compiled successfully in 14.2s
+
+### INVARIANT 유지 (안 α K1~K7, 안 β marker)
+
+- 새 로직도 detail/amount/memo/description 만 참조 → date 독립
+- marker regex 무변경 → idempotency 유지
+- 신규 EXPENSE_KEYWORD_RULES 는 category_code 유도 로직에 영향 없음 (94 → 90 카테고리)
+

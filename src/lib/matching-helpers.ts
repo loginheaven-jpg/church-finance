@@ -17,7 +17,7 @@ export interface IncomeMatchingRule {
 
 export const INCOME_MATCHING_RULES: IncomeMatchingRule[] = [
   { priority: 1, keywords: ['건축', '성전', '봉헌'], code: 501, name: '건축헌금' },
-  { priority: 2, keywords: ['이자'], code: 31, name: '이자수입' },
+  { priority: 2, keywords: ['예금이자', '이자'], code: 31, name: '이자수입' },
   { priority: 3, keywords: ['십일조', '십일'], code: 12, name: '십일조헌금' },
   { priority: 4, keywords: ['구제'], excludeKeywords: ['선교'], code: 22, name: '구제헌금' },
   { priority: 5, keywords: ['선교'], code: 21, name: '선교헌금' },
@@ -27,6 +27,49 @@ export const INCOME_MATCHING_RULES: IncomeMatchingRule[] = [
   { priority: 9, keywords: ['커피', '카페'], excludeKeywords: ['주일'], code: 32, name: '기타잡수입' },
   { priority: 10, keywords: ['주일'], code: 11, name: '주일헌금' },
 ];
+
+// 지출부 키워드 매칭 규칙 (우선순위 기반, 사용자 지시 2026-07-07)
+// 은행원장의 description/memo/detail 에 이 키워드가 있으면 자동으로 해당 account_code 로 분류.
+// detail 앞 2자리 숫자 추출(extractAccountCodeFromDetail) 실패 시 fallback 으로 사용.
+export interface ExpenseMatchingRule {
+  priority: number;
+  keywords: string[];
+  excludeKeywords?: string[];
+  code: number;
+  name: string;
+}
+
+export const EXPENSE_KEYWORD_RULES: ExpenseMatchingRule[] = [
+  { priority: 1, keywords: ['결산지방세', '결산법인세', '법인세', '지방세'], code: 94, name: '법인세' },
+];
+
+/**
+ * 지출 account_code 결정 (우선순위 기반 키워드 매칭)
+ * - description + memo + detail 검토
+ * - 매칭 시 { code, name, matchedBy: 'keyword' } 반환
+ * - 실패 시 null
+ */
+export function determineExpenseAccountCode(
+  memo: string | undefined,
+  detail: string | undefined,
+  description?: string
+): { code: number; name: string; matchedBy: 'keyword' } | null {
+  const searchText = `${description || ''} ${memo || ''} ${detail || ''}`.toLowerCase();
+
+  for (const rule of EXPENSE_KEYWORD_RULES) {
+    const hasKeyword = rule.keywords.some(kw => searchText.includes(kw.toLowerCase()));
+    if (!hasKeyword) continue;
+
+    if (rule.excludeKeywords) {
+      const hasExclude = rule.excludeKeywords.some(kw => searchText.includes(kw.toLowerCase()));
+      if (hasExclude) continue;
+    }
+
+    return { code: rule.code, name: rule.name, matchedBy: 'keyword' };
+  }
+
+  return null;
+}
 
 // 헌금 키워드 (이 키워드로 시작하면 뒤에서 이름 추출)
 export const OFFERING_KEYWORDS = ['십일', '주일', '감사', '선교', '구제', '건축', '성전', '특별'];

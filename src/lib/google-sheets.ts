@@ -29,6 +29,7 @@ import {
   findRepresentative,
   extractDonorName,
   determineIncomeOfferingCode,
+  determineExpenseAccountCode,
   extractAccountCodeFromDetail,
 } from './matching-helpers';
 
@@ -1154,14 +1155,35 @@ const CARD_PAYMENT_KEYWORDS = ['nh카드대금', 'nh기업카드', 'nh카드', '
 // - category_code = Math.floor(code/10)*10 유도 (G8)
 // - pledge 매칭 조건부 활성화 (G7) — 계좌이체 record 만 activate, 헌금함 총액은 skip
 // - note 원본 문맥 보존 (G10) — marker + " | " + 원본 detail
+//
+// 2026-07-07 안 β″ 추가:
+// - 지출 EXPENSE_KEYWORD_RULES (결산지방세/법인세 → 94) 우선순위 추가
+// - vendor fallback 개선 (memo 없으면 detail rest 첫 단어)
+// - needsReview 배열 반환 (분류 실패/낮은 정확도 항목)
 export async function autoTransferBankToLedger(
   transactions: BankTransaction[]
 ): Promise<{
   income: { added: number; skipped: number; ids: string[] };
   expense: { added: number; skipped: number; ids: string[] };
+  needsReview: Array<{
+    bankTxId: string;
+    kind: 'income' | 'expense';
+    transaction_date: string;
+    amount: number;
+    detail: string;
+    memo: string;
+    description: string;
+    assignedCode: number;
+    assignedName: string;
+    reason: string;
+  }>;
 }> {
   if (!transactions || transactions.length === 0) {
-    return { income: { added: 0, skipped: 0, ids: [] }, expense: { added: 0, skipped: 0, ids: [] } };
+    return {
+      income: { added: 0, skipped: 0, ids: [] },
+      expense: { added: 0, skipped: 0, ids: [] },
+      needsReview: [],
+    };
   }
 
   // 1. 기존 marker 스캔 + 결정 로직 데이터 소스 로드
@@ -1200,6 +1222,18 @@ export async function autoTransferBankToLedger(
   const createdAt = getKSTDateTime();
   const newIncomes: IncomeRecord[] = [];
   const newExpenses: ExpenseRecord[] = [];
+  const needsReview: Array<{
+    bankTxId: string;
+    kind: 'income' | 'expense';
+    transaction_date: string;
+    amount: number;
+    detail: string;
+    memo: string;
+    description: string;
+    assignedCode: number;
+    assignedName: string;
+    reason: string;
+  }> = [];
   let incomeSkipped = 0;
   let expenseSkipped = 0;
   let hasNonCashOfferingIncome = false; // pledge 매칭 조건부 활성화용
@@ -1250,11 +1284,15 @@ export async function autoTransferBankToLedger(
         // (a) matching_rules 우선 시도 (사용자 학습 규칙, amount_min/max 지원)
         const rule = findBestMatchingRule(t, rules);
         let offeringCode: number;
+        let offeringName: string;
         let donorName: string;
+        let matchedBy: 'rule' | 'keyword' | 'default';
 
         if (rule && rule.confidence >= 0.8) {
           offeringCode = rule.target_code;
+          offeringName = rule.target_name;
           donorName = extractDonorName(detail) || t.memo || rule.target_name;
+          matchedBy = 'rule';
         } else {
           // (b) 키워드 우선순위 매칭 + 금액 fallback (helpers.determineIncomeOfferingCode)
           const offeringResult = determineIncomeOfferingCode(
@@ -1264,7 +1302,9 @@ export async function autoTransferBankToLedger(
             description
           );
           offeringCode = offeringResult.code;
+          offeringName = offeringResult.name;
           donorName = extractDonorName(detail) || t.memo || offeringResult.name;
+          matchedBy = offeringResult.matchedBy;
         }
 
         // (c) 헌금자정보 → representative 자동 조회 (G1)
@@ -1284,6 +1324,22 @@ export async function autoTransferBankToLedger(
           created_by: 'auto:bank-transfer',
           transaction_date: t.transaction_date,
         });
+
+        // 안 β″: 키워드 미매칭 (금액 fallback) 항목은 needsReview 큐에 추가
+        if (matchedBy === 'default') {
+          needsReview.push({
+            bankTxId: t.id,
+            kind: 'income',
+            transaction_date: t.transaction_date,
+            amount: t.deposit,
+            detail,
+            memo: String(t.memo || ''),
+            description,
+            assignedCode: offeringCode,
+            assignedName: offeringName,
+            reason: '키워드 매칭 실패 — 금액 기반 자동 분류 (검토 권장)',
+          });
+        }
 
         hasNonCashOfferingIncome = true;
       }
@@ -1311,35 +1367,64 @@ export async function autoTransferBankToLedger(
           transaction_date: t.transaction_date,
         });
       } else {
-        // 일반 지출 — 결정 로직 총동원 (G5, G6, G8)
+        // 일반 지출 — 결정 로직 총동원 (G5, G6, G8) + 안 β″ 키워드 규칙
+        //
+        // 우선순위:
+        //   (a) detail 앞 2/3자리 숫자 → 명시적 코드 (사용자가 직접 지정)
+        //   (b) EXPENSE_KEYWORD_RULES → 결산지방세/법인세 등 하드코딩 keyword
+        //   (c) matching_rules 시트 → 사용자 학습 규칙 (amount_min/max)
+        //   (d) fallback 90(미분류) + needsReview 큐
 
-        // (a) detail 앞 2/3자리 account_code 추출 (helpers.extractAccountCodeFromDetail)
         const extracted = extractAccountCodeFromDetail(detail);
+        // detail 첫 단어 (앞자리 숫자 제거 후 첫 단어)
+        const detailHead = detail.split(/\s+/).filter(Boolean)[0] || '';
 
         let accountCode: number;
+        let accountName: string;
         let vendor: string;
         let descText: string;
         let noteBody: string;
+        let expenseMatchedBy: 'extracted' | 'keyword' | 'rule' | 'default';
 
         if (extracted) {
+          // (a) 앞자리 숫자로 명시적 지정
           accountCode = extracted.code;
-          vendor = t.memo || '기타';
+          accountName = `코드${extracted.code}`;
+          // vendor: memo(J열, 입금처) 우선 → detail rest 첫 단어 → '기타'
+          const restHead = extracted.rest.split(/\s+/).filter(Boolean)[0] || '';
+          vendor = t.memo || restHead || '기타';
           descText = '';
           noteBody = extracted.rest;
+          expenseMatchedBy = 'extracted';
         } else {
-          // (b) matching_rules 시도 (사용자 학습 규칙)
-          const rule = findBestMatchingRule(t, rules);
-          if (rule && rule.confidence >= 0.8) {
-            accountCode = rule.target_code;
-            vendor = t.memo || detail || description || rule.target_name;
+          // (b) EXPENSE_KEYWORD_RULES 시도 (결산지방세/법인세 등)
+          const keywordMatch = determineExpenseAccountCode(t.memo, detail, description);
+          if (keywordMatch) {
+            accountCode = keywordMatch.code;
+            accountName = keywordMatch.name;
+            vendor = t.memo || detailHead || description || keywordMatch.name;
             descText = '';
             noteBody = detail;
+            expenseMatchedBy = 'keyword';
           } else {
-            // (c) 매칭 실패 fallback — needsReview 대신 90(미분류) 로 이관하되 note 에 표시
-            accountCode = 90;
-            vendor = t.memo || (detail.split(/\s+/)[0] || '(자동이관)');
-            descText = detail || vendor;
-            noteBody = `[needs-review] ${detail}`;
+            // (c) matching_rules 시도 (사용자 학습 규칙)
+            const rule = findBestMatchingRule(t, rules);
+            if (rule && rule.confidence >= 0.8) {
+              accountCode = rule.target_code;
+              accountName = rule.target_name;
+              vendor = t.memo || detailHead || description || rule.target_name;
+              descText = '';
+              noteBody = detail;
+              expenseMatchedBy = 'rule';
+            } else {
+              // (d) 매칭 실패 fallback — 90(미분류) 로 이관 + needsReview 큐 push
+              accountCode = 90;
+              accountName = '미분류';
+              vendor = t.memo || detailHead || '(자동이관)';
+              descText = detail || vendor;
+              noteBody = `[needs-review] ${detail}`;
+              expenseMatchedBy = 'default';
+            }
           }
         }
 
@@ -1357,6 +1442,22 @@ export async function autoTransferBankToLedger(
           created_by: 'auto:bank-transfer',
           transaction_date: t.transaction_date,
         });
+
+        // 안 β″: 매칭 실패 항목은 needsReview 큐에 추가 (UI 팝업 리포트용)
+        if (expenseMatchedBy === 'default') {
+          needsReview.push({
+            bankTxId: t.id,
+            kind: 'expense',
+            transaction_date: t.transaction_date,
+            amount: t.withdrawal,
+            detail,
+            memo: String(t.memo || ''),
+            description,
+            assignedCode: accountCode,
+            assignedName: accountName,
+            reason: '계정 코드 매칭 실패 — 미분류(90)로 이관 (수동 재분류 필요)',
+          });
+        }
       }
     } else {
       // deposit/withdrawal 둘 다 0 — skip (예: 잔액 조정 row)
@@ -1378,7 +1479,7 @@ export async function autoTransferBankToLedger(
   }
 
   console.log(
-    `[autoTransferBankToLedger] 이관 완료: 수입 +${newIncomes.length}건 (skip ${incomeSkipped}) / 지출 +${newExpenses.length}건 (skip ${expenseSkipped})`
+    `[autoTransferBankToLedger] 이관 완료: 수입 +${newIncomes.length}건 (skip ${incomeSkipped}) / 지출 +${newExpenses.length}건 (skip ${expenseSkipped}) / 검토필요 ${needsReview.length}건`
   );
 
   return {
@@ -1392,6 +1493,7 @@ export async function autoTransferBankToLedger(
       skipped: expenseSkipped,
       ids: newExpenses.map(r => r.id),
     },
+    needsReview,
   };
 }
 

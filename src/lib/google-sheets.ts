@@ -1178,14 +1178,17 @@ export async function autoTransferBankToLedger(
     assignedCode: number;
     assignedName: string;
     reason: string;
-    suggestions: MatchingRule[]; // P1-9: top-3 rule 후보 (UI 재분류 도우미)
+    suggestions: MatchingRule[]; // P1-9
   }>;
+  // P1-2: 헌금함 정합성 검사로 자동 말소된 은행 tx 목록
+  suppressed: Array<{ bankTxId: string; reason: string }>;
 }> {
   if (!transactions || transactions.length === 0) {
     return {
       income: { added: 0, skipped: 0, ids: [] },
       expense: { added: 0, skipped: 0, ids: [] },
       needsReview: [],
+      suppressed: [],
     };
   }
 
@@ -1247,9 +1250,23 @@ export async function autoTransferBankToLedger(
     suggestions: MatchingRule[]; // P1-9
   }> = [];
   const usedRuleIds = new Set<string>(); // P1-11: 사용된 rule의 usage_count 배치 갱신용
+  const suppressed: Array<{ bankTxId: string; reason: string }> = []; // P1-2
   let incomeSkipped = 0;
   let expenseSkipped = 0;
   let hasNonCashOfferingIncome = false; // pledge 매칭 조건부 활성화용
+
+  // P1-1: 수입부의 헌금함 세부 record 를 transaction_date 별로 합계
+  // 은행 tx 가 헌금함인데 이미 수입부에 세부 record 있으면 aggregate 생성 skip + suppressed 추가
+  const cashOfferingByDate = new Map<string, number>();
+  for (let i = 1; i < incomeRows.length; i++) {
+    const row = incomeRows[i];
+    const source = String(row?.[2] || '');
+    if (source !== '헌금함') continue;
+    const txDate = String(row?.[11] || row?.[1] || '');  // transaction_date 또는 date
+    const amount = Number(row?.[6]) || 0;
+    if (!txDate) continue;
+    cashOfferingByDate.set(txDate, (cashOfferingByDate.get(txDate) || 0) + amount);
+  }
 
   for (const t of transactions) {
     // M1 INVARIANT (K1): BankTransaction.date === getWeekEndingSunday(transaction_date)
@@ -1276,6 +1293,32 @@ export async function autoTransferBankToLedger(
       const isCashOffering = isCashOfferingTransaction(t);
 
       if (isCashOffering) {
+        // P1-1: 헌금함 정합성 검사 — 이미 수입부에 세부 record 있는지 확인
+        const existingCashTotal = cashOfferingByDate.get(t.transaction_date) || 0;
+        if (existingCashTotal > 0 && existingCashTotal === t.deposit) {
+          // 세부 합계 === 은행 금액 → 이미 세부입력 완료. aggregate skip + suppressed 추가
+          suppressed.push({
+            bankTxId: t.id,
+            reason: `자동 말소 (헌금함 세부 이미 반영, ${existingCashTotal.toLocaleString()}원)`,
+          });
+          continue;
+        }
+        if (existingCashTotal > 0 && existingCashTotal !== t.deposit) {
+          // 세부 합계 ≠ 은행 금액 → 검토 필요, aggregate 만들되 needsReview 등록
+          needsReview.push({
+            bankTxId: t.id,
+            kind: 'income',
+            transaction_date: t.transaction_date,
+            amount: t.deposit,
+            detail,
+            memo: String(t.memo || ''),
+            description,
+            assignedCode: 14,
+            assignedName: '헌금함(총액)',
+            reason: `헌금함 금액 불일치 (수입부 세부 합계: ${existingCashTotal.toLocaleString()}, 은행: ${t.deposit.toLocaleString()})`,
+            suggestions: [],
+          });
+        }
         // 헌금함 총액 record — pledge 매칭 skip 대상
         newIncomes.push({
           id: generateId('INC'),
@@ -1552,7 +1595,7 @@ export async function autoTransferBankToLedger(
   }
 
   console.log(
-    `[autoTransferBankToLedger] 이관 완료: 수입 +${newIncomes.length}건 (skip ${incomeSkipped}) / 지출 +${newExpenses.length}건 (skip ${expenseSkipped}) / 검토필요 ${needsReview.length}건 / rule 갱신 ${usedRuleIds.size}건`
+    `[autoTransferBankToLedger] 이관 완료: 수입 +${newIncomes.length}건 (skip ${incomeSkipped}) / 지출 +${newExpenses.length}건 (skip ${expenseSkipped}) / 검토필요 ${needsReview.length}건 / 자동말소 ${suppressed.length}건 / rule 갱신 ${usedRuleIds.size}건`
   );
 
   return {
@@ -1567,6 +1610,7 @@ export async function autoTransferBankToLedger(
       ids: newExpenses.map(r => r.id),
     },
     needsReview,
+    suppressed,
   };
 }
 

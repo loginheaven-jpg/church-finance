@@ -69,8 +69,15 @@ export default function MatchingRulesPage() {
           <CardDescription className="space-y-1">
             <div>수동 분류 시 자동으로 학습됩니다. 사용량이 높을수록 신뢰도가 높아집니다.</div>
             <div className="text-xs text-amber-700">
-              <strong>금액 조건</strong>: 같은 vendor를 금액으로 분기할 때 사용 (예: 한국전력 금액 50만원 이상 = 교회 전기 / 50만원 미만 = 사택 전기).
-              현재는 구글시트 &apos;매칭규칙&apos; 시트의 <code className="bg-amber-100 px-1 rounded">amount_min</code> / <code className="bg-amber-100 px-1 rounded">amount_max</code> 컬럼에 직접 숫자 입력하여 수정. 빈값 = 금액 무관.
+              <strong>금액 조건</strong> (K/L열): 같은 vendor 를 금액으로 분기할 때 사용 (예: 한국전력 ≥50만원 = 교회 전기 / 미만 = 사택 전기).
+              &apos;매칭규칙&apos; 시트의 <code className="bg-amber-100 px-1 rounded">amount_min</code> / <code className="bg-amber-100 px-1 rounded">amount_max</code> 컬럼에 직접 숫자 입력. 빈값 = 금액 무관.
+            </div>
+            <div className="text-xs text-blue-700">
+              <strong>강제 지정</strong> (M/N/O열): 자동 이관 시 특정 필드를 강제로 채우고 싶을 때 시트에 직접 입력.
+              <code className="bg-blue-100 px-1 rounded">vendor_override</code>(지출 vendor) /
+              <code className="bg-blue-100 px-1 rounded ml-1">donor_override</code>(수입 헌금자) /
+              <code className="bg-blue-100 px-1 rounded ml-1">representative_override</code>(수입 대표자).
+              예: pattern=&quot;국민건강&quot; → vendor_override=&quot;최병희&quot; 등록 시, 은행 이관에서 해당 tx 의 vendor 를 항상 &quot;최병희&quot; 로 강제.
             </div>
           </CardDescription>
         </CardHeader>
@@ -87,6 +94,7 @@ export default function MatchingRulesPage() {
                   <TableHead>패턴</TableHead>
                   <TableHead>대상 항목</TableHead>
                   <TableHead className="text-right">금액 조건</TableHead>
+                  <TableHead>강제 지정</TableHead>
                   <TableHead className="text-right">신뢰도</TableHead>
                   <TableHead className="text-right">사용 횟수</TableHead>
                   <TableHead>생성일</TableHead>
@@ -122,6 +130,29 @@ export default function MatchingRulesPage() {
                         </div>
                       ) : (
                         <span className="text-slate-400">제한 없음</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {rule.vendor_override || rule.donor_override || rule.representative_override ? (
+                        <div className="space-y-0.5">
+                          {rule.vendor_override && (
+                            <div className="text-blue-700">
+                              <span className="text-slate-500">vendor:</span> {rule.vendor_override}
+                            </div>
+                          )}
+                          {rule.donor_override && (
+                            <div className="text-blue-700">
+                              <span className="text-slate-500">donor:</span> {rule.donor_override}
+                            </div>
+                          )}
+                          {rule.representative_override && (
+                            <div className="text-blue-700">
+                              <span className="text-slate-500">rep:</span> {rule.representative_override}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">

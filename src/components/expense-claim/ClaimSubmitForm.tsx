@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,7 @@ interface AIVerification {
   confidence?: string;
   mismatchReason?: string;  // 사용자가 입력한 불일치 사유
   details?: AIReceiptDetail[];  // 개별 영수증 상세 (복수일 때)
+  autoFilled?: boolean;  // 영수증-먼저 흐름에서 AI 인식금액을 그대로 자동입력한 경우
 }
 
 interface LineItem {
@@ -100,6 +101,20 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
   const [items, setItems] = useState<LineItem[]>([
     { id: makeId(), categoryCode: '', accountCode: '', amount: '', description: '', receiptFiles: [], receiptPaths: [], uploading: false },
   ]);
+
+  // 비동기 분석 콜백에서 최신 items 를 안전하게 읽기 위한 ref
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+
+  // 영수증-먼저 흐름: AI 인식금액 자동채움 팝업 상태
+  const [prefillPopup, setPrefillPopup] = useState<{
+    open: boolean;
+    itemId: string;
+    aiAmount: number;
+    aiStore: string;
+    details?: AIReceiptDetail[];
+    editAmount: string;
+  } | null>(null);
 
   // 계정과목 코드 조회
   useEffect(() => {
@@ -332,6 +347,13 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
         return;
       }
 
+      // 영수증-먼저 흐름 판정: 이 분석 직전(setItems 반영 전) 상태 기준
+      const preItem = itemsRef.current.find(i => i.id === itemId);
+      const preAmt = parseAmount(preItem?.amount || '');
+      const preAi = preItem?.aiVerification;
+      // 금액칸이 비어있거나, 이전에 AI가 자동입력한 값을 사용자가 그대로 둔 경우 → 자동채움(재)제안
+      const canPrefill = preAmt <= 0 || (!!preAi?.autoFilled && preAmt === preAi.aiAmount);
+
       setItems(prev => prev.map(item => {
         if (item.id !== itemId) return item;
         const userAmt = parseAmount(item.amount);
@@ -351,6 +373,18 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
           },
         };
       }));
+
+      // 자동채움 팝업 (기존 사후검증과 병존: 금액이 이미 입력돼 있으면 열리지 않음)
+      if (canPrefill) {
+        setPrefillPopup({
+          open: true,
+          itemId,
+          aiAmount: aiTotal,
+          aiStore: stores || '',
+          details: allDetails.length > 1 ? allDetails : undefined,
+          editAmount: aiTotal.toLocaleString(),
+        });
+      }
     } catch {
       setItems(prev => prev.map(item =>
         item.id === itemId ? { ...item, aiVerification: { status: 'failed' } } : item
@@ -370,6 +404,8 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
         aiVerification: {
           ...item.aiVerification,
           status: userAmt === aiAmt ? 'match' : 'mismatch',
+          // 사용자가 금액을 직접 수정 → 자동입력 플래그 해제
+          autoFilled: false,
           mismatchReason: userAmt === aiAmt ? undefined : item.aiVerification.mismatchReason,
         },
       };
@@ -516,7 +552,7 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
       const itemsWithReason = latestItems.map(item => {
         let desc = item.description;
         if (item.aiVerification?.status === 'match' && item.receiptFiles.length > 0) {
-          desc += ` (※AI확인)`;
+          desc += item.aiVerification.autoFilled ? ` (※AI자동입력)` : ` (※AI확인)`;
         } else if (item.aiVerification?.status === 'mismatch' && item.aiVerification.mismatchReason) {
           desc += ` (※AI불일치: 영수증 ${item.aiVerification.aiAmount?.toLocaleString()}원, ${item.aiVerification.mismatchReason})`;
         } else if (item.aiVerification?.status === 'failed' && item.receiptFiles.length > 0) {
@@ -928,7 +964,12 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                         <><ScanSearch className="h-3 w-3 animate-pulse text-blue-500" /><span className="text-blue-600">AI 확인 중...</span></>
                       )}
                       {(item.aiVerification.status === 'match' || item.aiVerification.status === 'mismatch') && (
-                        <><ScanSearch className="h-3 w-3 text-green-500" /><span className="text-slate-500">AI 확인 완료</span></>
+                        <>
+                          <ScanSearch className={`h-3 w-3 ${item.aiVerification.autoFilled ? 'text-blue-500' : 'text-green-500'}`} />
+                          <span className={item.aiVerification.autoFilled ? 'text-blue-600' : 'text-slate-500'}>
+                            {item.aiVerification.autoFilled ? 'AI 자동입력됨' : 'AI 확인 완료'}
+                          </span>
+                        </>
                       )}
                       {item.aiVerification.status === 'failed' && (
                         <><ScanSearch className="h-3 w-3 text-slate-400" /><span className="text-slate-400">AI 확인 실패</span></>
@@ -1053,6 +1094,92 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
                 </Button>
                 <Button variant="outline" onClick={() => aiPopup.onCancel()}>
                   취소
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* AI 영수증 금액 자동입력 팝업 (영수증-먼저 흐름) */}
+      <Dialog open={!!prefillPopup?.open} onOpenChange={(open) => { if (!open) setPrefillPopup(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-700">
+              <ScanSearch className="h-5 w-5" />
+              영수증 금액 자동입력
+            </DialogTitle>
+          </DialogHeader>
+          {prefillPopup && (
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-50 rounded-lg space-y-1.5 text-sm">
+                <div>
+                  <span className="text-slate-500">AI 인식: </span>
+                  <span className="font-semibold">
+                    {prefillPopup.details
+                      ? prefillPopup.details.map(d => `${d.amount.toLocaleString()}${d.store ? `(${d.store})` : ''}`).join(' + ')
+                        + ` = 총 ${prefillPopup.aiAmount.toLocaleString()}원`
+                      : `${prefillPopup.aiAmount.toLocaleString()}원${prefillPopup.aiStore ? ` (${prefillPopup.aiStore})` : ''}`
+                    }
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>입력할 금액 <span className="text-slate-400 text-xs">(다르면 수정하세요)</span></Label>
+                <Input
+                  autoFocus
+                  type="text"
+                  inputMode="numeric"
+                  className="bg-white text-right font-semibold"
+                  value={prefillPopup.editAmount}
+                  onChange={e => {
+                    const v = e.target.value.replace(/[^0-9]/g, '');
+                    const formatted = v ? Number(v).toLocaleString() : '';
+                    setPrefillPopup(prev => prev ? { ...prev, editAmount: formatted } : null);
+                  }}
+                />
+                <p className="text-xs text-slate-400">
+                  💡 인식된 금액이 맞으면 그대로 &apos;이 금액 사용&apos;을 누르세요.
+                  개인부담분 등으로 다르면 실제 금액으로 수정하면 됩니다.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  disabled={parseAmount(prefillPopup.editAmount) <= 0}
+                  onClick={() => {
+                    if (!prefillPopup) return;
+                    const finalNum = parseAmount(prefillPopup.editAmount);
+                    if (finalNum <= 0) return;
+                    const pid = prefillPopup.itemId;
+                    const aiAmt = prefillPopup.aiAmount;
+                    setItems(prev => prev.map(it => {
+                      if (it.id !== pid) return it;
+                      const unchanged = finalNum === aiAmt;
+                      return {
+                        ...it,
+                        amount: finalNum.toLocaleString(),
+                        aiVerification: {
+                          ...(it.aiVerification || {}),
+                          status: unchanged ? 'match' as const : 'mismatch' as const,
+                          aiAmount: it.aiVerification?.aiAmount ?? aiAmt,
+                          aiStore: it.aiVerification?.aiStore ?? (prefillPopup.aiStore || null),
+                          details: it.aiVerification?.details ?? prefillPopup.details,
+                          autoFilled: unchanged,
+                          // 인식금액을 그대로 사용하면 사유 불필요, 수정했으면 제출 시 사유 요청
+                          mismatchReason: unchanged ? undefined : it.aiVerification?.mismatchReason,
+                        },
+                      };
+                    }));
+                    setPrefillPopup(null);
+                  }}
+                >
+                  이 금액 사용
+                </Button>
+                <Button variant="outline" onClick={() => setPrefillPopup(null)}>
+                  직접 입력
                 </Button>
               </div>
             </div>

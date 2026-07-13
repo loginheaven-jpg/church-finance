@@ -12,6 +12,7 @@ interface StatsCardProps {
   color: 'income' | 'expense' | 'balance' | 'warning';
   isSelected?: boolean;
   onClick?: () => void;
+  subtitle?: string; // 값 아래 작은 보조 텍스트 (예: 원장 최종잔고)
 }
 
 const colorMap = {
@@ -41,7 +42,7 @@ const colorMap = {
   },
 };
 
-export function StatsCard({ icon: Icon, label, value, rawValue, color, isSelected, onClick }: StatsCardProps) {
+export function StatsCard({ icon: Icon, label, value, rawValue, color, isSelected, onClick, subtitle }: StatsCardProps) {
   const colors = colorMap[color];
 
   // 원본 숫자를 포맷팅하여 툴팁으로 표시
@@ -93,6 +94,11 @@ export function StatsCard({ icon: Icon, label, value, rawValue, color, isSelecte
             )}>
               {label}
             </p>
+            {subtitle && (
+              <p className="text-[10px] md:text-[11px] text-slate-400 mt-0.5 truncate">
+                {subtitle}
+              </p>
+            )}
             {/* Custom Tooltip */}
             {tooltipText && (
               <div className="absolute left-0 -bottom-10 z-50 px-3 py-1.5 bg-slate-800 text-white text-base md:text-lg font-semibold rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none">

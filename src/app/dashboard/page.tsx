@@ -68,6 +68,11 @@ interface DashboardStats {
   // super_admin 검증용 은행잔액
   lastBankBalance?: number;
   lastBankDate?: string | null;
+  // 원장/은행 최종잔고 (조회 주 무관, 지금까지의 최종)
+  ledgerFinalBalance?: number;
+  ledgerFinalDate?: string | null;
+  bankLatestBalance?: number;
+  bankLatestDate?: string | null;
   // 마감 전 자동 이전 주 이동 반영
   displaySunday?: string | null;
   weekShifted?: boolean;
@@ -116,6 +121,14 @@ function DashboardContent() {
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('ko-KR').format(amount) + '원';
+  };
+
+  // ISO(YYYY-MM-DD) → "M/D"
+  const mdOf = (iso?: string | null) => {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    if (parts.length < 3) return iso;
+    return `${Number(parts[1])}/${Number(parts[2])}`;
   };
 
   const handleRefresh = async () => {
@@ -178,6 +191,11 @@ function DashboardContent() {
           label="현재 잔액"
           value={isLoading ? '...' : formatAmount(stats?.balance || 0)}
           color="balance"
+          subtitle={
+            !isLoading && stats?.ledgerFinalBalance !== undefined
+              ? `최종잔고 ${formatAmount(stats.ledgerFinalBalance)}${stats.ledgerFinalDate ? ` (${mdOf(stats.ledgerFinalDate)})` : ''}`
+              : undefined
+          }
         />
       </div>
 
@@ -213,6 +231,27 @@ function DashboardContent() {
                       <span className="text-amber-700 font-medium">차액:</span>
                       <span className="font-bold text-amber-700">
                         {formatAmount(Math.abs(stats.balance - (stats.lastBankBalance || 0)))}
+                      </span>
+                    </div>
+                  )}
+                  {/* 조회 주 무관 — 지금까지의 최종 잔고 대조 */}
+                  <div className="flex justify-between pt-1 border-t border-slate-200">
+                    <span className="text-slate-500">
+                      원장 최종잔고{stats.ledgerFinalDate ? ` (${mdOf(stats.ledgerFinalDate)})` : ''}:
+                    </span>
+                    <span className="font-medium text-blue-600">{formatAmount(stats.ledgerFinalBalance || 0)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">
+                      은행 최종잔고{stats.bankLatestDate ? ` (업로드 ${mdOf(stats.bankLatestDate)})` : ''}:
+                    </span>
+                    <span className="font-medium">{formatAmount(stats.bankLatestBalance || 0)}</span>
+                  </div>
+                  {(stats.ledgerFinalBalance || 0) !== (stats.bankLatestBalance || 0) && (
+                    <div className="flex justify-between">
+                      <span className="text-amber-700">최종 차액:</span>
+                      <span className="font-semibold text-amber-700">
+                        {formatAmount(Math.abs((stats.ledgerFinalBalance || 0) - (stats.bankLatestBalance || 0)))}
                       </span>
                     </div>
                   )}

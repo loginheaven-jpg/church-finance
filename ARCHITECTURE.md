@@ -329,6 +329,13 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 
 ## 최근 변경사항
 
+### 2026-07-13 업데이트 (대시보드 "최종잔고" 표시)
+
+대시보드 "현재 잔액"은 **선택 주의 일요일 기준**이라 그 이후~현재의 입출금이 미반영. 조회 주와 무관한 "지금까지의 최종 잔고"를 함께 노출.
+- **일반**: 현재 잔액 카드 아래 작은 글씨 `최종잔고 {원장 최종잔고} (마지막 거래 M/D)`. 값 = `이월 + 연 전체수입 − 연 전체지출`, 날짜 = 원장(수입·지출부) transaction_date 최댓값(조회일 아님 → 조회 시점 무관 일관).
+- **관리자(super_admin) 검증카드**: `원장 최종잔고`·`은행 최종잔고(가장 최근 은행 tx balance = E11 성격, endDate 필터 없음)`·`최종 차액` 행 추가로 현금보유·미입금 등 전역 대조.
+- stats route 응답에 `ledgerFinalBalance/ledgerFinalDate/bankLatestBalance/bankLatestDate` 추가. [StatsCard](src/components/dashboard/StatsCard.tsx)에 `subtitle` prop 추가.
+
 ### 2026-07-13 업데이트 (안 β⁶ — 은행 재업로드 이중기록 재발방지)
 
 **사고:** 7/5 전우윤 십일조 550,000이 수입부에 2건 기록 → 대시보드 계산잔액이 은행보다 550,000 초과. 원인은 원본 7/5 은행행(입금 550,000)의 **출금칸에 유령 46,209가 주입**되어, 중복키(`…|deposit|withdrawal|balance`)가 재업로드 정상행(withdrawal=0)과 어긋나 **중복 미검출 → 이중기록**. (46,209의 최초 주입 시점은 7/7 preview→confirm 단계로 한정 확인, insert 이후 시스템 write 경로는 아님.)

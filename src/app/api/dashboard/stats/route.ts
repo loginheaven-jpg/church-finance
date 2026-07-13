@@ -378,6 +378,29 @@ export async function GET(request: NextRequest) {
     const lastBankBalance = sortedBank[0]?.balance || 0;
     const lastBankDate = sortedBank[0]?.transaction_date || null;
 
+    // 안 (2026-07-13): 원장 최종잔고 = 이월 + 연 전체수입 - 연 전체지출 (기록된 전체 반영)
+    //   주간 balance(선택 주일 기준)와 달리, 조회 주와 무관하게 "기록된 마지막 거래까지"의 누적 잔고.
+    //   화면엔 "최종잔고 (마지막 거래일)" 로 표시.
+    const ledgerFinalBalance = carryoverBalance + yearlyTotalIncome - yearlyTotalExpense;
+    const ledgerDates = [
+      ...yearlyIncomeRecords.map(r => r.transaction_date || r.date),
+      ...yearlyExpenseRecords.map(r => r.transaction_date || r.date),
+    ].filter(Boolean) as string[];
+    const ledgerFinalDate = ledgerDates.length
+      ? ledgerDates.reduce((a, b) => (a > b ? a : b))
+      : null;
+
+    // 은행 최종잔고 = 전체 은행 tx 중 가장 최신 balance (endDate 필터 없음 — E11 성격, 관리자 대조용)
+    const bankLatestSorted = bankTransactions
+      .filter(t => t.balance > 0)
+      .sort((a, b) => {
+        const aDT = `${a.transaction_date} ${normalizeTime(a.time)}`;
+        const bDT = `${b.transaction_date} ${normalizeTime(b.time)}`;
+        return bDT.localeCompare(aDT);
+      });
+    const bankLatestBalance = bankLatestSorted[0]?.balance || 0;
+    const bankLatestDate = bankLatestSorted[0]?.transaction_date || null;
+
     // 미분류 거래 수
     const unmatchedCount = unmatchedBank.length + unmatchedCard.length;
 
@@ -565,6 +588,11 @@ export async function GET(request: NextRequest) {
       // super_admin 검증용 은행잔액 정보
       lastBankBalance,
       lastBankDate,
+      // 원장/은행 최종잔고 (조회 주와 무관한 "지금까지의 최종" 잔고)
+      ledgerFinalBalance,
+      ledgerFinalDate,
+      bankLatestBalance,
+      bankLatestDate,
       // 안 β: 실시간 원장-은행 정합 배지
       bankLedgerAlign,
       // 실제 표시 날짜 (마감 전 자동 이전 주 이동 반영)
@@ -614,6 +642,10 @@ export async function GET(request: NextRequest) {
       topOverBudgetItems: [],
       lastBankBalance: 0,
       lastBankDate: null,
+      ledgerFinalBalance: 0,
+      ledgerFinalDate: null,
+      bankLatestBalance: 0,
+      bankLatestDate: null,
       bankLedgerAlign: {
         isAligned: false,
         gap: 0,

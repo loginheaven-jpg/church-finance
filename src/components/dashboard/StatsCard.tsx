@@ -95,7 +95,7 @@ export function StatsCard({ icon: Icon, label, value, rawValue, color, isSelecte
               {label}
             </p>
             {subtitle && (
-              <p className="text-[10px] md:text-[11px] text-slate-400 mt-0.5 truncate">
+              <p className="font-display text-[22px] md:text-[28px] font-bold leading-none text-slate-900 mt-1.5">
                 {subtitle}
               </p>
             )}

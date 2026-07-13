@@ -188,7 +188,7 @@ function DashboardContent() {
         />
         <StatsCard
           icon={Wallet}
-          label="현재 잔액"
+          label="주일 기준"
           value={isLoading ? '...' : formatAmount(stats?.balance || 0)}
           color="balance"
           subtitle={

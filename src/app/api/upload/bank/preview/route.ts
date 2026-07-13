@@ -152,6 +152,34 @@ export async function POST(request: NextRequest) {
     const previousBalance = oldestTx ? oldestTx.balance - oldestTx.deposit + oldestTx.withdrawal : 0;
     const calculatedBalance = previousBalance + totalDeposit - totalWithdrawal;
 
+    // === 안 β⁶ (2026-07-13): 행 단위 무결성 검증 ===
+    // B: 동일행 입금·출금 동시 존재 → 불가능한 거래(오염). 오류 처리 대상.
+    const bothDepWit: number[] = [];
+    transactions.forEach((t, i) => {
+      if (t.deposit > 0 && t.withdrawal > 0) bothDepWit.push(i);
+    });
+
+    // D2: 잔액체인 검증 — balance[i] === balance[i-1] + 입금 - 출금 (시간 오름차순).
+    //   파일은 최신→과거 순이므로 역순 순회. 원본 index 보존.
+    //   balance 미기재(0) 행은 검증 스킵하고 다음 알려진 잔액에서 재개(연쇄 오탐 방지).
+    const balanceChainBreaks: Array<{ index: number; expected: number; actual: number }> = [];
+    {
+      let prev = previousBalance;
+      let prevKnown = previousBalance > 0;
+      for (let j = transactions.length - 1; j >= 0; j--) {
+        const t = transactions[j];
+        if (t.balance <= 0) { prevKnown = false; continue; }
+        if (prevKnown) {
+          const expected = prev + t.deposit - t.withdrawal;
+          if (expected !== t.balance) {
+            balanceChainBreaks.push({ index: j, expected, actual: t.balance });
+          }
+        }
+        prev = t.balance;
+        prevKnown = true;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: transactions,
@@ -163,6 +191,11 @@ export async function POST(request: NextRequest) {
         totalWithdrawal,       // B: 지출 합계
         calculatedBalance,     // 이전잔고 + A - B
         isValid: currentBalance !== null ? calculatedBalance === currentBalance : null,
+      },
+      // 안 β⁶: 행 단위 검증 결과 (data 배열의 index 기준)
+      validation: {
+        bothDepWit,            // B: 입출금 동시 행 index
+        balanceChainBreaks,    // D2: 잔액체인 불일치 행 {index, expected, actual}
       },
     });
   } catch (error) {

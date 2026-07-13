@@ -1236,6 +1236,34 @@ export async function autoTransferBankToLedger(
     }
   }
 
+  // 안 β⁶ (2026-07-13): 원장 자연키 세트 (C) — 재유입(중복 bank row)이 A(업로드 dedup)를 우회해도
+  //   수입/지출 이중기록을 원천 차단하는 2중 방어. 마커(bank id)가 아닌 "내용키"로 판정.
+  //   key = transaction_date | amount | detail(자동이관 note 의 마지막 ' | ' 세그먼트, 소문자 trim)
+  //   - 자동이관 note = `[bank:id][auto] | ... | detail` → 마지막 세그먼트가 원본 detail.
+  //   - 수동/헌금함 등 마커 없는 record 는 세트에서 제외(오탐 방지).
+  const naturalKey = (txDate: string, amount: number, detail: string) =>
+    `${txDate}|${amount}|${String(detail || '').trim().toLowerCase()}`;
+  const noteDetail = (note: string): string | null => {
+    const i = note.lastIndexOf(' | ');
+    return i >= 0 ? note.slice(i + 3) : null;
+  };
+  const existingIncomeNaturalKeys = new Set<string>();
+  for (let i = 1; i < incomeRows.length; i++) {
+    const d = noteDetail(String(incomeRows[i]?.[7] || ''));
+    if (d === null) continue;
+    const txd = String(incomeRows[i]?.[11] || '');
+    if (!txd) continue;
+    existingIncomeNaturalKeys.add(naturalKey(txd, parseAmount(incomeRows[i]?.[6]), d));
+  }
+  const existingExpenseNaturalKeys = new Set<string>();
+  for (let i = 1; i < expenseRows.length; i++) {
+    const d = noteDetail(String(expenseRows[i]?.[8] || ''));
+    if (d === null) continue;
+    const txd = String(expenseRows[i]?.[11] || '');
+    if (!txd) continue;
+    existingExpenseNaturalKeys.add(naturalKey(txd, parseAmount(expenseRows[i]?.[5]), d));
+  }
+
   const createdAt = getKSTDateTime();
   const newIncomes: IncomeRecord[] = [];
   const newExpenses: ExpenseRecord[] = [];
@@ -1305,6 +1333,14 @@ export async function autoTransferBankToLedger(
         incomeSkipped++;
         continue;
       }
+      // C: 원장 자연키 중복 방어 — 같은 (거래일·금액·detail) 수입이 이미 있으면 재유입으로 판단, skip
+      const incNatKey = naturalKey(t.transaction_date, t.deposit, detail);
+      if (existingIncomeNaturalKeys.has(incNatKey)) {
+        incomeSkipped++;
+        console.warn(`[autoTransferBankToLedger] 자연키 중복 수입 skip (재유입 방어): ${incNatKey} bank=${t.id}`);
+        continue;
+      }
+      existingIncomeNaturalKeys.add(incNatKey); // 배치 내 중복도 방지
 
       // 헌금함 판정 (helpers.isCashOfferingTransaction: detail 좌측 3자리 === '헌금함')
       const isCashOffering = isCashOfferingTransaction(t);
@@ -1449,6 +1485,14 @@ export async function autoTransferBankToLedger(
         expenseSkipped++;
         continue;
       }
+      // C: 원장 자연키 중복 방어 — 같은 (거래일·금액·detail) 지출이 이미 있으면 재유입으로 판단, skip
+      const expNatKey = naturalKey(t.transaction_date, t.withdrawal, detail);
+      if (existingExpenseNaturalKeys.has(expNatKey)) {
+        expenseSkipped++;
+        console.warn(`[autoTransferBankToLedger] 자연키 중복 지출 skip (재유입 방어): ${expNatKey} bank=${t.id}`);
+        continue;
+      }
+      existingExpenseNaturalKeys.add(expNatKey); // 배치 내 중복도 방지
       const isCardPayment = CARD_PAYMENT_KEYWORDS.some(kw => haystack.includes(kw));
 
       if (isCardPayment) {

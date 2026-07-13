@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { BankTransaction, IncomeRecord, ExpenseRecord, MatchingRule } from '@/types';
+import { getBankDuplicateKey } from '@/lib/bank-dedup';
 
 // 안 β″ 자동 이관 검토필요 항목 (팝업 리포트용)
 interface AutoTransferReviewItem {
@@ -96,15 +97,7 @@ interface UnifiedExpenseItem {
   suggestions?: MatchingRule[];
 }
 
-// 중복 체크용 복합키 생성
-function getDuplicateKey(
-  transactionDate: string,
-  deposit: number,
-  withdrawal: number,
-  balance: number
-): string {
-  return `${transactionDate}|${deposit}|${withdrawal}|${balance}`;
-}
+// 중복 체크용 복합키는 @/lib/bank-dedup 의 getBankDuplicateKey 로 일원화 (서버와 동일 키).
 
 export function BankUpload() {
   const [file, setFile] = useState<File | null>(null);
@@ -131,6 +124,10 @@ export function BankUpload() {
   } | null>(null);
   const [existingKeys, setExistingKeys] = useState<Set<string>>(new Set());
   const [duplicateIndices, setDuplicateIndices] = useState<Set<number>>(new Set());
+  // 안 β⁶ (2026-07-13): 행 단위 무결성 검증
+  const [bothDepWitIndices, setBothDepWitIndices] = useState<Set<number>>(new Set()); // B: 입출금 동시행
+  const [chainBreaks, setChainBreaks] = useState<Array<{ index: number; expected: number; actual: number }>>([]); // D2: 잔액체인 불일치
+  const [overrideValidation, setOverrideValidation] = useState(false); // 검증 경고 무시하고 저장
   const [balanceVerification, setBalanceVerification] = useState<{
     currentBalance: number | null;
     previousBalance: number;
@@ -255,12 +252,7 @@ export function BankUpload() {
         // 3. 중복 체크: 각 항목의 복합키가 기존 데이터에 있는지 확인
         const dupIndices = new Set<number>();
         parsedData.forEach((tx, index) => {
-          const key = getDuplicateKey(
-            tx.transaction_date,
-            Number(tx.deposit) || 0,
-            Number(tx.withdrawal) || 0,
-            Number(tx.balance) || 0
-          );
+          const key = getBankDuplicateKey(tx);
           if (existingKeySet.has(key)) {
             dupIndices.add(index);
           }
@@ -270,6 +262,19 @@ export function BankUpload() {
         // 4. 잔고 검증 데이터 저장
         if (result.balanceVerification) {
           setBalanceVerification(result.balanceVerification);
+        }
+
+        // 안 β⁶: 행 단위 무결성 검증 결과 반영 (B: 입출금동시, D2: 잔액체인)
+        const bothSet = new Set<number>((result.validation?.bothDepWit as number[]) || []);
+        const chainBreaks = (result.validation?.balanceChainBreaks as Array<{ index: number; expected: number; actual: number }>) || [];
+        setBothDepWitIndices(bothSet);
+        setChainBreaks(chainBreaks);
+        setOverrideValidation(false);
+        if (bothSet.size > 0 || chainBreaks.length > 0) {
+          toast.warning(
+            `⚠️ 검증 경고: 입출금 동시행 ${bothSet.size}건, 잔액 불일치행 ${chainBreaks.length}건 — 표에서 확인 후 저장하세요`,
+            { duration: 8000 }
+          );
         }
 
         setData(parsedData);
@@ -314,11 +319,19 @@ export function BankUpload() {
       return;
     }
 
-    // 중복 제외한 신규 데이터만 필터링
-    const newData = data.filter((_, index) => !duplicateIndices.has(index));
+    // 안 β⁶: 검증 경고(입출금동시·잔액체인)가 있으면 override 없이 저장 차단
+    const hasValidationWarnings = bothDepWitIndices.size > 0 || chainBreaks.length > 0;
+    if (hasValidationWarnings && !overrideValidation) {
+      toast.error('검증 경고가 있습니다. 표에서 확인 후 "경고 무시하고 저장"에 체크해야 저장됩니다.');
+      return;
+    }
+
+    // 중복 + 입출금동시(오류) 행 제외 후 신규 데이터만 저장
+    //   입출금동시 행은 불가능한 거래(오염)이므로 override 여부와 무관하게 항상 제외.
+    const newData = data.filter((_, index) => !duplicateIndices.has(index) && !bothDepWitIndices.has(index));
 
     if (newData.length === 0) {
-      toast.info(`이미 모두 반영된 파일입니다 (${duplicateIndices.size}건 전부 은행원장에 존재). 추가할 신규 거래가 없습니다.`);
+      toast.info(`저장할 신규 거래가 없습니다 (중복 ${duplicateIndices.size}건, 오류행 ${bothDepWitIndices.size}건 제외).`);
       return;
     }
 
@@ -851,11 +864,40 @@ export function BankUpload() {
                 </div>
               )}
 
+              {/* 안 β⁶: 행 단위 검증 경고 배너 */}
+              {step === 'preview' && (bothDepWitIndices.size > 0 || chainBreaks.length > 0) && (
+                <div className="rounded-lg p-3 border border-red-300 bg-red-50 text-sm space-y-2">
+                  <div className="font-semibold text-red-700 flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4" /> 원장파일 무결성 경고
+                  </div>
+                  {bothDepWitIndices.size > 0 && (
+                    <div className="text-xs text-red-700">
+                      • <b>입금·출금 동시 기록 {bothDepWitIndices.size}건</b> (불가능한 거래 — 오염 의심).
+                      해당 행(빨강)은 <b>저장에서 자동 제외</b>됩니다: {`${Array.from(bothDepWitIndices).map(i => i + 1).join(', ')}번 행`}
+                    </div>
+                  )}
+                  {chainBreaks.length > 0 && (
+                    <div className="text-xs text-amber-800">
+                      • <b>잔액체인 불일치 {chainBreaks.length}건</b> (누락·중복·금액오류 의심).
+                      해당 행(주황)을 확인하세요: {`${chainBreaks.map(b => b.index + 1).join(', ')}번 행`}
+                    </div>
+                  )}
+                  <label className="flex items-center gap-2 text-xs text-slate-700 pt-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={overrideValidation}
+                      onChange={e => setOverrideValidation(e.target.checked)}
+                    />
+                    경고를 확인했으며 (오류행 제외 후) 저장을 진행합니다
+                  </label>
+                </div>
+              )}
+
               {/* 1단계: 은행원장에 반영 버튼 */}
               {step === 'preview' && (
                 <Button
                   onClick={handleSave}
-                  disabled={saving}
+                  disabled={saving || ((bothDepWitIndices.size > 0 || chainBreaks.length > 0) && !overrideValidation)}
                   className="w-full"
                 >
                   {saving ? (
@@ -1427,11 +1469,21 @@ export function BankUpload() {
                     <TableBody>
                       {data.map((item, index) => {
                         const isDuplicate = duplicateIndices.has(index);
+                        const isBoth = bothDepWitIndices.has(index);        // B: 입출금 동시
+                        const isChainBreak = chainBreaks.some(b => b.index === index); // D2
                         return (
-                        <TableRow key={item.id} className={cn(isDuplicate && 'bg-slate-100 opacity-60')}>
+                        <TableRow key={item.id} className={cn(
+                          isBoth && 'bg-red-50',
+                          !isBoth && isChainBreak && 'bg-amber-50',
+                          isDuplicate && 'bg-slate-100 opacity-60'
+                        )}>
                           <TableCell className="font-medium text-sm">{index + 1}</TableCell>
                           <TableCell>
-                            {isDuplicate ? (
+                            {isBoth ? (
+                              <span className="px-1.5 py-0.5 bg-red-200 text-red-700 rounded text-xs font-medium">오류</span>
+                            ) : isChainBreak ? (
+                              <span className="px-1.5 py-0.5 bg-amber-200 text-amber-800 rounded text-xs font-medium">잔액</span>
+                            ) : isDuplicate ? (
                               <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-xs font-medium">중복</span>
                             ) : (
                               <span className="text-slate-300 text-xs">-</span>

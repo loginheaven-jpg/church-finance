@@ -329,6 +329,18 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 
 ## 최근 변경사항
 
+### 2026-07-13 업데이트 (안 β⁶ — 은행 재업로드 이중기록 재발방지)
+
+**사고:** 7/5 전우윤 십일조 550,000이 수입부에 2건 기록 → 대시보드 계산잔액이 은행보다 550,000 초과. 원인은 원본 7/5 은행행(입금 550,000)의 **출금칸에 유령 46,209가 주입**되어, 중복키(`…|deposit|withdrawal|balance`)가 재업로드 정상행(withdrawal=0)과 어긋나 **중복 미검출 → 이중기록**. (46,209의 최초 주입 시점은 7/7 preview→confirm 단계로 한정 확인, insert 이후 시스템 write 경로는 아님.)
+
+**재발방지 코드 (A·B·C·D2):**
+
+- **A. 중복키 견고화** — [src/lib/bank-dedup.ts](src/lib/bank-dedup.ts) 신설, 클라이언트([BankUpload.tsx](src/components/data-entry/BankUpload.tsx))·서버([check-duplicates/route.ts](src/app/api/bank/check-duplicates/route.ts)) 공용. 키 = `transaction_date | time(HH:MM:SS) | signedAmount | detail`. `signedAmount = deposit>0 ? +deposit : -withdrawal` → 입금행 유령 출금 무시. `balance` 제외 → 재처리로 잔액체인 밀려도 정확 인식. `time`으로 같은 날 동일액 구분.
+- **B. 입출금 동시행 차단** — [preview/route.ts](src/app/api/upload/bank/preview/route.ts)가 `deposit>0 && withdrawal>0` 행을 `validation.bothDepWit`로 반환, 클라이언트가 빨강 표시 + 저장에서 자동 제외. [confirm/route.ts](src/app/api/upload/bank/confirm/route.ts)는 그런 행이 payload에 있으면 400 거부(2중 안전).
+- **C. 원장 자연키 2중 방어** — [autoTransferBankToLedger](src/lib/google-sheets.ts)가 `[bank:id]` 마커뿐 아니라 `transaction_date|amount|detail` 자연키로도 기존 수입/지출 존재 시 skip. 중복 bank row가 A를 우회해도 원장 이중기록 차단.
+- **D2. 잔액체인 검증** — preview가 각 행의 `balance[i] === balance[i-1] + 입금 - 출금`을 검사해 `validation.balanceChainBreaks` 반환. 클라이언트가 주황 표시. 누락·중복·금액오류까지 포착.
+- 클라이언트: B/D2 경고 시 **"경고 무시하고 저장" override 체크** 전까지 저장 버튼 비활성(입출금동시 행은 override와 무관하게 항상 제외).
+
 ### 2026-07-13 업데이트 (지출청구 영수증-먼저 자동입력 흐름 병존)
 
 지출청구 입력([ClaimSubmitForm.tsx](src/components/expense-claim/ClaimSubmitForm.tsx))에 **두 가지 입력 방향을 병존**시켰습니다. 인프라(`/api/expense-claim/verify-receipt`, 이미지 압축, 복수 영수증 합산)는 그대로 재사용.

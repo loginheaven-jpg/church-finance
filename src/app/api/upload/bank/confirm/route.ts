@@ -20,6 +20,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 안 β⁶ (2026-07-13): 서버 가드 — 동일행 입금·출금 동시(>0)는 불가능한 거래(오염).
+    //   실제 사고: 입금행에 유령 출금 주입 → 중복키 훼손 → 재업로드 이중기록.
+    //   클라이언트가 제외했어도 방어적으로 서버에서도 거부(2중 안전).
+    const bothDepWit = (transactions as BankTransaction[]).filter(
+      t => (Number(t.deposit) || 0) > 0 && (Number(t.withdrawal) || 0) > 0
+    );
+    if (bothDepWit.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `입금·출금이 동시에 기록된 오류 행 ${bothDepWit.length}건이 있어 저장할 수 없습니다. 원장파일을 확인해주세요. (예: ${bothDepWit[0].transaction_date} ${bothDepWit[0].detail || bothDepWit[0].description || ''})`,
+        },
+        { status: 400 }
+      );
+    }
+
     // 안 α (K3): client 페이로드 신뢰 제거 — date 재계산 + 매칭상태 초기화 강제
     const sanitized = (transactions as BankTransaction[]).map(t => ({
       ...t,

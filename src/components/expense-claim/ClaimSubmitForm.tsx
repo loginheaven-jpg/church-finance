@@ -544,6 +544,33 @@ export function ClaimSubmitForm({ userName, onSuccess }: ClaimSubmitFormProps) {
     const aiPassed = await verifyAllItems(validItems);
     if (!aiPassed) return;
 
+    // 중복 상신 사전 경고 — 근접 날짜에 동일 청구자·금액 청구건이 있으면 확인
+    try {
+      const amounts = grouped.map(g => g.totalAmount);
+      const dupRes = await fetch('/api/expense-claim/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          claimant: isProxy ? claimant : userName,
+          claimDate: shared.claimDate,
+          amounts,
+        }),
+      });
+      const dupData = await dupRes.json();
+      if (dupData.success && Array.isArray(dupData.duplicates) && dupData.duplicates.length > 0) {
+        const lines = dupData.duplicates
+          .map((d: { claimDate: string; amount: number; description?: string }) =>
+            `• ${d.claimDate} · ${Number(d.amount).toLocaleString()}원${d.description ? ` · ${d.description}` : ''}`)
+          .join('\n');
+        const proceed = window.confirm(
+          `⚠️ 근접한 날짜에 동일 청구자·금액 청구건이 있습니다.\n\n${lines}\n\n중복 상신건인지 확인하세요. 계속 등록하시겠습니까?`
+        );
+        if (!proceed) return;
+      }
+    } catch {
+      // 중복 점검 실패는 등록을 막지 않음
+    }
+
     setLoading(true);
     try {
       // AI 태그를 내역에 포함하여 그룹 데이터 생성

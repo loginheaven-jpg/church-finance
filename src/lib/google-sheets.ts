@@ -3374,6 +3374,7 @@ export interface ExpenseClaimRow {
   processedDate: string;  // K: 입금처리
   claimId?: string;       // A: 청구 ID (과거 구글폼 입력 건은 빈칸)
   receiptUrl?: string;    // I: 영수증 (구글드라이브 URL 또는 Supabase 경로)
+  manualConfirm?: string; // M: 수동확인 감사기록 "YYYY-MM-DD|사용자" (자동 최종확인과 구분)
 }
 
 export interface AccountInfo {
@@ -3571,6 +3572,32 @@ export async function unmarkExpenseClaimsProcessed(
 }
 
 /**
+ * 지출청구 수동확인 표시/취소 (M컬럼) — 자동 대조로 못 잡는 잔여 건을 admin이 수동 확인.
+ *   감사용으로 "YYYY-MM-DD|사용자" 기록. 취소 시 빈값. 자동 '최종확인'과 구분되는 '수동확인' 상태.
+ * @param rowIndices 대상 행 번호(1-based 시트 행)
+ * @param value 기록 문자열 (취소 시 '')
+ */
+export async function setExpenseClaimManualConfirm(
+  rowIndices: number[],
+  value: string
+): Promise<void> {
+  const sheets = getGoogleSheetsClient();
+
+  const requests = rowIndices.map(rowIndex => ({
+    range: `${FINANCE_CONFIG.sheets.expenseClaim}!M${rowIndex}`,
+    values: [[value]],
+  }));
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: FINANCE_CONFIG.spreadsheetId,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: requests,
+    },
+  });
+}
+
+/**
  * 처리완료된 지출청구 조회 (K컬럼에 날짜가 있는 행)
  * @param startDate K컬럼(처리일) 시작 범위 (YYYY-MM-DD)
  * @param endDate K컬럼(처리일) 끝 범위 (YYYY-MM-DD)
@@ -3751,7 +3778,7 @@ export async function getAllExpenseClaims(options?: {
   startDate?: string;
   endDate?: string;
 }): Promise<ExpenseClaimRow[]> {
-  const rows = await readSheet(FINANCE_CONFIG.sheets.expenseClaim, 'A:L');
+  const rows = await readSheet(FINANCE_CONFIG.sheets.expenseClaim, 'A:M');
 
   if (!rows || rows.length <= 1) return [];
 
@@ -3773,6 +3800,7 @@ export async function getAllExpenseClaims(options?: {
     let bankName = row[9] || '';       // J
     const processedRaw = row[10] || '';// K
     const accountHolder = row[11] || '';// L: 예금주명
+    const manualRaw = row[12] || '';   // M: 수동확인 감사기록
 
     const claimDate = normalizeDateString(rawClaimDate.trim()) || rawClaimDate.trim();
 
@@ -3823,6 +3851,7 @@ export async function getAllExpenseClaims(options?: {
       description,
       processedDate,
       receiptUrl: receiptRaw || undefined,
+      manualConfirm: manualRaw.trim() || undefined,
     });
   }
 

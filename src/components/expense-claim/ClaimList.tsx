@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/table';
 import {
   Loader2, Eye, Trash2, Download, CheckCircle2, AlertTriangle,
-  Clock, RefreshCw, ShieldCheck, ShieldAlert, ShieldQuestion, Pencil, Save, X, ChevronDown, ChevronRight, Paperclip,
+  Clock, RefreshCw, ShieldCheck, ShieldAlert, ShieldQuestion, Pencil, Save, X, ChevronDown, ChevronRight, Paperclip, UserCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -36,6 +36,7 @@ interface ClaimItem {
   processedDate: string;
   receiptUrl?: string;
   status: 'pending' | 'suspicious' | 'processed';
+  manualConfirm?: string; // M: 수동확인 감사기록 "YYYY-MM-DD|사용자"
 }
 
 type VerifStatus = 'matched' | 'pending' | 'missing';
@@ -325,6 +326,35 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
     }
   };
 
+  // 수동확인 처리/취소 — 자동 대조로 못 잡는 잔여 건을 admin이 직접 확인(감사기록)
+  const handleManualConfirm = async (cancel: boolean, targets: ClaimItem[]) => {
+    if (targets.length === 0) return;
+    const msg = cancel
+      ? `${targets.length}건의 수동확인을 취소하시겠습니까?`
+      : `${targets.length}건을 수동확인 처리하시겠습니까?\n(자동 대조로 확인되지 않았지만 관리자가 직접 확인 — 감사기록에 남습니다)`;
+    if (!confirm(msg)) return;
+    setMarking(true);
+    try {
+      const res = await fetch('/api/expense-claim/manual-confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rowIndices: targets.map(c => c.rowIndex), cancel }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || (cancel ? '수동확인 취소됨' : '수동확인 처리됨'));
+        setSelected(new Set());
+        await fetchClaims();
+      } else {
+        toast.error(data.error || '수동확인 처리 실패');
+      }
+    } catch {
+      toast.error('수동확인 처리 중 오류가 발생했습니다');
+    } finally {
+      setMarking(false);
+    }
+  };
+
   const handleViewReceipt = async (receiptUrl: string) => {
     // 구글드라이브 URL (쉼표 구분 복수 가능) → 직접 열기
     if (receiptUrl.startsWith('http')) {
@@ -471,6 +501,14 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   // 4단계 상태 배지
   const statusBadge = (claim: ClaimItem) => {
     if (claim.status === 'processed') {
+      // 수동확인(admin 감사기록)이 있으면 자동 최종확인보다 우선, 별도 배지로 구분
+      if (claim.manualConfirm) {
+        return (
+          <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-0" title={`수동확인: ${claim.manualConfirm.replace('|', ' · ')}`}>
+            <UserCheck className="h-3 w-3 mr-1" />수동확인
+          </Badge>
+        );
+      }
       const verif = verifMap.get(claim.rowIndex);
       if (verif?.status === 'matched') {
         return (
@@ -520,6 +558,10 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
   const hasUnpaidSelected = selectedUnpaid.length > 0;
   const hasPaidSelected = selectedPaid.length > 0;
   const isMixedSelection = hasUnpaidSelected && hasPaidSelected;
+
+  // 수동확인 대상: 입금완료(처리)됐으나 아직 수동확인 아님 / 취소 대상: 이미 수동확인된 것
+  const selectedForManual = selectedPaid.filter(c => !c.manualConfirm);
+  const selectedManualConfirmed = selectedPaid.filter(c => !!c.manualConfirm);
 
   return (
     <div className="space-y-4">
@@ -577,6 +619,29 @@ export function ClaimList({ onCancelSuccess }: ClaimListProps) {
             >
               입금완료 취소 ({selectedPaid.length})
             </Button>
+            {/* 수동확인 처리 (자동 대조 실패 잔여 건) */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleManualConfirm(false, selectedForManual)}
+              disabled={marking || selectedForManual.length === 0 || isMixedSelection}
+              className={selectedForManual.length > 0 && !isMixedSelection ? 'text-indigo-600 border-indigo-300 hover:bg-indigo-50' : ''}
+              title="자동 대조로 확인되지 않은 입금완료 건을 관리자가 직접 확인(감사기록에 기록)"
+            >
+              <UserCheck className="h-4 w-4 mr-1" />
+              수동확인 ({selectedForManual.length})
+            </Button>
+            {selectedManualConfirmed.length > 0 && !isMixedSelection && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleManualConfirm(true, selectedManualConfirmed)}
+                disabled={marking}
+                className="text-orange-600 border-orange-300 hover:bg-orange-50"
+              >
+                수동확인 취소 ({selectedManualConfirmed.length})
+              </Button>
+            )}
             {/* 지출부 대조 */}
             <Button
               size="sm"

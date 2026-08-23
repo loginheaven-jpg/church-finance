@@ -107,6 +107,20 @@ const formatDate = (d: Date) =>
 //   금액+이름 = 65(임계) 유지로 기존 매칭 회귀 방지. 내역 가중은 10→15로 상향(동일금액 구분력).
 const MATCH_THRESHOLD = 65;
 
+// (원인 B) 이름이 안 맞아도 내역이 강하게 일치하면 매칭 허용.
+//   지출부 vendor가 사람이 아니라 용도/문구인 경우(예: 청구 "김창환조의화환" ↔ 지출부 vendor "김창환조의화환")
+//   이름 게이트에 걸려 false-negative(입금완료 오표시)가 되던 문제 해소.
+const STRONG_TEXT_SIM = 0.6;
+
+// 청구 내역의 자동 태그 노이즈 제거 — (※AI확인)/(대리입력: ...) 등이 내역 유사도를 희석시키는 것 방지
+//   (금액/의미 있는 괄호 예: "자녀등록금(찬유,은솔)"는 보존 — 알려진 태그 패턴만 제거)
+function cleanClaimDesc(desc: string): string {
+  return String(desc || '')
+    .replace(/\s*\(\s*※[^)]*\)/g, '')
+    .replace(/\s*\(\s*대리입력[^)]*\)/g, '')
+    .trim();
+}
+
 // GET: 처리완료 지출청구 ↔ 지출원장 교차대조
 export async function GET(request: NextRequest) {
   try {
@@ -180,6 +194,7 @@ export async function GET(request: NextRequest) {
       matched: MatchedExpense;
       nameMatched: boolean;
       dd: number; // 지출부 거래일 ~ 청구일/처리일 최소 일수차 (동점 tie-break용)
+      eligible: boolean; // 배정 자격: score>=임계 && (이름일치 || 강한 내역일치)
     }
 
     // 1단계: 청구별 후보 점수화
@@ -228,14 +243,20 @@ export async function GET(request: NextRequest) {
         const dateScore = dd === Infinity ? 0 : Math.max(0, 20 - Math.round(dd));
         score += dateScore;
 
-        // 내역 유사도 (가중 상향 10→15) — 내역이 다르면 오매칭 억제, greedy에서 올바른 짝 우선
-        const textSim = calculateTextSimilarity(claim.description, e.description, e.vendor);
+        // 내역 유사도 (가중 상향 10→15) — 내역이 다르면 오매칭 억제, greedy에서 올바른 짝 우선.
+        //   청구 내역의 자동 태그 노이즈 제거 후 비교.
+        const textSim = calculateTextSimilarity(cleanClaimDesc(claim.description), e.description, e.vendor);
         score += Math.round(textSim * 15);
+
+        const nameMatched = nameScore > 0;
+        // 배정 자격: 임계 통과 + (이름일치 OR 강한 내역일치). 이름 게이트 완화(원인 B).
+        const eligible = score >= MATCH_THRESHOLD && (nameMatched || textSim >= STRONG_TEXT_SIM);
 
         cands.push({
           expenseIdx: idx,
-          nameMatched: nameScore > 0,
+          nameMatched,
           dd,
+          eligible,
           matched: {
             id: e.id,
             date: e.date,
@@ -256,7 +277,7 @@ export async function GET(request: NextRequest) {
     const pairs: Pair[] = [];
     claimCandidates.forEach((cands, ci) => {
       for (const c of cands) {
-        if (c.matched.score >= MATCH_THRESHOLD && c.nameMatched) {
+        if (c.eligible) {
           pairs.push({ ci, expenseIdx: c.expenseIdx, score: c.matched.score, dd: c.dd, matched: c.matched });
         }
       }
@@ -275,7 +296,7 @@ export async function GET(request: NextRequest) {
     for (let ci = 0; ci < claimCandidates.length; ci++) {
       if (assignedClaim.has(ci)) continue;
       for (const c of claimCandidates[ci]) {
-        if (c.matched.score >= MATCH_THRESHOLD && c.nameMatched && !usedExpense.has(c.expenseIdx)) {
+        if (c.eligible && !usedExpense.has(c.expenseIdx)) {
           assignedClaim.set(ci, { ci, expenseIdx: c.expenseIdx, score: c.matched.score, dd: c.dd, matched: c.matched });
           usedExpense.add(c.expenseIdx);
           break;
@@ -331,8 +352,8 @@ export async function GET(request: NextRequest) {
       const best = cands[0];
       const bestScore = best.matched.score;
       const bestNameMatched = best.nameMatched;
-      // 임계(65)+이름일치 후보가 하나라도 있었는가 → 있으면 그 지출부가 다른 청구에 선점된 것(중복 상신 의심)
-      const hadQualifying = cands.some(c => c.matched.score >= MATCH_THRESHOLD && c.nameMatched);
+      // 배정 자격 후보가 하나라도 있었는가 → 있으면 그 지출부가 다른 청구에 선점된 것(중복 상신 의심)
+      const hadQualifying = cands.some(c => c.eligible);
       const sundays = countSundaysBetween(claim.processedDate || claim.claimDate, todayStr);
       const status: VerificationStatus = sundays >= 2 ? 'missing' : 'pending';
 

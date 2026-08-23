@@ -342,6 +342,12 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 
 **중복 상신 경고 (D):** [check-duplicate/route.ts](src/app/api/expense-claim/check-duplicate/route.ts) 신설 — 같은 청구자(공백 정규화 비교)+동일 금액+청구일 ±14일 기존 청구를 반환. [ClaimSubmitForm](src/components/expense-claim/ClaimSubmitForm.tsx) 제출 시 AI검증 직후 호출해, 있으면 "중복 상신건인지 확인하세요" 팝업(window.confirm)으로 경고(non-blocking, 조회범위 ±30일로 좁힘).
 
+### 2026-08 업데이트 (지출청구 대조 이름게이트 완화 + 수동확인)
+
+**원인 B(이름 불일치 false-negative):** 지출부에 있는데도 vendor가 사람이 아니라 용도/문구(예: 청구 "김창환조의화환" ↔ 지출부 vendor "김창환조의화환")면 이름 매칭에 걸려 '입금완료'로 오표시.
+- **매칭 개선:** 배정 자격을 `score≥65 && (이름일치 OR 강한 내역일치[textSim≥0.6])`로 완화 — 지출부 vendor=용도인 케이스 흡수. 청구 내역의 자동 태그 노이즈(`(※AI확인)`,`(대리입력…)`) 제거 후 내역 유사도 계산. exact 금액+근접일+1:1 배정과 결합해 오매칭 위험 낮음. (검증: 천장성 조의화환 → 최종확인)
+- **수동확인(escape hatch):** 자동 대조로 못 잡는 잔여 건을 admin이 직접 확인. 지출청구 시트 **M컬럼에 "YYYY-MM-DD\|사용자" 감사기록** 저장([setExpenseClaimManualConfirm](src/lib/google-sheets.ts), [manual-confirm/route.ts](src/app/api/expense-claim/manual-confirm/route.ts), admin 전용). [ClaimList](src/components/expense-claim/ClaimList.tsx)에서 입금완료 건 선택 → "수동확인" 버튼, 자동 '최종확인'과 구분되는 **'수동확인'(indigo) 배지**로 표시(우선순위: 수동확인 > 자동 최종확인 > 입금완료).
+
 ### 2026-07-13 업데이트 (대시보드 "최종잔고" 표시)
 
 대시보드 "현재 잔액"은 **선택 주의 일요일 기준**이라 그 이후~현재의 입출금이 미반영. 조회 주와 무관한 "지금까지의 최종 잔고"를 함께 노출.

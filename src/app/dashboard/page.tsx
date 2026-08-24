@@ -192,8 +192,8 @@ function DashboardContent() {
           value={isLoading ? '...' : formatAmount(stats?.balance || 0)}
           color="balance"
           subtitle={
-            !isLoading && stats?.ledgerFinalBalance !== undefined
-              ? `최종잔고 ${formatAmount(stats.ledgerFinalBalance)}${stats.ledgerFinalDate ? ` (${mdOf(stats.ledgerFinalDate)})` : ''}`
+            !isLoading && stats?.bankLatestBalance
+              ? `최종잔고 ${formatAmount(stats.bankLatestBalance)}${stats.bankLatestDate ? ` (${mdOf(stats.bankLatestDate)})` : ''}`
               : undefined
           }
         />

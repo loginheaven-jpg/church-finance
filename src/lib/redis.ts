@@ -25,7 +25,8 @@ export const CACHE_TTL = {
 // 캐시 버전: 데이터 읽기 로직/응답 형태 변경 시 버전을 올려서 stale 캐시 자동 무효화
 // v2 → v3: 날짜 정규화(normalizeDateString) 추가 반영
 // v3 → v4: 대시보드 응답에 최종잔고 필드(ledgerFinalBalance 등) 추가 반영
-const CACHE_VERSION = 'v4';
+// v4 → v5: 직접-시트 데이터 교정(P3 orphan 지출부 재생성) 반영 — stale 계산잔액 무효화
+const CACHE_VERSION = 'v5';
 
 // 캐시 키 생성 헬퍼
 export const cacheKeys = {

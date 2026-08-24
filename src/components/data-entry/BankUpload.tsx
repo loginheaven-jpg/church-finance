@@ -376,6 +376,18 @@ export function BankUpload() {
               { duration: 8000 }
             );
           }
+
+          // P2 (2026-08): 원장 누락(orphanLedgerMissing) 감지·재생성 결과 표시
+          const integ = result.integrity;
+          if (integ && integ.orphanLedgerMissing > 0) {
+            const repaired = integ.orphanLedgerRepaired ?? 0;
+            const failed = integ.orphanLedgerRepairFailed ?? 0;
+            if (repaired > 0 && failed === 0) {
+              toast.success(`🔧 원장 누락 ${integ.orphanLedgerMissing}건 감지 → 지출부/수입부 ${repaired}건 자동 재생성`, { duration: 9000 });
+            } else {
+              toast.warning(`⚠️ 원장 누락 ${integ.orphanLedgerMissing}건 감지 (재생성 ${repaired}건${failed > 0 ? `, 실패 ${failed}건` : ''}) — 지출부 반영 여부 확인 필요`, { duration: 12000 });
+            }
+          }
         } else if (result.warning) {
           toast.warning(`⚠️ ${result.warning}`, { duration: 8000 });
         }

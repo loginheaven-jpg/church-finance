@@ -329,6 +329,19 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 
 ## 최근 변경사항
 
+### 2026-08 업데이트 (은행 업로드 지출부 누락 재발방지 — P1·P2)
+
+**사고:** 은행파일 업로드 시 **동일 금액 다건 지출**에서 지출부 추가가 누락(은행 8/21 방민혁 사례 1.2M, 8/24 학비지원 3M) → 원장이 은행보다 4.2M 과다.
+
+**원인 P1(확정):** β⁶에 넣은 C(원장 자연키 `transaction_date|금액|detail` 중복스킵)가 **같은 날·같은 금액·같은 적요의 서로 다른 실지급**(학비지원 이민우 3M + 방민혁 3M, 적요 모두 "11학비지원")을 재유입 중복으로 오판 → 두 번째 건 skip.
+- **수정:** [autoTransferBankToLedger](src/lib/google-sheets.ts)에서 **C 완전 제거**. 재업로드 중복은 A(업로드 중복키 = date+time+금액+detail, [bank-dedup.ts](src/lib/bank-dedup.ts))가 원천 차단하고, 같은 은행 tx 재이관은 `[bank:id]` 마커 스킵이 막으므로 C는 불필요·오탐만 유발.
+
+**원인 P2(기여):** `verifyBankLedgerIntegrity`가 orphanLedgerMissing(은행 matched인데 원장 record 없음)을 **탐지만 하고 방치** → 갭 조용히 잔존.
+- **수정:** [repairOrphanLedgerMissing](src/lib/integrity.ts) 추가 — orphan tx를 재이관해 누락 record 재생성. [confirm/route.ts](src/app/api/upload/bank/confirm/route.ts)가 업로드 직후 호출·재무효화, [BankUpload](src/components/data-entry/BankUpload.tsx)에 결과 토스트.
+- **⚠️ 적대적 리뷰로 잡은 치명 버그(수정 완료):** orphan 판정이 `[bank:id]` 마커만 봤는데, **수동매칭(match/confirm) record는 마커가 없어** orphan으로 오판 → 재이관 시 **이중계상** 위험. → `verifyBankLedgerIntegrity`가 **matched_ids(N열)가 실재 record id를 가리키면 orphan에서 제외**하도록 보강(마커 OR matched_ids 해석). 실데이터 검증: 국민 학비지원(수동매칭) 제외, 방민혁·카카오(진짜 누락)만 검출.
+
+**P3(데이터):** 누락 2건(방민혁 사례 1.2M, 학비지원 이민우 3M)을 지출부에 재생성 → 4.2M 갭 해소.
+
 ### 2026-08 업데이트 (지출청구 상태 대조 오매칭 수정 + 중복 상신 경고)
 
 **사고:** 최철영이 8/3·8/6에 동일 20만원을 서로 다른 내역으로 청구. 지출부엔 8/3분 1건만 기록됐는데, 대조 로직([verification/route.ts](src/app/api/expense-claim/verification/route.ts))이 청구마다 독립적으로 지출부를 훑어 **지출부 1건을 여러 청구에 중복 매칭**함 → 8/6이 8/3 기록을 빌려 '최종확인'으로 오표시(실제는 '입금완료'가 맞음).

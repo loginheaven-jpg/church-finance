@@ -16,7 +16,13 @@
 //   - /api/verify/integrity (admin) 에서 정합성 리포트 + 자동 복구
 //   - 대시보드 정합 배지 (선택)
 
-import { readSheet, updateBankTransactionsBatch, FINANCE_CONFIG } from './google-sheets';
+import {
+  readSheet,
+  updateBankTransactionsBatch,
+  getBankTransactions,
+  autoTransferBankToLedger,
+  FINANCE_CONFIG,
+} from './google-sheets';
 
 export interface IntegrityReport {
   scope: { from: string; to: string };
@@ -106,6 +112,18 @@ export async function verifyBankLedgerIntegrity(
     });
   }
 
+  // 모든 원장 record id 집합 (마커 없는 record — 예: /api/match/confirm 수동매칭 — 도
+  //   은행 matched_ids 로 연결됨. 마커만 보면 수동매칭 건을 orphan 으로 오판하므로 id 로도 확인.)
+  const allLedgerIds = new Set<string>();
+  for (let i = 1; i < incomeRows.length; i++) {
+    const id = String(incomeRows[i]?.[0] || '');
+    if (id) allLedgerIds.add(id);
+  }
+  for (let i = 1; i < expenseRows.length; i++) {
+    const id = String(expenseRows[i]?.[0] || '');
+    if (id) allLedgerIds.add(id);
+  }
+
   const report: IntegrityReport = {
     scope: { from, to },
     totalBankTxs: 0,
@@ -126,6 +144,11 @@ export async function verifyBankLedgerIntegrity(
 
     const status = String(r?.[11] || '');
     const matchedType = String(r?.[12] || '');
+    // matched_ids(N열=index 13) 가 실재 원장 record id 를 가리키는지 (수동매칭 record 는 마커가 없어 이걸로 확인)
+    const matchedIdsResolved = String(r?.[13] || '')
+      .split(',')
+      .map(s => s.trim())
+      .some(id => id.length > 0 && allLedgerIds.has(id));
     const suppressedRaw = r?.[14];
     const suppressed = suppressedRaw === 'TRUE' || String(suppressedRaw) === 'true';
     const withdrawal = parseAmount(r?.[3]);
@@ -153,15 +176,16 @@ export async function verifyBankLedgerIntegrity(
       });
     }
 
-    // 케이스 B: status='matched' 인데 ledger 에 record 없음
-    //   → append 실패 or 사후 삭제. 확인 필요.
-    if (status === 'matched' && !inLedger) {
+    // 케이스 B: status='matched' 인데 (마커도 없고) matched_ids 도 실재 record 를 못 가리킴 → 진짜 orphan.
+    //   수동매칭(match/confirm) record 는 마커가 없지만 matched_ids 가 실재 record 를 가리키므로 제외됨
+    //   (이 제외가 없으면 P2 자동복구가 수동매칭 건을 재이관해 이중계상함).
+    if (status === 'matched' && !inLedger && !matchedIdsResolved) {
       report.orphanLedgerMissing.push({
         bankId,
         transaction_date: txDate,
         matched_type: matchedType,
         amount: bankAmount,
-        reason: 'status=matched 이지만 수입부/지출부 에 marker 매치되는 record 없음',
+        reason: 'status=matched 이지만 수입부/지출부 에 marker/matched_ids 로 매치되는 record 없음',
       });
     }
 
@@ -201,4 +225,48 @@ export async function repairOrphanBankPending(
   }));
 
   return await updateBankTransactionsBatch(updates);
+}
+
+/**
+ * P2 (2026-08): orphanLedgerMissing 자동복구.
+ *   은행 status=matched 인데 수입/지출부에 [bank:id] 마커 record 가 없는 tx 를,
+ *   해당 은행거래로 **재이관**하여 누락된 원장 record 를 재생성한다.
+ *   (원장에 마커가 없으므로 autoTransferBankToLedger 의 마커 스킵에 걸리지 않고 새로 생성됨.
+ *    은행 status/matched_ids 도 새 record id 로 재설정됨.)
+ *
+ *   기존엔 orphanLedgerMissing 을 "탐지만" 하고 방치 → 은행보다 원장이 과다/과소한 갭이 조용히 잔존했음.
+ *
+ * @returns { attempted, addedIncome, addedExpense, failedBankUpdates }
+ */
+export async function repairOrphanLedgerMissing(
+  report: IntegrityReport
+): Promise<{
+  attempted: number;
+  addedIncome: number;
+  addedExpense: number;
+  failedBankUpdates: string[];
+}> {
+  if (report.orphanLedgerMissing.length === 0) {
+    return { attempted: 0, addedIncome: 0, addedExpense: 0, failedBankUpdates: [] };
+  }
+
+  const orphanIds = new Set(report.orphanLedgerMissing.map(o => o.bankId));
+  const allBank = await getBankTransactions();
+  // 말소(suppressed) 는 재이관 대상 아님. 입출금 0 도 제외.
+  const orphanTxs = allBank.filter(
+    t => orphanIds.has(t.id) && !t.suppressed && ((t.deposit || 0) > 0 || (t.withdrawal || 0) > 0)
+  );
+  if (orphanTxs.length === 0) {
+    return { attempted: 0, addedIncome: 0, addedExpense: 0, failedBankUpdates: [] };
+  }
+
+  // 재이관 — 누락 record 재생성 + 은행 status/id 재설정
+  const result = await autoTransferBankToLedger(orphanTxs);
+
+  return {
+    attempted: orphanTxs.length,
+    addedIncome: result.income.added,
+    addedExpense: result.expense.added,
+    failedBankUpdates: result.failedBankUpdates,
+  };
 }

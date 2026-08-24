@@ -4,7 +4,7 @@ import {
   getWeekEndingSunday,
   autoTransferBankToLedger,
 } from '@/lib/google-sheets';
-import { verifyBankLedgerIntegrity, repairOrphanBankPending } from '@/lib/integrity';
+import { verifyBankLedgerIntegrity, repairOrphanBankPending, repairOrphanLedgerMissing } from '@/lib/integrity';
 import { invalidateYearCache } from '@/lib/redis';
 import type { BankTransaction } from '@/types';
 
@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       // 이관 범위 = 이번에 저장된 tx 의 transaction_date 최소/최대
       let integrityReport: Awaited<ReturnType<typeof verifyBankLedgerIntegrity>> | null = null;
       let repairResult: Awaited<ReturnType<typeof repairOrphanBankPending>> | null = null;
+      let ledgerRepair: Awaited<ReturnType<typeof repairOrphanLedgerMissing>> | null = null;
       try {
         const dates = sanitized.map(t => t.transaction_date).filter(Boolean).sort();
         if (dates.length > 0) {
@@ -89,9 +90,28 @@ export async function POST(request: NextRequest) {
               `[bank/confirm] 정합성 자동 복구: ${repairResult.success.length}건 성공, ${repairResult.failed.length}건 실패`
             );
           }
+          // P2 (2026-08): orphanLedgerMissing(은행 matched인데 원장 record 없음) → 재이관으로 자동 복구
+          //   (동일금액 다건 이관 시 누락되던 지출부 record 를 업로드 시점에 즉시 재생성)
+          if (integrityReport.orphanLedgerMissing.length > 0) {
+            ledgerRepair = await repairOrphanLedgerMissing(integrityReport);
+            console.warn(
+              `[bank/confirm] orphanLedgerMissing ${integrityReport.orphanLedgerMissing.length}건 감지 → 재이관: 수입 ${ledgerRepair.addedIncome} · 지출 ${ledgerRepair.addedExpense} 재생성`
+            );
+          }
         }
       } catch (integrityErr) {
         console.warn('[bank/confirm] 정합성 검증/복구 실패 (이관 자체는 성공):', integrityErr);
+      }
+      const ledgerRepaired = (ledgerRepair?.addedIncome ?? 0) + (ledgerRepair?.addedExpense ?? 0);
+      // P2: 재이관으로 원장 record 가 추가됐으면(step3 캐시 무효화 이후) 캐시 재무효화
+      if (ledgerRepaired > 0) {
+        for (const y of years) {
+          try {
+            await invalidateYearCache(y);
+          } catch (cacheErr) {
+            console.warn(`[bank/confirm] 재이관 후 invalidateYearCache(${y}) 실패:`, cacheErr);
+          }
+        }
       }
 
       return NextResponse.json({
@@ -114,9 +134,12 @@ export async function POST(request: NextRequest) {
               mismatched: integrityReport.mismatched.length,
               repaired: repairResult?.success.length ?? 0,
               repairFailed: repairResult?.failed.length ?? 0,
+              // P2: orphanLedgerMissing 재이관 복구 결과
+              orphanLedgerRepaired: ledgerRepaired,
+              orphanLedgerRepairFailed: (ledgerRepair?.failedBankUpdates.length ?? 0),
             }
           : null,
-        message: `은행 ${sanitized.length}건 저장 · 수입 ${transferResult.income.added}건 · 지출 ${transferResult.expense.added}건 자동 이관 · 검토필요 ${transferResult.needsReview.length}건${repairResult && repairResult.success.length > 0 ? ` · 정합 자동복구 ${repairResult.success.length}건` : ''}`,
+        message: `은행 ${sanitized.length}건 저장 · 수입 ${transferResult.income.added}건 · 지출 ${transferResult.expense.added}건 자동 이관 · 검토필요 ${transferResult.needsReview.length}건${repairResult && repairResult.success.length > 0 ? ` · 정합 자동복구 ${repairResult.success.length}건` : ''}${ledgerRepaired > 0 ? ` · 누락원장 재생성 ${ledgerRepaired}건` : ''}`,
       });
     }
 

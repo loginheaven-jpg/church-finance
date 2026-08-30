@@ -329,6 +329,14 @@ Upstash Redis를 사용하여 Google Sheets API 호출을 최소화합니다. Re
 
 ## 최근 변경사항
 
+### 2026-08 업데이트 (지출분석 인터랙티브 개편)
+
+지출분석([reports/expense-analysis](src/app/reports/expense-analysis/page.tsx)) 레이아웃·기능 개편.
+- **위치 교체:** 상단 2열을 `[카테고리별 비율]` | `[월별 지출 추이]`로, `세부내역`은 아래 전체폭으로 이동.
+- **월 필터:** 월별 지출 추이 막대 클릭 → 파이·항목별·원장 모두 해당 월로 필터(다시 클릭 시 해제). 선택 월 막대는 진한색.
+- **세부내역 2분할:** 좌=항목별 내역(소분류), 우=지출부 원장(`날짜|지출자|지출내역|금액`). 좌측 **항목명 클릭 → 우측 원장이 그 항목(계정코드)만** 표시(클릭 전 공백). 월 선택 시 (월 ∩ 항목).
+- API([expense-analysis/route.ts](src/app/api/reports/expense-analysis/route.ts))에 `records`(원장 raw: month=기준일 월, date=실거래일, accountCode, vendor, description[없으면 note detail 폴백], amount) 추가. `CACHE_VERSION` v5→v6.
+
 ### 2026-08 업데이트 (은행 업로드 지출부 누락 재발방지 — P1·P2)
 
 **사고:** 은행파일 업로드 시 **동일 금액 다건 지출**에서 지출부 추가가 누락(은행 8/21 방민혁 사례 1.2M, 8/24 학비지원 3M) → 원장이 은행보다 4.2M 과다.

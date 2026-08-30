@@ -26,7 +26,8 @@ export const CACHE_TTL = {
 // v2 → v3: 날짜 정규화(normalizeDateString) 추가 반영
 // v3 → v4: 대시보드 응답에 최종잔고 필드(ledgerFinalBalance 등) 추가 반영
 // v4 → v5: 직접-시트 데이터 교정(P3 orphan 지출부 재생성) 반영 — stale 계산잔액 무효화
-const CACHE_VERSION = 'v5';
+// v5 → v6: 지출분석 응답에 records(원장 raw) 추가 — 월/항목 필터·원장 리스트용
+const CACHE_VERSION = 'v6';
 
 // 캐시 키 생성 헬퍼
 export const cacheKeys = {

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Loader2, ChevronLeft, ChevronRight, TrendingDown, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import {
   BarChart,
   Bar,
@@ -59,6 +60,17 @@ interface ExpenseAnalysisData {
   byMonth: Array<{ month: number; expense: number; count: number }>;
   byPaymentMethod: Array<{ method: string; amount: number; count: number }>;
   topVendors: Array<{ vendor: string; amount: number; count: number }>;
+  records?: Array<{
+    month: number;        // 기준일(주일) 월 — 월차트와 동일 기준
+    date: string;         // 표시용 날짜 (실제 거래일)
+    categoryCode: number;
+    accountCode: number;
+    name: string;
+    category: string;
+    vendor: string;
+    description: string;
+    amount: number;
+  }>;
 }
 
 const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899'];
@@ -68,6 +80,8 @@ export default function ExpenseAnalysisPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ExpenseAnalysisData | null>(null);
   const [includeConstruction, setIncludeConstruction] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // 월 막대 클릭 필터 (null=연 전체)
+  const [selectedCode, setSelectedCode] = useState<number | null>(null);   // 좌측 항목명 클릭 → 우측 원장 필터 (null=공백)
 
   useEffect(() => {
     loadData();
@@ -123,9 +137,10 @@ export default function ExpenseAnalysisPage() {
     );
   }
 
-  // 월별 차트 데이터
+  // 월별 차트 데이터 (mNum = 클릭 필터용 숫자 월)
   const monthlyData = data.byMonth.map(m => ({
     month: `${m.month}월`,
+    mNum: m.month,
     지출: m.expense,
     건수: m.count,
   }));
@@ -145,20 +160,48 @@ export default function ExpenseAnalysisPage() {
     ? Object.values(categoryGroupMap)
     : Object.values(categoryGroupMap).filter(g => g.name !== '건축비');
 
+  // === 원장 raw 기반 월/건축비 필터 (파이·항목별·원장 모두 연동) ===
+  const allRecords = data.records || [];
+  const monthFiltered = selectedMonth != null
+    ? allRecords.filter(r => r.month === selectedMonth)
+    : allRecords;
+  const scopeRecords = includeConstruction
+    ? monthFiltered
+    : monthFiltered.filter(r => r.accountCode < 500);
+
+  // 파이(카테고리별 비율) — 월+건축 필터 반영
   const categoryPieData = activeGroups
     .map(group => {
-      const amount = data.byCategory
-        .filter(c => group.codes.includes(c.code))
-        .reduce((sum, c) => sum + c.amount, 0);
+      const amount = scopeRecords
+        .filter(r => group.codes.includes(r.categoryCode))
+        .reduce((sum, r) => sum + r.amount, 0);
       return { name: group.name, value: amount };
     })
     .filter(d => d.value > 0);
 
-  // 건축비 필터 적용된 세부내역
-  const filteredByCode = includeConstruction
-    ? data.byCode
-    : data.byCode.filter(item => item.code < 500);
+  // 좌: 항목별(소분류) 집계 — 월+건축 필터 반영
+  const byCodeMap = new Map<number, { code: number; name: string; category: string; amount: number }>();
+  for (const r of scopeRecords) {
+    const cur = byCodeMap.get(r.accountCode) || { code: r.accountCode, name: r.name, category: r.category, amount: 0 };
+    cur.amount += r.amount;
+    byCodeMap.set(r.accountCode, cur);
+  }
+  const filteredByCode = Array.from(byCodeMap.values()).sort((a, b) => b.amount - a.amount);
   const filteredTotal = filteredByCode.reduce((sum, item) => sum + item.amount, 0);
+
+  // 우: 지출부 원장 — 선택 항목(코드) 없으면 공백. 월 필터는 유지.
+  const ledgerRecords = selectedCode == null
+    ? []
+    : monthFiltered
+        .filter(r => r.accountCode === selectedCode)
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+  const selectedMonthLabel = selectedMonth != null ? `${selectedMonth}월` : '연 전체';
+  const selectedItemName = selectedCode != null
+    ? (filteredByCode.find(i => i.code === selectedCode)?.name
+        || allRecords.find(r => r.accountCode === selectedCode)?.name
+        || `항목${selectedCode}`)
+    : null;
 
   // 예산 대비 집행 차트 데이터 (상위 8개)
   const budgetComparisonData = data.byCategory
@@ -324,57 +367,134 @@ export default function ExpenseAnalysisPage() {
           </CardContent>
         </Card>
 
+        {/* 월별 지출 추이 (막대 클릭 → 아래 세부내역 월 필터) */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle>세부내역</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>월별 지출 추이</CardTitle>
+              {selectedMonth != null && (
+                <button
+                  onClick={() => setSelectedMonth(null)}
+                  className="px-3 py-1 text-xs rounded-full border bg-red-100 text-red-700 border-red-300"
+                >
+                  {selectedMonth}월 필터 해제 ✕
+                </button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="max-h-[320px] overflow-y-auto">
-              <Table>
-                <TableHeader className="sticky top-0 bg-white">
-                  <TableRow>
-                    <TableHead className="w-[80px]">카테고리</TableHead>
-                    <TableHead>항목명</TableHead>
-                    <TableHead className="text-right">금액</TableHead>
-                    <TableHead className="text-right w-[60px]">비율</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredByCode
-                    .sort((a, b) => b.amount - a.amount)
-                    .map(item => (
-                    <TableRow key={item.code}>
-                      <TableCell className="text-slate-500 text-xs">{item.category}</TableCell>
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell className="text-right text-red-600">{formatFullAmount(item.amount)}</TableCell>
-                      <TableCell className="text-right text-slate-600">
-                        {filteredTotal > 0 ? ((item.amount / filteredTotal) * 100).toFixed(1) : 0}%
-                      </TableCell>
-                    </TableRow>
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis tickFormatter={formatAmount} />
+                <Tooltip formatter={(value) => formatFullAmount(Number(value) || 0)} />
+                <Bar
+                  dataKey="지출"
+                  cursor="pointer"
+                  onClick={(barData) => {
+                    const m = (barData as { mNum?: number })?.mNum;
+                    if (m != null) setSelectedMonth(prev => (prev === m ? null : m));
+                  }}
+                >
+                  {monthlyData.map((entry) => (
+                    <Cell key={entry.mNum} fill={selectedMonth === entry.mNum ? '#b91c1c' : '#ef4444'} />
                   ))}
-                </TableBody>
-              </Table>
-            </div>
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <p className="text-xs text-slate-400 mt-1 text-center">
+              막대를 클릭하면 아래 세부내역이 해당 월로 필터링됩니다
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Monthly Trend */}
+      {/* 세부내역 — 좌: 항목별 내역 / 우: 지출부 원장 (항목명 클릭 시 표시) */}
       <Card>
-        <CardHeader>
-          <CardTitle>월별 지출 추이</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle>
+            세부내역 <span className="text-sm font-normal text-slate-400">({selectedMonthLabel})</span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={formatAmount} />
-              <Tooltip formatter={(value) => formatFullAmount(Number(value) || 0)} />
-              <Legend />
-              <Bar dataKey="지출" fill="#ef4444" />
-            </BarChart>
-          </ResponsiveContainer>
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 좌: 항목별 내역 */}
+            <div>
+              <p className="text-xs text-slate-500 mb-2">
+                항목별 내역 <span className="text-slate-400">— 항목명을 클릭하면 오른쪽에 지출부 원장이 표시됩니다</span>
+              </p>
+              <div className="max-h-[420px] overflow-y-auto border rounded-md">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-white">
+                    <TableRow>
+                      <TableHead className="w-[80px]">카테고리</TableHead>
+                      <TableHead>항목명</TableHead>
+                      <TableHead className="text-right">금액</TableHead>
+                      <TableHead className="text-right w-[60px]">비율</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredByCode.map(item => (
+                      <TableRow
+                        key={item.code}
+                        onClick={() => setSelectedCode(prev => (prev === item.code ? null : item.code))}
+                        className={cn('cursor-pointer hover:bg-slate-50', selectedCode === item.code && 'bg-red-50')}
+                      >
+                        <TableCell className="text-slate-500 text-xs">{item.category}</TableCell>
+                        <TableCell className={cn('font-medium', selectedCode === item.code && 'text-red-700')}>{item.name}</TableCell>
+                        <TableCell className="text-right text-red-600">{formatFullAmount(item.amount)}</TableCell>
+                        <TableCell className="text-right text-slate-600">
+                          {filteredTotal > 0 ? ((item.amount / filteredTotal) * 100).toFixed(1) : 0}%
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filteredByCode.length === 0 && (
+                      <TableRow><TableCell colSpan={4} className="text-center text-slate-400 py-8">데이터가 없습니다</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {/* 우: 지출부 원장 (선택 항목만, 미선택 시 공백) */}
+            <div>
+              <p className="text-xs text-slate-500 mb-2">
+                지출부 원장
+                {selectedItemName
+                  ? <span className="text-red-600 font-medium"> — {selectedItemName} ({selectedMonthLabel}, {ledgerRecords.length}건)</span>
+                  : <span className="text-slate-400"> — 왼쪽 항목명을 선택하세요</span>}
+              </p>
+              <div className="max-h-[420px] overflow-y-auto border rounded-md">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-white">
+                    <TableRow>
+                      <TableHead className="w-[90px]">날짜</TableHead>
+                      <TableHead className="w-[90px]">지출자</TableHead>
+                      <TableHead>지출내역</TableHead>
+                      <TableHead className="text-right">금액</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedCode == null ? (
+                      <TableRow><TableCell colSpan={4} className="text-center text-slate-400 py-8">왼쪽 항목명을 클릭하면 해당 지출부 내역이 표시됩니다</TableCell></TableRow>
+                    ) : ledgerRecords.length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center text-slate-400 py-8">해당 조건의 지출부 내역이 없습니다</TableCell></TableRow>
+                    ) : (
+                      ledgerRecords.map((r, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-xs text-slate-600 whitespace-nowrap">{r.date}</TableCell>
+                          <TableCell className="text-sm">{r.vendor}</TableCell>
+                          <TableCell className="text-sm">{r.description}</TableCell>
+                          <TableCell className="text-right text-red-600 whitespace-nowrap">{formatFullAmount(r.amount)}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

@@ -171,6 +171,27 @@ export async function GET(request: NextRequest) {
         .map(([method, data]) => ({ method, ...data }))
         .sort((a, b) => b.amount - a.amount),
       topVendors,
+      // 지출부 원장 raw (월+항목코드 필터/원장 리스트용). month 은 기준일(주일) 월 — 월차트와 동일 기준.
+      records: expenseRecords.map(r => {
+        const code = r.account_code;
+        const categoryCode = r.category_code || Math.floor(code / 10) * 10;
+        const codeInfo = codeMap.get(code);
+        // 지출내역: description 우선, 없으면 note 의 detail 세그먼트(자동이관 "[bank:..][auto] | detail")
+        const note = String(r.note || '');
+        const segIdx = note.lastIndexOf(' | ');
+        const noteBody = segIdx >= 0 ? note.slice(segIdx + 3).trim() : (note.startsWith('[') ? '' : note.trim());
+        return {
+          month: new Date(r.date).getMonth() + 1,
+          date: r.transaction_date || r.date, // 표시용: 실제 거래일 우선
+          categoryCode,
+          accountCode: code,
+          name: codeInfo?.item || `항목${code}`,
+          category: codeInfo?.category || '',
+          vendor: r.vendor || '',
+          description: (r.description || '').trim() || noteBody,
+          amount: r.amount,
+        };
+      }),
     };
     }, CACHE_TTL.REPORTS);
 

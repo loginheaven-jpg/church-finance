@@ -51,7 +51,7 @@ function getShade(baseColor: string, index: number, total: number): string {
 }
 
 export function WeeklyChart({ data, yearlyIncome, yearlyExpense }: WeeklyChartProps) {
-  const [cumulativeMode, setCumulativeMode] = useState<'8week' | 'yearly'>('8week');
+  const [cumulativeMode, setCumulativeMode] = useState<'8week' | 'yearly'>('yearly');
 
   const formatAmount = (value: number) => {
     if (value >= 100000000) {

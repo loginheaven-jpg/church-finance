@@ -10,6 +10,8 @@ import {
   Loader2,
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { useFinanceSession } from '@/lib/auth/use-finance-session';
 import { useQuery } from '@tanstack/react-query';
@@ -92,6 +94,7 @@ function DashboardContent() {
 
   const [selectedCard, setSelectedCard] = useState<'income' | 'expense' | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false); // 잔액 검증 박스 접힘/펼침 (기본 접힘)
 
   const { data: stats, isLoading, isFetching, refetch } = useQuery<DashboardStats>({
     queryKey: [...queryKeys.unmatchedTransactions, weekOffset],
@@ -207,14 +210,23 @@ function DashboardContent() {
             : 'bg-amber-50'
         }`}>
           <CardContent className="p-4">
-            <div className="flex items-start gap-3">
+            <button
+              type="button"
+              onClick={() => setVerifyOpen(o => !o)}
+              className="w-full flex items-center gap-3 text-left"
+            >
               {stats.balance === stats.lastBankBalance ? (
-                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
               ) : (
-                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
               )}
-              <div className="flex-1">
-                <h3 className="font-semibold text-slate-900 text-sm">잔액 검증 (관리자용)</h3>
+              <h3 className="font-semibold text-slate-900 text-sm flex-1">잔액 검증 (관리자용)</h3>
+              {verifyOpen
+                ? <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                : <ChevronRight className="h-4 w-4 text-slate-400 flex-shrink-0" />}
+            </button>
+            {verifyOpen && (
+              <div className="mt-3 pl-8">
                 <div className="mt-2 space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-600">계산 잔액 (이월+수입-지출):</span>
@@ -262,7 +274,7 @@ function DashboardContent() {
                   </p>
                 )}
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       )}

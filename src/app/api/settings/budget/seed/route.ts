@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { clearSheetData, appendToSheet } from '@/lib/google-sheets';
+import { getServerSession, hasRole } from '@/lib/auth/finance-permissions';
 
 // 예산 데이터 (2019-2026년)
 // CSV 데이터 기반: 예산2019-2026.csv
@@ -131,6 +132,15 @@ const BUDGET_DATA: {
 // POST: 예산 데이터 일괄 입력 (2019-2026년)
 export async function POST() {
   try {
+    // [보안 응급조치 2026-09-12] 관리자 전용 — 예산시트 전체 삭제(파괴적) 무단 실행 방지
+    const session = await getServerSession();
+    if (!session?.user_id) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+    if (!hasRole(session.finance_role, 'admin')) {
+      return NextResponse.json({ success: false, error: '권한이 없습니다' }, { status: 403 });
+    }
+
     // 1. 기존 예산 데이터 삭제
     await clearSheetData('예산');
 

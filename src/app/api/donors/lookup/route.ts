@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemberByName } from '@/lib/supabase';
 import { getDonorInfo } from '@/lib/google-sheets';
+import { getServerSession } from '@/lib/auth/finance-permissions';
 
 // GET: 이름으로 교인 정보 조회
 export async function GET(request: NextRequest) {
   try {
+    // [보안 응급조치 2026-09-12] 익명 접근 차단 — 주민등록번호·주소 노출 방지
+    const session = await getServerSession();
+    if (!session?.user_id) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const name = searchParams.get('name');
 

@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { getIncomeRecords, getDonorInfo, getIncomeCodes } from '@/lib/google-sheets';
 import type { DonationReceipt } from '@/types';
+import { getServerSession } from '@/lib/auth/finance-permissions';
 
 // jsPDF autotable 타입 확장
 declare module 'jspdf' {
@@ -22,6 +23,12 @@ const CHURCH_INFO = {
 // POST: 기부금영수증 PDF 생성
 export async function POST(request: NextRequest) {
   try {
+    // [보안 응급조치 2026-09-12] 익명 접근 차단 — 기부금영수증 무단 발급 방지
+    const session = await getServerSession();
+    if (!session?.user_id) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { year, representative } = body;
 

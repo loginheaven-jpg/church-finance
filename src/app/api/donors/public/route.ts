@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDonorInfo } from '@/lib/google-sheets';
+import { getServerSession } from '@/lib/auth/finance-permissions';
 
 // GET: 헌금자 목록 조회 (공개 - 로그인 불필요, 이름만 반환)
 export async function GET(request: NextRequest) {
   try {
+    // [보안 응급조치 2026-09-12] 익명 접근 차단 — 헌금자 명부 노출 방지(lookup과 엮이면 주민번호로)
+    const session = await getServerSession();
+    if (!session?.user_id) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search')?.toLowerCase();
 

@@ -7,9 +7,19 @@ import {
 import { verifyBankLedgerIntegrity, repairOrphanBankPending, repairOrphanLedgerMissing } from '@/lib/integrity';
 import { invalidateYearCache } from '@/lib/redis';
 import type { BankTransaction } from '@/types';
+import { getServerSession, hasRole } from '@/lib/auth/finance-permissions';
 
 export async function POST(request: NextRequest) {
   try {
+    // [보안 응급조치 2026-09-12] 관리자 전용 — 임의 은행거래 주입·원장 자동이관(재무 무결성) 방지
+    const session = await getServerSession();
+    if (!session?.user_id) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+    if (!hasRole(session.finance_role, 'admin')) {
+      return NextResponse.json({ success: false, error: '권한이 없습니다' }, { status: 403 });
+    }
+
     const body = await request.json();
     const { transactions } = body;
 

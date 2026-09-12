@@ -3,6 +3,7 @@ import {
   getProcessedExpenseClaims,
   getExpenseRecords,
 } from '@/lib/google-sheets';
+import { getServerSession } from '@/lib/auth/finance-permissions';
 
 // 날짜 정규화: "2026. 5. 24" → "2026-05-24", 이미 정규형이면 그대로
 function normalizeDateStr(d: string | undefined | null): string {
@@ -124,6 +125,12 @@ function cleanClaimDesc(desc: string): string {
 // GET: 처리완료 지출청구 ↔ 지출원장 교차대조
 export async function GET(request: NextRequest) {
   try {
+    // [보안 응급조치 2026-09-12] 익명 접근 차단 — 청구자명·은행 계좌번호 노출 방지
+    const session = await getServerSession();
+    if (!session?.user_id) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate') || undefined;
     const endDate = searchParams.get('endDate') || undefined;

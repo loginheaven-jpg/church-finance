@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
+import { requireRole } from '@/lib/auth/require-session';
 
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby9sjxdbGVWdtrAEpOkBhUlsvmy7iQYad3hyCY96V3j2rCFw-49dly5ke3tCxlvmBsvLQ/exec';
 
 export async function POST() {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     // Google Apps Script Web App 호출 (mergeFromB 실행)
     const response = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',

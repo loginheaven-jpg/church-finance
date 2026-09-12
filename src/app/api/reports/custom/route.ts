@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords, getExpenseRecords, getBudget } from '@/lib/google-sheets';
+import { requireRole } from '@/lib/auth/require-session';
 
 interface PeriodData {
   startDate: string;
@@ -22,6 +23,9 @@ interface PeriodData {
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireRole('super_admin');
+    if (guard.response) return guard.response;
+
     const body = await request.json();
     const { periods, includeIncome, includeExpense, includeBudget } = body;
 

@@ -7,6 +7,7 @@ import {
   generateId,
   getKSTDateTime,
 } from '@/lib/google-sheets';
+import { requireRole } from '@/lib/auth/require-session';
 import {
   isCashOfferingTransaction,
   findBestMatchingRule,
@@ -35,6 +36,9 @@ interface CashOfferingMatchStatus {
 // 미리보기용 매칭 결과 생성 (저장하지 않음)
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const body = await request.json().catch(() => ({}));
     const { transactionIds } = body as { transactionIds?: string[] };
 

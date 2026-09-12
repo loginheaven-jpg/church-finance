@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getMemberByName } from '@/lib/supabase';
 import { getDonorInfo } from '@/lib/google-sheets';
 import { getServerSession } from '@/lib/auth/finance-permissions';
+import { maskResidentId } from '@/lib/pii';
 
 // GET: 이름으로 교인 정보 조회
 export async function GET(request: NextRequest) {
@@ -31,7 +32,8 @@ export async function GET(request: NextRequest) {
         data: {
           name: memberInfo.name,
           address: memberInfo.address || '',
-          resident_id: memberInfo.resident_id || '',
+          // 전문은 클라이언트로 내리지 않는다 — 앞 6자리만(§4-7). 서버 영수증 경로만 원본 사용.
+          resident_id: maskResidentId(memberInfo.resident_id),
           source: 'supabase',
         },
       });
@@ -49,7 +51,7 @@ export async function GET(request: NextRequest) {
         data: {
           name: donorInfo.representative || donorInfo.donor_name,
           address: donorInfo.address || '',
-          resident_id: donorInfo.registration_number || '',
+          resident_id: maskResidentId(donorInfo.registration_number),
           source: 'google_sheets',
         },
       });

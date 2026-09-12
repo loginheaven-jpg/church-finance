@@ -1,161 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
-import { supabaseAdmin } from '@/lib/supabase';
-import { FinanceSession } from '@/lib/auth/finance-permissions';
-import { sealFinanceSession, FINANCE_SESSION_COOKIE, financeSessionOptions } from '@/lib/auth/finance-session';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
-  try {
-    const { email, password } = await request.json();
-
-    if (!email || !password) {
-      return NextResponse.json(
-        { success: false, error: '이메일과 비밀번호를 입력해주세요' },
-        { status: 400 }
-      );
-    }
-
-    // Supabase가 설정되지 않은 경우
-    if (!supabaseAdmin) {
-      return NextResponse.json(
-        { success: false, error: '데이터베이스 연결이 설정되지 않았습니다' },
-        { status: 500 }
-      );
-    }
-
-    // 사용자 조회 - finance_role 컬럼 유무에 따라 처리
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let user: any = null;
-
-    // 먼저 finance_role 포함하여 조회 시도
-    const { data: userData, error: queryError } = await supabaseAdmin
-      .from('users')
-      .select('user_id, email, password_hash, name, member_id, permission_level, finance_role, is_approved')
-      .eq('email', email.toLowerCase().trim())
-      .single();
-
-    if (queryError) {
-      // finance_role 컬럼이 없어서 발생한 에러인지 확인
-      if (queryError.message?.includes('finance_role') || queryError.code === 'PGRST204') {
-        // finance_role 없이 다시 조회
-        const { data: userWithoutFinanceRole, error: retryError } = await supabaseAdmin
-          .from('users')
-          .select('user_id, email, password_hash, name, member_id, permission_level, is_approved')
-          .eq('email', email.toLowerCase().trim())
-          .single();
-
-        if (retryError || !userWithoutFinanceRole) {
-          console.error('User query error:', retryError);
-          return NextResponse.json(
-            { success: false, error: '등록되지 않은 이메일입니다' },
-            { status: 401 }
-          );
-        }
-        // finance_role이 없으므로 null로 설정
-        user = { ...userWithoutFinanceRole, finance_role: null };
-      } else if (queryError.code === 'PGRST116') {
-        // 사용자를 찾지 못함
-        return NextResponse.json(
-          { success: false, error: '등록되지 않은 이메일입니다' },
-          { status: 401 }
-        );
-      } else {
-        console.error('User query error:', queryError);
-        return NextResponse.json(
-          { success: false, error: '사용자 조회 중 오류가 발생했습니다' },
-          { status: 500 }
-        );
-      }
-    } else {
-      user = userData;
-    }
-
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: '등록되지 않은 이메일입니다' },
-        { status: 401 }
-      );
-    }
-
-    // 승인 확인
-    if (!user.is_approved) {
-      return NextResponse.json(
-        { success: false, error: '계정 승인 대기 중입니다. 관리자에게 문의하세요.' },
-        { status: 403 }
-      );
-    }
-
-    // 비밀번호 검증
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    if (!isValidPassword) {
-      return NextResponse.json(
-        { success: false, error: '비밀번호가 일치하지 않습니다' },
-        { status: 401 }
-      );
-    }
-
-    // finance_role 결정:
-    // 1. finance_role 컬럼 값이 있으면 사용
-    // 2. 없으면: super_admin만 자동 부여, 나머지는 member
-    const determineFinanceRole = (): 'super_admin' | 'admin' | 'deacon' | 'member' => {
-      // finance_role이 DB에 설정되어 있으면 사용
-      if (user.finance_role) {
-        return user.finance_role as 'super_admin' | 'admin' | 'deacon' | 'member';
-      }
-      // super_admin만 자동으로 super_admin 역할 부여
-      if (user.permission_level === 'super_admin') {
-        return 'super_admin';
-      }
-      // 나머지는 재정부 사용자관리에서 별도 설정 필요 (기본 member)
-      return 'member';
-    };
-
-    // 세션 데이터 생성
-    const sessionData: FinanceSession = {
-      user_id: user.user_id,
-      name: user.name,
-      email: user.email,
-      member_id: user.member_id,
-      finance_role: determineFinanceRole(),
-    };
-
-    const response = NextResponse.json({
-      success: true,
-      user: {
-        name: user.name,
-        email: user.email,
-        role: sessionData.finance_role,
-      }
-    });
-
-    // 세션 쿠키 설정 (iron-session 암호화)
-    const sealed = await sealFinanceSession(sessionData);
-    response.cookies.set(FINANCE_SESSION_COOKIE, sealed, financeSessionOptions.cookieOptions!);
-
-    // 기존 auth-token도 설정 (기존 미들웨어 호환)
-    response.cookies.set('auth-token', 'authenticated', financeSessionOptions.cookieOptions!);
-
-    return response;
-  } catch (error) {
-    console.error('Auth verify error:', error);
-    return NextResponse.json(
-      { success: false, error: '인증 처리 중 오류가 발생했습니다' },
-      { status: 500 }
-    );
-  }
-}
-
-// 로그아웃
-export async function DELETE() {
-  const response = NextResponse.json({ success: true });
-  const cookieOpts = financeSessionOptions.cookieOptions!;
-  // 도메인 일치시켜 삭제해야 .yebom.org 쿠키도 삭제됨
-  response.cookies.set('auth-token', '', { ...cookieOpts, maxAge: 0 });
-  response.cookies.set(FINANCE_SESSION_COOKIE, '', { ...cookieOpts, maxAge: 0 });
-  // 교적부 SSO 쿠키도 삭제 (재정부에서 로그아웃 시)
-  response.cookies.set('saint_record_session', '', {
-    ...cookieOpts,
-    maxAge: 0,
-  });
-  return response;
+/**
+ * 재정부 자체 비밀번호 로그인 — 폐기됨 (410 Gone)
+ *
+ * 비밀번호 입력은 오직 교적부(saint.yebom.org)에서만 이뤄진다(§2-1).
+ * 재정부 세션은 `/api/auth/sso` 가 교적부 세션을 읽어 발급하는 경로 하나만 남는다.
+ *
+ * 이전 구현은 bcrypt 로 이메일·비밀번호를 직접 검증하고 finance-session 과
+ * 서명 없는 정적 쿠키 `auth-token='authenticated'` 를 함께 발급했다. 그 정적 토큰은
+ * 위조가 가능했고 미들웨어가 그것만으로 통과시켰으므로(§4-1) 설정·수용 양쪽을 모두 제거했다.
+ *
+ * 로그아웃(구 DELETE 핸들러)은 `/api/auth/logout` 으로 이전했다(§4-3, §9-1).
+ */
+export async function POST() {
+  return NextResponse.json(
+    { success: false, error: '재정부 자체 로그인은 폐지되었습니다. 예봄성도 로그인을 이용해 주세요.' },
+    { status: 410 }
+  );
 }

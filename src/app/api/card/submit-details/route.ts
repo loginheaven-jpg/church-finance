@@ -7,9 +7,14 @@ import {
 } from '@/lib/google-sheets';
 import { invalidateYearCache } from '@/lib/redis';
 import type { CardTransaction, ExpenseRecord } from '@/types';
+import { requireSession } from '@/lib/auth/require-session';
 
 export async function POST(request: NextRequest) {
   try {
+    // 카드내역 입력(/card-details)은 member 접근 → 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const body = await request.json();
     const { transactionId, transaction, details } = body as {
       transactionId: string;

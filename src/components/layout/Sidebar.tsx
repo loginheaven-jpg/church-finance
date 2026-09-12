@@ -30,6 +30,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
+import { clearDeviceData } from '@/lib/auth/clear-device';
+import { saintLogoutUrl } from '@/lib/auth/saint-sso';
 
 // 역할 타입 정의
 export type FinanceRole = 'super_admin' | 'admin' | 'deacon' | 'member';
@@ -139,15 +141,29 @@ export function Sidebar({ isOpen = true, onClose, userRole = 'member', userName 
     // 표시할 항목이 있는 섹션만 남김
     .filter(section => section.items.length > 0);
 
-  // 로그아웃 처리
+  // 로그아웃 처리 — 5개 앱 공통 순서(§2-3). 임의로 순서를 바꾸지 말 것.
   const handleLogout = async () => {
+    if (!confirm('로그아웃하시겠습니까?\n이 기기에 저장된 로그인 정보가 모두 지워집니다.')) return;
+
+    // 1) 이 기기의 저장소를 **먼저** 지운다 (localStorage/sessionStorage/Cache/SW/IndexedDB)
+    //    cash-offering-draft:*(헌금자 초안), pledge_bulk_* 등 개인 데이터가 여기서 함께 지워진다.
     try {
-      await fetch('/api/auth/verify', { method: 'DELETE' });
-      // 전체 페이지 새로고침으로 세션 상태 완전 초기화
-      window.location.href = '/login';
+      await clearDeviceData();
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Device cleanup error:', error);
     }
+
+    // 2) 재정부 자체 쿠키(finance-session·구 auth-token)를 두 사본 모두 만료
+    try {
+      await fetch('/api/auth/logout', { method: 'DELETE' });
+    } catch (error) {
+      console.error('Local logout error:', error);
+    }
+
+    // 3) 교적부 통합 로그아웃으로 전체 이동 → .yebom.org SSO 쿠키 삭제 + Clear-Site-Data
+    //    + 재로그인 표식(yebom_reauth) 후 return 으로 복귀.
+    //    origin 을 쓰므로 로컬 개발에서는 localhost 로 돌아온다(교적부가 허용, §2-5).
+    window.location.replace(saintLogoutUrl(`${window.location.origin}/login`));
   };
 
   return (

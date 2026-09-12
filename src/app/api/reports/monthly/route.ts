@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords, getExpenseRecords, getCarryoverBalance } from '@/lib/google-sheets';
 import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 import type { MonthlyReport } from '@/types';
+import { requireRole } from '@/lib/auth/require-session';
 
 // 이월잔액을 동적으로 계산하는 헬퍼 함수
 // 시트에 데이터가 없으면 이전 연도의 수입/지출로 계산
@@ -36,6 +37,9 @@ async function getCalculatedCarryover(targetYear: number): Promise<number> {
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireRole('deacon');
+    if (guard.response) return guard.response;
+
     const searchParams = request.nextUrl.searchParams;
     const yearParam = searchParams.get('year');
     const debug = searchParams.get('debug') === 'true';

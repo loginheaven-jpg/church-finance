@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getMatchingRules } from '@/lib/google-sheets';
+import { requireRole } from '@/lib/auth/require-session';
 
 export async function GET() {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const rules = await getMatchingRules();
 
     // 사용량순으로 정렬

@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getUnmatchedBankTransactions, getUnmatchedCardTransactions, getMatchingRules } from '@/lib/google-sheets';
+import { requireSession } from '@/lib/auth/require-session';
 
 export async function GET() {
   try {
+    // 매칭(admin)과 카드통합(member) 양쪽에서 호출 → 최소 공통인 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const [bankTransactions, cardTransactions, rules] = await Promise.all([
       getUnmatchedBankTransactions(),
       getUnmatchedCardTransactions(),

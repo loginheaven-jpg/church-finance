@@ -6,6 +6,7 @@ import {
   getDonorMilestones,
   getPledgeHistory,
 } from '@/lib/google-sheets';
+import { requireSession, requireRole } from '@/lib/auth/require-session';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -17,6 +18,10 @@ interface RouteParams {
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
+    // 작정 현황 카드(member 본인) 에서 호출 → 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const { id } = await params;
     const searchParams = request.nextUrl.searchParams;
     const includeHistory = searchParams.get('history') === 'true';
@@ -62,6 +67,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
+    // 작정 입력 모달(PledgeModal, member 본인) 에서 기존 작정 수정 시 호출 → 로그인만 요구.
+    // ⚠️ 본인 작정만 수정하도록 하는 소유권 스코프는 §4-7 후속.
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const { id } = await params;
     const body = await request.json();
 
@@ -126,6 +136,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
+    // 작정 현황 카드(member 본인)·작정 관리(admin) 양쪽에서 호출 → 로그인만 요구.
+    // ⚠️ 본인 작정만 삭제하도록 하는 소유권 스코프는 §4-7 후속.
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const { id } = await params;
 
     const pledge = await getPledgeById(id);

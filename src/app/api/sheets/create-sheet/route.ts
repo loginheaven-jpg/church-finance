@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { JWT } from 'google-auth-library';
+import { requireRole } from '@/lib/auth/require-session';
 
 // 특정 시트만 생성하는 간단한 API
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const { sheetName } = await request.json();
 
     if (!sheetName) {
@@ -89,6 +93,9 @@ export async function POST(request: NextRequest) {
 // GET: 시트 존재 여부 확인
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const sheetName = searchParams.get('name') || '이월잔액';
 

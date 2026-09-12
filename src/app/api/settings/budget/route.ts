@@ -7,10 +7,14 @@ import {
   deleteBudget,
   getExpenseCodes,
 } from '@/lib/google-sheets';
+import { requireRole } from '@/lib/auth/require-session';
 
 // GET: 예산 조회
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const year = searchParams.get('year');
 
@@ -39,6 +43,9 @@ export async function GET(request: NextRequest) {
 // POST: 예산 추가/수정
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const body = await request.json();
     const { year, account_code, budgeted_amount, note, action } = body;
 
@@ -106,6 +113,9 @@ export async function POST(request: NextRequest) {
 // DELETE: 예산 삭제
 export async function DELETE(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const year = searchParams.get('year');
     const accountCode = searchParams.get('account_code');

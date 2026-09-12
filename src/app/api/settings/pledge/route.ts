@@ -7,6 +7,7 @@ import {
   getIncomeRecords,
   getKSTDateTime,
 } from '@/lib/google-sheets';
+import { requireRole } from '@/lib/auth/require-session';
 
 // 헌금 종류별 수입 코드 범위
 const PLEDGE_TYPE_CODE_RANGE = {
@@ -17,6 +18,9 @@ const PLEDGE_TYPE_CODE_RANGE = {
 // GET: 작정헌금 조회
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const year = searchParams.get('year');
     const type = searchParams.get('type') as '건축헌금' | '선교헌금' | null;
@@ -86,6 +90,9 @@ export async function GET(request: NextRequest) {
 // POST: 작정헌금 추가
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const body = await request.json();
     const { year, type, donor_name, representative, pledged_amount, note } = body;
 
@@ -129,6 +136,9 @@ export async function POST(request: NextRequest) {
 // PATCH: 작정헌금 수정
 export async function PATCH(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const body = await request.json();
     const { id, pledged_amount, note } = body;
 
@@ -161,6 +171,9 @@ export async function PATCH(request: NextRequest) {
 // DELETE: 작정헌금 삭제
 export async function DELETE(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

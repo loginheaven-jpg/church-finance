@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getExpenseRecords } from '@/lib/google-sheets';
+import { requireSession } from '@/lib/auth/require-session';
 
 // GET: 지출 내역 조회 (계정과목별 필터링)
 export async function GET(request: NextRequest) {
   try {
+    // 지출 상세 모달(reports/budget·weekly), 카드통합(member)에서 호출 → 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const accountCode = searchParams.get('accountCode');
     const categoryCode = searchParams.get('categoryCode');

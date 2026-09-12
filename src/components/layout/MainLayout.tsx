@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { PledgePromptPopup } from '@/components/pledge';
 import { VersionChecker } from '@/lib/version-checker';
 import { FinanceCodeFab } from './FinanceCodeFab';
+import { SessionCheckIn, type CheckInUser } from '@/components/auth/SessionCheckIn';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -20,6 +21,14 @@ export function MainLayout({ children }: MainLayoutProps) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const session = useFinanceSession();
+
+  // 교적부 체크인 결과 — 권한의 기준값. 로컬 finance-session 의 baked role 보다 우선한다(§4-5).
+  const [checkInUser, setCheckInUser] = useState<CheckInUser | null>(null);
+  const handleCheckIn = useCallback((user: CheckInUser) => {
+    setCheckInUser((prev) =>
+      prev?.finance_role === user.finance_role && prev?.name === user.name ? prev : user
+    );
+  }, []);
 
   // 연마감 알림 상태
   const [showClosingAlert, setShowClosingAlert] = useState(false);
@@ -156,6 +165,8 @@ export function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="min-h-screen bg-[#F8F6F3]">
       <VersionChecker />
+      {/* 교적부 체크인 — 앱 오픈/포커스 복귀 시. 로그인 화면에서는 렌더하지 않는다(§4-5 루프 가드) */}
+      <SessionCheckIn onCheckIn={handleCheckIn} />
       {/* Mobile Header - md 이하에서만 표시 */}
       <header
         className="fixed top-0 left-0 right-0 z-[60] md:hidden flex items-center justify-between px-4 py-3"
@@ -192,12 +203,12 @@ export function MainLayout({ children }: MainLayoutProps) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — 권한은 교적부 체크인 응답을 우선 신뢰한다(§4-5) */}
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        userRole={session?.finance_role || 'member'}
-        userName={session?.name}
+        userRole={checkInUser?.finance_role || session?.finance_role || 'member'}
+        userName={checkInUser?.name || session?.name}
       />
 
       {/* Main Content */}

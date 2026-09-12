@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBuildingMaster } from '@/lib/google-sheets';
+import { requireSession } from '@/lib/auth/require-session';
 
 // 기본 이자율 4.7% (연)
 const DEFAULT_INTEREST_RATE = 4.7;
@@ -187,6 +188,10 @@ function generateScenarios(loanBalance: number, cumulativeInterest: number, annu
 
 export async function GET(request: NextRequest) {
   try {
+    // /building 과 대시보드 WeeklyBriefingCard(둘 다 member) 에서 호출 → 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const currentYear = new Date().getFullYear();
 
     // 1. 건축원장에서 모든 데이터 읽기 (시트에서 당년 포함 SUMIFS로 계산됨)

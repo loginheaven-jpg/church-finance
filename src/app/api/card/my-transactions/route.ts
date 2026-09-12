@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUnmatchedCardTransactions } from '@/lib/google-sheets';
+import { requireSession } from '@/lib/auth/require-session';
 
 export async function GET(request: NextRequest) {
   try {
+    // 카드내역 입력 흐름(member 접근)에서 호출 → 로그인만 요구.
+    // ⚠️ ?owner= 로 타인 카드 조회가 가능하다(§4-7 후속: 세션 이름 기준 스코프 강제 검토).
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const searchParams = request.nextUrl.searchParams;
     const cardOwner = searchParams.get('owner');
 

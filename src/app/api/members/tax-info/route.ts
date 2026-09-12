@@ -6,6 +6,13 @@ import { hasRole } from '@/lib/auth/finance-permissions';
 // GET: 연말정산 정보 입력 여부 확인
 export async function GET(request: NextRequest) {
   try {
+    // 미인증 시 특정인의 PII 보유 여부(hasTaxInfo)를 노출하는 오라클이 되므로 로그인 필수.
+    // 작정/연말정산 안내 팝업(MainLayout, member)에서 호출 → 로그인만 요구.
+    const session = await getFinanceSession();
+    if (!session?.user_id) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const name = searchParams.get('name');
 

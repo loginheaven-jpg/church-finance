@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { getIncomeRecords, getExpenseRecords, getCarryoverBalance } from '@/lib/google-sheets';
+import { requireRole } from '@/lib/auth/require-session';
 
 // 검증 결과 타입
 interface VerificationResult {
@@ -110,6 +111,9 @@ async function calculateCurrentBalance(referenceDate: string): Promise<number> {
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
 

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getExpenseRecords, getExpenseCodes, getBudget } from '@/lib/google-sheets';
 import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
+import { requireRole } from '@/lib/auth/require-session';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireRole('deacon');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const year = Number(searchParams.get('year')) || new Date().getFullYear();
 

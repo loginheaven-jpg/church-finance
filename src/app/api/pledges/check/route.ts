@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPledges } from '@/lib/google-sheets';
+import { requireSession } from '@/lib/auth/require-session';
 
 /**
  * 작정 여부 확인 API
@@ -13,6 +14,10 @@ import { getPledges } from '@/lib/google-sheets';
  */
 export async function GET(request: NextRequest) {
   try {
+    // 작정 안내 팝업(MainLayout, member) 에서 호출 → 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const searchParams = request.nextUrl.searchParams;
     const name = searchParams.get('name');
     const year = searchParams.get('year')

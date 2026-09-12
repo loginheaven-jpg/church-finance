@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllBusinessInfo, getBusinessInfoByName, searchBusinessInfo } from '@/lib/google-sheets';
+import { requireSession } from '@/lib/auth/require-session';
 
 // GET: 사업자정보 조회
 export async function GET(request: NextRequest) {
   try {
+    // 영수증 발급 화면(/donors/receipts, member) 에서 호출 → 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const companyName = searchParams.get('company_name');
     const keyword = searchParams.get('keyword');

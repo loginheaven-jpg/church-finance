@@ -3,6 +3,7 @@ import { fetchCashOfferings, generateId, getKSTDateTime, getWeekEndingSunday, bu
 import { syncCashOfferingsWithDuplicatePrevention } from '@/lib/matching-engine';
 import { invalidateYearCache } from '@/lib/redis';
 import type { IncomeRecord } from '@/types';
+import { requireRole } from '@/lib/auth/require-session';
 
 interface PreviewData {
   rowIndex?: number; // 헌금함입력 시트의 행 번호 (sync 후 status 업데이트용)
@@ -19,6 +20,9 @@ interface PreviewData {
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const body = await request.json();
     const { startDate, endDate, previewData } = body;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBudget, getIncomeRecords, getCarryoverBalance } from '@/lib/google-sheets';
+import { requireRole } from '@/lib/auth/require-session';
 
 // 지출 카테고리 → 은행 표시명 매핑
 const EXPENSE_DISPLAY_NAMES: Record<number, string> = {
@@ -45,6 +46,10 @@ const INCOME_CODE_NAMES: Record<number, string> = {
 
 export async function GET(request: NextRequest) {
   try {
+    // /reports/custom(super_admin 전용) 에서만 호출
+    const guard = await requireRole('super_admin');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const yearParam = searchParams.get('year');
 

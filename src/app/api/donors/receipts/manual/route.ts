@@ -10,6 +10,7 @@ import { getFinanceSession } from '@/lib/auth/finance-session';
 import { hasRole } from '@/lib/auth/finance-permissions';
 import { getFamilyGroup } from '@/lib/family-group';
 import { updateMemberTaxInfo, getMembersByNames } from '@/lib/supabase';
+import { isMaskedResidentId } from '@/lib/pii';
 import type { ManualReceiptHistory } from '@/types';
 
 // POST: 수작업 발급 이력 저장
@@ -22,7 +23,8 @@ export async function POST(request: NextRequest) {
     const isAdmin = hasRole(session.finance_role, 'admin');
 
     const body = await request.json();
-    const { year, representative, address, resident_id, amount, issue_number, original_issue_number, note, forceUpdateTaxInfo } = body;
+    const { year, representative, address, amount, issue_number, original_issue_number, note, forceUpdateTaxInfo } = body;
+    let resident_id: string = body.resident_id || '';
 
     // 필수 필드 검증
     if (!year || !representative || !amount || !issue_number) {
@@ -30,6 +32,14 @@ export async function POST(request: NextRequest) {
         { success: false, error: '필수 항목이 누락되었습니다 (연도, 대표자명, 금액, 발급번호)' },
         { status: 400 }
       );
+    }
+
+    // 조회 화면(donors/lookup)은 이제 주민번호를 마스킹해서 내려준다(§4-7).
+    // 사용자가 그 값을 수정 없이 그대로 제출하면 마스킹 문자열이 되돌아오는데,
+    // 그대로 교적부·발급이력에 쓰면 원본이 파괴된다 → 서버 원본으로 복원(없으면 빈 값).
+    if (isMaskedResidentId(resident_id)) {
+      const existingMember = (await getMembersByNames([representative])).get(representative);
+      resident_id = existingMember?.resident_id || '';
     }
 
     // member 권한: 본인 가족 그룹의 구성원만 발급 가능 (자신 또는 분할 수령자)

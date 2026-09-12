@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords, getExpenseRecords, getCarryoverBalance } from '@/lib/google-sheets';
+import { requireRole } from '@/lib/auth/require-session';
 
 // 수입 카테고리 코드 → 카테고리 매핑
 function incomeCategory(offeringCode: number): string {
@@ -35,6 +36,10 @@ const INCOME_CODE_NAMES: Record<number, string> = {
 
 export async function GET(request: NextRequest) {
   try {
+    // /reports/custom(super_admin 전용) 에서만 호출
+    const guard = await requireRole('super_admin');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const yearParam = searchParams.get('year');
 

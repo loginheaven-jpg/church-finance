@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMatchingRules, addMatchingRule, clearMatchingRules, getKSTDateTime } from '@/lib/google-sheets';
 import type { MatchingRule } from '@/types';
+import { requireRole } from '@/lib/auth/require-session';
 
 // GET: 모든 매칭규칙 조회
 export async function GET() {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const rules = await getMatchingRules();
     return NextResponse.json({ success: true, data: rules });
   } catch (error) {
@@ -19,6 +23,9 @@ export async function GET() {
 // POST: 매칭규칙 추가
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const body = await request.json();
     const { rules } = body as { rules: Omit<MatchingRule, 'id' | 'created_at' | 'updated_at'>[] };
 
@@ -65,6 +72,9 @@ export async function POST(request: NextRequest) {
 // DELETE: 모든 매칭규칙 삭제
 export async function DELETE() {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const deletedCount = await clearMatchingRules();
     return NextResponse.json({
       success: true,

@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { addCardTransactions, getCardOwners, generateId, getKSTDateTime } from '@/lib/google-sheets';
 import type { CardTransaction, CardOwner } from '@/types';
+import { requireRole } from '@/lib/auth/require-session';
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireRole('admin');
+    if (guard.response) return guard.response;
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 

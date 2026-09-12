@@ -11,9 +11,14 @@ import {
   getExpenseCodes,
 } from '@/lib/google-sheets';
 import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
+import { requireSession } from '@/lib/auth/require-session';
 
 export async function GET(request: NextRequest) {
   try {
+    // 대시보드(member 접근) → 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     // week offset 파라미터 처리
     const { searchParams } = new URL(request.url);
     const weekOffset = parseInt(searchParams.get('week') || '0');

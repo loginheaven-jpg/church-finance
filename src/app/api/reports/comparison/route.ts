@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords, getExpenseRecords, getIncomeCodes, getExpenseCodes } from '@/lib/google-sheets';
 import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
+import { requireRole } from '@/lib/auth/require-session';
 
 // 카테고리 이름 정의 (fallback용)
 const INCOME_CATEGORY_NAMES: Record<number, string> = {
@@ -38,6 +39,9 @@ interface YearlyData {
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireRole('deacon');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const endYear = Number(searchParams.get('year')) || new Date().getFullYear();
     const startYear = 2019; // 2019년부터 시작 (2018년 이전 데이터 제외)

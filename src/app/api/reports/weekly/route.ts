@@ -8,6 +8,7 @@ import {
 } from '@/lib/google-sheets';
 import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
 import type { WeeklyReport } from '@/types';
+import { requireRole } from '@/lib/auth/require-session';
 
 // 주어진 날짜의 주일(일요일)을 계산
 function getSundayOfWeek(date: Date): Date {
@@ -34,6 +35,9 @@ function formatDate(date: Date): string {
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireRole('deacon');
+    if (guard.response) return guard.response;
+
     const searchParams = request.nextUrl.searchParams;
     const dateParam = searchParams.get('date');
     const weekOffset = searchParams.get('week');

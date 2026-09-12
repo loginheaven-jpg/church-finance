@@ -9,9 +9,14 @@ import {
   getKSTDateTime,
 } from '@/lib/google-sheets';
 import type { CardOwner, CardExpenseItem, CardExpenseParseResponse, CardExpenseTempRecord } from '@/types';
+import { requireSession } from '@/lib/auth/require-session';
 
 export async function POST(request: NextRequest) {
   try {
+    // 카드내역 통합(/card-expense-integration)은 member 접근 → 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 

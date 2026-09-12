@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIncomeRecords } from '@/lib/google-sheets';
 import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
+import { requireRole } from '@/lib/auth/require-session';
 
 export async function GET(request: NextRequest) {
   try {
+    // /reports/income-analysis(deacon)도 이 API를 호출하므로 deacon 기준
+    const guard = await requireRole('deacon');
+    if (guard.response) return guard.response;
+
     const { searchParams } = new URL(request.url);
     const year = Number(searchParams.get('year')) || new Date().getFullYear();
     const minMonthlyAvg = Number(searchParams.get('minMonthlyAvg')) || 0;

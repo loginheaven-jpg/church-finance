@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBudget, getExpenseRecords } from '@/lib/google-sheets';
 import { getWithCache, cacheKeys, CACHE_TTL } from '@/lib/redis';
+import { requireSession } from '@/lib/auth/require-session';
 
 // 경과일수 계산
 function getDaysPassed(year: number, endDate: string): number {
@@ -17,6 +18,10 @@ function isLeapYear(year: number): boolean {
 
 export async function GET(request: NextRequest) {
   try {
+    // /reports/budget 은 member 접근 가능 → 로그인만 요구
+    const guard = await requireSession();
+    if (guard.response) return guard.response;
+
     const searchParams = request.nextUrl.searchParams;
     const yearParam = searchParams.get('year');
     const endDateParam = searchParams.get('endDate'); // 기준일 (옵션)

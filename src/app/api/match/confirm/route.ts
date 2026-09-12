@@ -65,6 +65,42 @@ export async function POST(request: NextRequest) {
     console.error('[match/confirm] 은행원장 읽기 실패:', error);
   }
 
+  // β⁵ (2026-07-07): 수입부/지출부에 이미 [bank:xxx] marker 있는 tx 는 재이관 방지
+  // 이전 이슈: autoTransferBankToLedger 가 status 갱신에 실패하면 tx 가 pending 남음
+  //   → 사용자가 "미처리 확인" 반영 → match/confirm 이 pending 보고 재이관 → 이중 record
+  //   → 수입부/지출부에 marker 검사로 원천 봉쇄
+  const alreadyImportedBankIds = new Set<string>();
+  try {
+    const markerRegex = /\[bank:([^\]]+)\]|bank=(BANK[A-Za-z0-9]+)/g;
+    const [incRows, expRows] = await Promise.all([
+      readSheet(FINANCE_CONFIG.sheets.income),
+      readSheet(FINANCE_CONFIG.sheets.expense),
+    ]);
+    // 수입부 note 는 컬럼 H (index 7), 지출부 note 는 컬럼 I (index 8)
+    for (let i = 1; i < incRows.length; i++) {
+      const note = String(incRows[i]?.[7] || '');
+      if (!note) continue;
+      let mm: RegExpExecArray | null;
+      markerRegex.lastIndex = 0;
+      while ((mm = markerRegex.exec(note)) !== null) {
+        const bid = mm[1] || mm[2];
+        if (bid) alreadyImportedBankIds.add(bid);
+      }
+    }
+    for (let i = 1; i < expRows.length; i++) {
+      const note = String(expRows[i]?.[8] || '');
+      if (!note) continue;
+      let mm: RegExpExecArray | null;
+      markerRegex.lastIndex = 0;
+      while ((mm = markerRegex.exec(note)) !== null) {
+        const bid = mm[1] || mm[2];
+        if (bid) alreadyImportedBankIds.add(bid);
+      }
+    }
+  } catch (error) {
+    console.warn('[match/confirm] 수입부/지출부 marker 스캔 실패 (재이관 방지 약화):', error);
+  }
+
   // β⁴ (2026-07-07): 순서 반전 — 헌금함 자동 흡수 먼저, K5 방어는 그 뒤에.
   // 이유: K5 가 먼저 실행되면 배치 전체가 400 으로 죽어 정상 record 도 함께 실패.
   //       헌금함(deposit>0)이 지출탭에 실수로 포함되어도 자동 suppressed 이동 후 통과되도록.
@@ -118,13 +154,20 @@ export async function POST(request: NextRequest) {
   let expenseError = '';
 
   // 수입 레코드 저장 (수입부 먼저 쓰고 → 성공 시 은행원장 status 변경)
+  const incomeSkippedByMarker: string[] = []; // β⁵: 재이관 방지 skip 목록
   if (income && income.length > 0) {
     try {
-      // 중복 반영 방지: 서버의 실제 은행원장 상태 기준으로 필터링
+      // 중복 반영 방지: 서버의 실제 은행원장 상태 + 수입부 marker 검사
       const newIncomeItems = income.filter(item => {
         const serverStatus = bankStatusMap.get(item.transaction.id) || item.transaction.matched_status;
         if (serverStatus === 'matched' || serverStatus === 'suppressed') {
           console.warn('[match/confirm] 이미 반영된 수입 거래 스킵:', item.transaction.id, '상태:', serverStatus);
+          return false;
+        }
+        // β⁵: 수입부에 이미 [bank:tx_id] marker 있으면 재이관 방지 (autoTransfer 성공 흔적)
+        if (alreadyImportedBankIds.has(item.transaction.id)) {
+          console.warn('[match/confirm] 수입부에 이미 marker 있는 수입 거래 스킵 (재이관 방지):', item.transaction.id);
+          incomeSkippedByMarker.push(item.transaction.id);
           return false;
         }
         return true;
@@ -177,14 +220,21 @@ export async function POST(request: NextRequest) {
   }
 
   // 지출 레코드 저장 (독립적 처리)
+  const expenseSkippedByMarker: string[] = []; // β⁵
   if (expense && expense.length > 0) {
     try {
-      // undefined record 필터링, 유효성 검사, 중복 반영 방지 (서버 상태 기준)
+      // undefined record 필터링, 유효성 검사, 중복 반영 방지 (서버 상태 + marker)
       const validExpenseItems = expense.filter(item => {
         // 중복 반영 방지: 서버의 실제 은행원장 상태 기준으로 필터링
         const serverStatus = bankStatusMap.get(item.transaction.id) || item.transaction.matched_status;
         if (serverStatus === 'matched' || serverStatus === 'suppressed') {
           console.warn('[match/confirm] 이미 반영된 지출 거래 스킵:', item.transaction.id, '상태:', serverStatus);
+          return false;
+        }
+        // β⁵: 지출부에 이미 [bank:tx_id] marker 있으면 재이관 방지
+        if (alreadyImportedBankIds.has(item.transaction.id)) {
+          console.warn('[match/confirm] 지출부에 이미 marker 있는 지출 거래 스킵 (재이관 방지):', item.transaction.id);
+          expenseSkippedByMarker.push(item.transaction.id);
           return false;
         }
         if (!item.record) {
@@ -237,6 +287,38 @@ export async function POST(request: NextRequest) {
       expenseSuccess = false;
       console.error('[match/confirm] 지출 레코드 저장 실패:', error);
       expenseError = '지출 레코드 저장 중 오류가 발생했습니다';
+    }
+  }
+
+  // β⁵: marker 로 skip 된 tx 들은 은행원장 status 만 matched 로 갱신 (record 는 이미 있음)
+  const markerSkipUpdates: Array<{
+    id: string;
+    matched_status: 'matched';
+    matched_type: string;
+    matched_ids: string;
+  }> = [];
+  for (const bid of incomeSkippedByMarker) {
+    markerSkipUpdates.push({
+      id: bid,
+      matched_status: 'matched',
+      matched_type: 'income_auto_repair',
+      matched_ids: '',
+    });
+  }
+  for (const bid of expenseSkippedByMarker) {
+    markerSkipUpdates.push({
+      id: bid,
+      matched_status: 'matched',
+      matched_type: 'expense_auto_repair',
+      matched_ids: '',
+    });
+  }
+  if (markerSkipUpdates.length > 0) {
+    try {
+      const r = await updateBankTransactionsBatch(markerSkipUpdates, bankRawRows);
+      console.log(`[match/confirm] marker skip status 갱신: 성공 ${r.success.length}, 실패 ${r.failed.length}`);
+    } catch (err) {
+      console.warn('[match/confirm] marker skip status 갱신 실패:', err);
     }
   }
 
